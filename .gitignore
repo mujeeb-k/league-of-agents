@@ -8,3 +8,4 @@ playwright-report/
 
 # Raw agent recordings: local only, never committed
 tests/fixtures/agents/raw/
+.README.repo.md

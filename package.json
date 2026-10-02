@@ -23,6 +23,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "prepack": "npm --prefix web ci && npm --prefix web run build"
+    "prepack": "npm --prefix web ci && npm --prefix web run build && node scripts/readme-for-npm.mjs pack",
+    "postpack": "node scripts/readme-for-npm.mjs restore"
   }
 }

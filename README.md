@@ -1,139 +1,150 @@
-<p align="center"><img src="https://raw.githubusercontent.com/mujeeb-k/league-of-agents/main/brand/wordmark-600.png" alt="League of Agents" width="420"></p>
+<p align="center"><img src="brand/wordmark-600.png" alt="League of Agents" width="420"></p>
 
-# League of Agents: The Agentic Code Canvas
+## What is League of Agents?
 
-See every change your agents make.
+League of Agents is an agentic code canvas: a map of your codebase where you direct coding agents and review their work.
 
-Point your coding agent at any file or block of code, then see every change on a map of your repo. Works with Claude Code, Codex, Cursor and more.
+Coding agents change more code than anyone can review line by line. League of Agents shows your whole project as a map, and every change an agent makes lands on it. You see what changed, where, and whether it still works, then keep it or undo it.
 
-Codex and Cursor support is in beta: built to their published formats and tested against them, but not yet verified with real runs.
+It runs on your computer, works with the agents you already use, and is open source.
 
-![Selecting a folder on the map, asking Claude Code for a change, then reviewing the run's diff file by file](https://raw.githubusercontent.com/mujeeb-k/league-of-agents/main/docs/media/demo.gif)
+![Selecting a folder on the map, asking Claude Code for a change, then reviewing the run's diff file by file](docs/media/demo.gif)
+
+## What you can do
+
+- **See your whole project at once.** Every folder and file on one map. Zoom out for the shape, zoom in to read the code.
+- **Point an agent at exact lines.** Select a file, a folder, or a few lines, and describe the change. Claude Code can't edit anything outside your selection; edits outside it by Codex or Cursor are flagged.
+- **Edit files yourself.** Double-click a file's code to open it in the editor. Saved edits are recorded and can be undone like any agent run.
+- **Update what depends on a change.** Rename a function, then ask the agent to update every file that uses it. The map shows each file it touched.
+- **Review before you keep.** Switch between Before, After and Diff, step through changed files, then keep the run or undo it in one click.
+- **Run your checks automatically.** Tests and type checks run after every change, so you know if it still works.
 
 ## Quick start
 
-Two ways, in any project folder that is a git repo:
+Open a terminal in any project folder that is a git repo, then pick one:
 
-1. **Paste one line into your coding agent** (Claude Code, Codex, Cursor):
+**Let your agent set it up.** Paste this into Claude Code, Codex or Cursor:
 
-   ```text
-   Read leagueofagents.dev/setup.md and set up League of Agents in this repo.
-   ```
+```text
+Read leagueofagents.dev/setup.md and set up League of Agents in this repo.
+```
 
-   It checks the repo, asks you before adding hooks, starts League of Agents and gives you the link.
-2. **Or run it yourself:**
-
-   ```bash
-   npx leagueofagents-cli@latest
-   ```
-
-Requires macOS, git, Node 20 or later, and a git repo. Windows coming soon.
-
-It starts the bridge in the background and opens your repo as a map in your default browser, already connected: run Claude Code from the canvas, and review each run as before, after and diff. In Chrome, Edge, Brave and Arc that is leagueofagents.dev, which the browser asks once to let reach your computer: choose Allow. In Safari, Firefox and others it is the local app the bridge serves, which needs no permission. The bridge keeps running after the terminal closes. `npx leagueofagents-cli@latest status` shows the link again; `stop` stops it. Each start makes a fresh link.
-
-There is also a Claude Code plugin: `/plugin marketplace add mujeeb-k/league-of-agents-plugin`, then `/plugin install league-of-agents@league-of-agents`. It adds `/league-of-agents:open`, which starts League of Agents for the repo you're in, and records each prompt as a run.
-
-Requirements:
-
-- macOS. Windows coming soon.
-- git (on a Mac, Apple's command line developer tools).
-- Node 20 or later.
-- A git repository. Run the command from inside it.
-- Claude Code (`claude`) or Cursor (`cursor-agent`) installed and logged in. If Claude Code isn't, League of Agents says so and gives the command to fix it. Without either, changes made in any editor still show up as runs.
-
-Options: `--port <n>` (default: the first free port from 43210), `--web <url>` (default https://leagueofagents.dev), `--hooks` / `--no-hooks`. The rest of this README covers how it works and how to develop it.
-
-## How it is built
-
-Two parts:
-
-- `web/`: the web app (Vite, React, TypeScript). `npm --prefix web run build` produces a static site in `web/dist`. Deploy it anywhere static. Vercel works.
-- `bridge/loa.mjs`: runs on your machine inside a repo. Zero dependencies, Node 20+.
-
-## 1. The web app
-
-The app runs at [https://leagueofagents.dev](https://leagueofagents.dev). Without a bridge connected, it runs in demo mode.
-
-To host your own copy on Vercel:
-
-1. Import the repo as a new project and keep the root directory as the repo root. `vercel.json` sets the install command, the build command, and the output directory (`web/dist`).
-2. Add your domain under Settings, Domains.
-3. Pass it to the bridge with `--web https://your-domain`.
-
-`.vercelignore` keeps `bridge/` off the site.
-
-## 2. Run the bridge in a repo
-
-From npm: `npx leagueofagents-cli@latest`, as in the quick start. From a clone, build the web app once so the bridge can serve it: `npm --prefix ~/code/league-of-agents/web ci && npm --prefix ~/code/league-of-agents/web run build`.
+**Or run it yourself:**
 
 ```bash
+npx leagueofagents-cli@latest
+```
+
+What happens next:
+
+1. League of Agents starts in the background and opens your repo as a map in your browser.
+2. In Chrome, Edge, Brave and Arc, it opens on leagueofagents.dev. The browser asks once to let the site reach your computer: choose Allow. In Safari and Firefox, it opens the local app, which needs no permission.
+3. Select a file, describe a change, and press Enter.
+
+### Requirements
+
+- macOS (Windows coming soon)
+- git. On a Mac, this comes with Apple's command line developer tools: `xcode-select --install`
+- Node 20 or later
+- A git repository
+- Claude Code installed and logged in, to run agents from the map. Without it, changes from any editor still show up.
+
+## Works with
+
+Claude Code, from the map or your terminal. Codex and Cursor are in beta. Changes from any other editor or agent show up through watch mode.
+
+<sub>Built and tested with Claude Code. Codex and Cursor support follows their published formats and passes tests against them, but hasn't been fully verified with real runs yet.</sub>
+
+## Using it
+
+**From the map.** Select files, folders or lines, pick an agent, describe the change and press Enter. When the run finishes, review it and keep it or undo it. With a finished run selected, your next prompt continues the same session. Remove the "Follow-up" chip to start fresh.
+
+**From your terminal.** Use Claude Code, Codex or Cursor as usual. With the hooks on, each prompt you send becomes a run on the map, titled by the prompt.
+
+**From any editor.** Just work. When files you changed go quiet for a few seconds, League of Agents records them as one run, such as "Edited main.py". Files ignored by `.gitignore` never make a run, and branch switches and pulls are never recorded.
+
+### Checks
+
+If your repo has none set up, League of Agents looks for test and typecheck scripts and pytest, and offers to turn them on. They're kept in `.loa/`, out of your repo, unless you choose to share them with your team in `loa.config.json`. A check that can't run on your machine, because something it needs isn't installed, shows as "Couldn't run" instead of failing, and can be turned off in one click. See [`loa.config.example.json`](loa.config.example.json) to write your own.
+
+### What it changes in your repo
+
+- Creates `.loa/` for run records, and excludes it from git through `.git/info/exclude`.
+- Stores run snapshots under private `refs/loa/` refs.
+- Asks before adding hooks, then adds them to `.claude/settings.local.json` and `.codex/hooks.json` in the repo, and to `~/.cursor/hooks.json` for Cursor. Your own hooks are never changed.
+- Never commits to your branch, never touches staging, and never reads `.env` files.
+
+To remove everything:
+
+```bash
+npx leagueofagents-cli@latest uninstall
+```
+
+It stops League of Agents, removes its hooks, snapshots, `.loa/` and its lines in `.git/info/exclude`, and tells you what it removed. To remove only the hooks, use `hooks remove`.
+
+## Privacy and security
+
+League of Agents runs on your computer and never sends your code anywhere. The agents you use send code to their own providers, under their terms. leagueofagents.dev counts page views only: see the [privacy page](https://leagueofagents.dev/privacy). Who can reach League of Agents on your computer, and how it's protected, is in [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md). Report security issues privately, as [SECURITY.md](SECURITY.md) explains.
+
+## Not supported yet
+
+- Windows. Linux is untested.
+- Remote machines, SSH and dev containers. League of Agents must run on the same computer as your browser.
+- Repos with more than 1,500 files. The map shows the first 1,500.
+- Files over 400 KB, and diffs past a file's first 4,000 lines.
+- More than one run at a time in the same repo.
+- The website in Safari and Firefox. They use the local app instead.
+
+## Commands and options
+
+| Command | What it does |
+|---|---|
+| `npx leagueofagents-cli@latest` | Starts League of Agents in the background and opens your browser |
+| `... status` | Shows whether it's running, and its link |
+| `... stop` | Stops it |
+| `... uninstall` | Removes everything it added to the repo |
+| `... hooks remove` | Removes only its hooks |
+
+| Option | Default | What it does |
+|---|---|---|
+| `--port`, `LOA_PORT` | First free port from 43210 | Port League of Agents listens on |
+| `--web`, `LOA_WEB_URL` | `https://leagueofagents.dev` | Website to open in Chrome-family browsers |
+| `--hooks`, `--no-hooks` | Asks once | Add or skip the agent hooks without asking |
+| `LOA_CLAUDE_BIN` | `claude` | Claude Code command |
+| `LOA_CODEX_BIN` | `codex` | Codex command |
+| `LOA_CURSOR_BIN` | `cursor-agent` | Cursor command (newer installs may call it `agent`) |
+
+Using Claude Code? There's also a plugin: `/plugin marketplace add mujeeb-k/league-of-agents-plugin`, then `/plugin install league-of-agents@league-of-agents`.
+
+## How it works
+
+League of Agents has two parts:
+
+- **The bridge** (`bridge/loa.mjs`) runs on your computer, inside your repo. Node 20 or later, no dependencies. Before and after each run, it snapshots your files into a git commit using a private index, so your branch and staging area are never touched. Diffs come from comparing the two snapshots. Undo restores the "before" snapshot, and asks first if a file changed again since.
+- **The app** (`web/`, built with Vite, React and TypeScript) is the map you use. It's served at leagueofagents.dev and by the bridge itself.
+
+More detail is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Development
+
+```bash
+npm --prefix web ci
+npm --prefix web run build
 cd ~/code/your-project
 node ~/code/league-of-agents/bridge/loa.mjs
 ```
 
-It prints two links:
+To host your own copy of the app, deploy the repo to Vercel (`vercel.json` sets the build), add your domain, and start the bridge with `--web https://your-domain`.
 
-- `http://127.0.0.1:43210/#t=…` works in every browser.
-- `https://leagueofagents.dev/#bridge=43210&t=…` works in Chrome and Edge. Click Allow when Chrome asks for local network access.
-
-The link connects the canvas to that repo. The token is saved in the browser, so reloading reconnects.
-
-What the bridge changes in your repo, once:
-
-- Creates `.loa/` for run records and adds it to `.git/info/exclude`.
-- Only if you agree (it asks once, in the terminal): adds hooks so prompts you send in Claude Code, Codex and Cursor become runs titled by the prompt. They go in `.claude/settings.local.json` and `.codex/hooks.json` in the repo, and Cursor's in your own `~/.cursor/hooks.json` (Cursor reads project hooks only from the folder it opened), next to any hooks of your own, which are never changed. Remove the League of Agents hooks with `npx leagueofagents-cli@latest hooks remove`: each file goes back exactly as it was. Codex asks you to trust new hooks once (`/hooks` in Codex).
-
-It never commits to your branch or touches staging, and never reads `.env` files. Run snapshots live under private `refs/loa/` refs.
-
-To remove it all: `npx leagueofagents-cli@latest uninstall`. It stops the bridge, then removes its hooks, the `refs/loa/` snapshots, its lines in `.git/info/exclude` and `.loa/`, and says what it removed. The repo is left as if the bridge had never run. Who can reach the bridge, and what it guards against, is in [docs/THREAT-MODEL.md](https://github.com/mujeeb-k/league-of-agents/blob/main/docs/THREAT-MODEL.md).
-
-## 3. Use it
-
-**Steer Claude Code from the canvas.** Select files or folders, pick Claude Code, describe the change, press Enter. Claude Code runs headless in the repo. Edits outside the selection are blocked by the scope lock hook. When it finishes you get Before, After, Diff, check results, Keep and Revert. With a finished run selected, the next prompt continues the same session. Remove the "Follow-up" chip to start fresh.
-
-**Use Claude Code in your terminal as usual.** Each prompt you send becomes a run on the canvas automatically, through the hooks, titled by the prompt and with exact start and stop.
-
-**Codex in a terminal, Cursor in its editor (beta).** With the hooks, each prompt becomes a run the same way. Beta: these follow Codex's and Cursor's published hook formats and are tested against them, but are not yet verified with a real run.
-
-**Cursor, any editor, any other agent.** Just work. Watch mode notices files you change outside a run and, once they have been quiet for a few seconds, records them as one run named for what changed, such as "Edited main.py", with Before, After, Diff, Keep and Revert. Files your `.gitignore` ignores never make a run, and a branch switch or pull is never recorded. If Cursor's CLI (`cursor-agent`) is installed, "Cursor" also appears as an agent you can run from the canvas (beta).
-
-**Codex (beta).** Appears if the `codex` CLI is installed. Runs via `codex exec`. Not yet verified with a real run.
-
-## 4. Checks
-
-Checks run after every run that changed files. In a repo with none set up, League of Agents looks for test and typecheck scripts and pytest, and offers to turn them on. They are kept in `.loa/`, out of your repo, unless you choose to share them with your team: then they go in `loa.config.json` at the repo root. To write your own, see [`loa.config.example.json`](https://github.com/mujeeb-k/league-of-agents/blob/main/loa.config.example.json). `requires_free_port` skips a check when a dev server is holding that port.
-
-A check that can't run on your machine, because a command or package it needs isn't installed, shows as "Couldn't run" with the error, not as a failure, and can be turned off in one click.
-
-## 5. Options
-
-| Flag or env | Default | Purpose |
+| Variable | Default | What it does |
 |---|---|---|
-| `--port` / `LOA_PORT` | first free from 43210 | Bridge port |
-| `--web` / `LOA_WEB_URL` | `https://leagueofagents.dev` | Hosted site the second link points to |
-| `--hooks` / `--no-hooks` | asks once | Add or leave out the hooks for Claude Code, Codex and Cursor, without asking |
-| `LOA_CLAUDE_BIN` | `claude` | Claude Code binary |
-| `LOA_CURSOR_BIN` | `cursor-agent` | Cursor CLI binary (newer installs may call it `agent`) |
-| `LOA_CODEX_BIN` | `codex` | Codex CLI binary |
-| `LOA_WEB_DIR` | `web/dist` | Folder of the built web app the bridge serves |
-| `LOA_WEB_FILE` | none | Serve one HTML file instead, for example `path/to/index.html` |
-
-## How runs are recorded
-
-Before and after each run, the bridge snapshots every tracked and untracked file into a git commit using a private index, and pins it under `refs/loa/runs/<id>/`. Diffs come from `git diff` between the two. Revert restores files from the before snapshot and refuses if a file changed again later, unless you confirm.
-
-## Not supported yet
-
-- **Windows.** macOS only for now; Linux untested.
-- **Remote machines, SSH and dev containers.** The bridge must run on the same computer as your browser, in a repo on that computer.
-- **Repos over roughly 5,000 files.** Tested up to about 1,500; the first 400 lines of each file are shown.
-- **More than one run at a time** per repo.
-- **The hosted site in Safari or Firefox.** leagueofagents.dev needs Chrome or Edge to reach your computer; the local link the bridge prints works in every browser.
-
-## Privacy
-
-League of Agents runs on your machine and never sends your code anywhere. The agents you use send code to their own providers, under their terms. leagueofagents.dev counts page views only ([privacy page](https://leagueofagents.dev/privacy)).
+| `LOA_WEB_DIR` | `web/dist` | Built app the bridge serves |
+| `LOA_WEB_FILE` | none | Serve a single HTML file instead |
 
 ## Contributing
 
-See [CONTRIBUTING.md](https://github.com/mujeeb-k/league-of-agents/blob/main/CONTRIBUTING.md) to get started, and [docs/ARCHITECTURE.md](https://github.com/mujeeb-k/league-of-agents/blob/main/docs/ARCHITECTURE.md) for how the bridge and the app fit together. Contributions are accepted under the Apache License 2.0. Everyone follows the [code of conduct](https://github.com/mujeeb-k/league-of-agents/blob/main/CODE_OF_CONDUCT.md). Report security problems privately, as [SECURITY.md](https://github.com/mujeeb-k/league-of-agents/blob/main/SECURITY.md) explains.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Contributions are accepted under the Apache License 2.0, and everyone follows the [code of conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+[Apache 2.0](LICENSE)
