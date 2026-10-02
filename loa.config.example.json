@@ -1,0 +1,7 @@
+{
+  "ignore": ["evidence/**", "test-results/**"],
+  "checks": [
+    { "name": "tests", "run": "npm test", "requires_free_port": 43117 },
+    { "name": "stability", "run": "npm run stability" }
+  ]
+}

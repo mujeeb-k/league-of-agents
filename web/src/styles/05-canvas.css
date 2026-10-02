@@ -1,0 +1,494 @@
+/* ---------- stage ---------- */
+#stage {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--canvas);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#stage.grid {
+  background-image: radial-gradient(circle, var(--dot) 1px, transparent 1.2px);
+}
+#stage.panning {
+  cursor: grabbing;
+}
+#world.zooming {
+  will-change: transform;
+}
+#world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+#wires,
+#links {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+#wires path,
+#links path {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+.wire {
+  stroke: var(--wire);
+  stroke-width: 1;
+}
+.wire.hot {
+  stroke-width: 2.25;
+}
+/* Import lines: only for the hovered, selected or current file. route.ts keeps them in the gutters. */
+.edge {
+  display: none;
+  stroke: var(--sel);
+  stroke-width: 1.75;
+}
+.near .edge.on {
+  display: inline;
+}
+.frame {
+  position: absolute;
+  border-radius: 12px;
+  background: var(--frame);
+  box-shadow: 0 0 0 1px var(--hair);
+}
+.frame.bare {
+  background: none;
+  box-shadow: none;
+}
+.frame.leaf .flabel b {
+  color: var(--ink2);
+}
+.frame.dim .flabel {
+  opacity: 0.55;
+}
+.flabel {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  padding-bottom: calc(6px / var(--s));
+  white-space: nowrap;
+  font-size: calc(12px / var(--s));
+  line-height: 1.25;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 0.7em;
+  overflow: hidden;
+}
+.flabel b {
+  font:
+    500 1em 'IBM Plex Mono',
+    ui-monospace,
+    Menlo,
+    monospace;
+  color: var(--ink);
+  flex: none;
+}
+.flabel span {
+  color: var(--ink3);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.flabel .stat {
+  font-size: 0.92em;
+  flex: none;
+}
+.frame.sel .flabel b {
+  color: var(--sel);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.frame.hot .flabel b {
+  color: var(--hotc);
+}
+
+/* Files zoomed out: a tile in each card's slot. One geometry at every zoom; only detail changes. */
+.fr {
+  position: absolute;
+  overflow: hidden;
+  border-radius: max(10px, calc(3px / var(--s)));
+  background: var(--surface);
+  box-shadow: 0 0 0 calc(1px / var(--s)) var(--hair);
+  cursor: pointer;
+  /* Tiles are a fixed size (CW × CH), so off-screen tiles skip layout and paint. */
+  content-visibility: auto;
+  contain-intrinsic-size: 420px 300px;
+}
+.near .fr {
+  display: none;
+}
+.fr .n {
+  position: absolute;
+  top: calc(7px / var(--s));
+  left: calc(9px / var(--s));
+  right: calc(9px / var(--s));
+  font:
+    500 calc(11px / var(--s)) / 1.3 'IBM Plex Mono',
+    ui-monospace,
+    Menlo,
+    monospace;
+  color: var(--ink);
+  /* One line: a long name shortens with an ellipsis, never breaking mid-word. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tight .fr .n {
+  top: calc(6px / var(--s));
+  left: calc(7px / var(--s));
+  right: calc(7px / var(--s));
+  font-size: calc(10px / var(--s));
+}
+.tight .fr .n svg {
+  display: none;
+}
+/* The texture of the file's lines, under the name. */
+.fr .tx,
+.fr .tk {
+  position: absolute;
+  top: max(24px, calc(26px / var(--s)));
+  left: 24px;
+  right: 24px;
+  bottom: 20px;
+}
+.fr .tx {
+  background: var(--spark);
+  mask-size: 360px auto;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: 360px auto;
+  -webkit-mask-repeat: no-repeat;
+}
+/* Changed rows: marks on the right edge, like an editor's overview ruler. */
+.fr .tk i {
+  position: absolute;
+  right: calc(-20px + max(2px, calc(1px / var(--s))));
+  top: calc(var(--row) * 4px);
+  width: max(6px, calc(3px / var(--s)));
+  height: max(4px, calc(2px / var(--s)));
+  border-radius: calc(1px / var(--s));
+}
+.tk i.add {
+  background: var(--tick-add);
+}
+.tk i.del {
+  background: var(--tick-del);
+}
+/* Overview: tiles keep their texture and lose their names; folders show a file count instead. */
+.over .fr .n {
+  display: none;
+}
+.over .fr .tx,
+.over .fr .tk {
+  top: 24px;
+}
+.flabel .cnt {
+  display: none;
+  color: var(--ink3);
+  flex: none;
+}
+.over .flabel .cnt {
+  display: inline;
+}
+.over .flabel > span:not(.cnt),
+.over .flabel .stat {
+  display: none;
+}
+.over .frame.hot {
+  background: color-mix(in srgb, var(--hotc) 10%, var(--frame));
+}
+.fr.k-mod {
+  box-shadow:
+    inset max(4px, calc(3px / var(--s))) 0 0 var(--mod),
+    0 0 0 calc(1px / var(--s)) var(--hair);
+}
+.fr.k-add {
+  box-shadow:
+    inset max(4px, calc(3px / var(--s))) 0 0 var(--add),
+    0 0 0 calc(1px / var(--s)) var(--hair);
+}
+.fr.k-mod .n {
+  color: var(--mod);
+}
+.fr.k-add .n {
+  color: var(--add);
+}
+.fr.ghost {
+  background: none;
+  box-shadow: none;
+  outline: calc(1.5px / var(--s)) dashed var(--add);
+  outline-offset: calc(-1.5px / var(--s));
+}
+.fr.ghost .n {
+  color: var(--add);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+.fr.dim {
+  opacity: 0.42;
+}
+.fr:hover {
+  box-shadow: 0 0 0 calc(1.5px / var(--s)) var(--sel);
+}
+.fr.sel {
+  background: color-mix(in srgb, var(--sel) 8%, var(--surface));
+  box-shadow: 0 0 0 calc(2px / var(--s)) var(--sel);
+}
+/* A file with unsaved edits: a dot in the corner of its tile, and after its name on its card. */
+.fr.dirty::after,
+.card.dirty header::after {
+  content: '';
+  flex: none;
+  width: max(8px, calc(6px / var(--s)));
+  height: max(8px, calc(6px / var(--s)));
+  border-radius: 50%;
+  background: var(--mod);
+}
+.fr.dirty::after {
+  position: absolute;
+  top: calc(8px / var(--s));
+  right: calc(8px / var(--s));
+}
+.card.dirty header::after {
+  order: 1;
+}
+.card.dirty header .stat {
+  order: 2;
+}
+
+/* Folder labels that would collide or not fit drop all but their name, then hide (labels.ts). */
+.frame.nn .flabel > span,
+.frame.nn .flabel .stat {
+  display: none;
+}
+.frame.lh .flabel {
+  visibility: hidden;
+}
+/* Overview: a folder's label sits inside its block, over tiles that show no names. */
+.over .frame:not(.bare) .flabel {
+  z-index: 1;
+  bottom: auto;
+  top: calc(4px / var(--s));
+  left: calc(4px / var(--s));
+  padding: calc(2px / var(--s)) calc(6px / var(--s));
+  border-radius: calc(5px / var(--s));
+  background: var(--frame);
+  box-shadow: 0 0 0 calc(1px / var(--s)) var(--hair);
+}
+
+.card {
+  display: none;
+  position: absolute;
+  background: var(--surface);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--e1);
+  cursor: pointer;
+  /* Cards are a fixed size (CW × CH), so off-screen cards can skip layout and paint entirely. */
+  content-visibility: auto;
+  contain-intrinsic-size: 420px 300px;
+}
+/* No entrance fade: animating every card on a large repo restyles them all on each frame of the zoom. */
+.near .card {
+  display: block;
+}
+.card.dim {
+  opacity: 0.42;
+}
+.card:hover {
+  box-shadow:
+    var(--e1),
+    0 0 0 calc(1px / var(--s)) var(--sel);
+}
+.card.k-mod {
+  box-shadow:
+    var(--e1),
+    inset 3px 0 0 var(--mod);
+}
+.card.k-add {
+  box-shadow:
+    var(--e1),
+    inset 3px 0 0 var(--add);
+}
+.card.ghost {
+  background: transparent;
+  box-shadow: none;
+  border: 1.5px dashed var(--add);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--add);
+  font:
+    500 13px 'IBM Plex Mono',
+    monospace;
+  text-align: center;
+  padding: 24px;
+}
+.near .card.ghost {
+  display: flex;
+}
+.card header {
+  height: max(36px, calc(22px / var(--s)));
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0 14px 0 16px;
+  border-bottom: 1px solid var(--hair2);
+  font-size: max(13px, calc(11px / var(--s)));
+  white-space: nowrap;
+}
+.card header .fn {
+  font:
+    500 1em 'IBM Plex Mono',
+    ui-monospace,
+    Menlo,
+    monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card header .dir {
+  color: var(--ink3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.92em;
+}
+.card header .stat {
+  margin-left: auto;
+  font-size: 0.92em;
+}
+/* How many files this one imports and is used by; the lines themselves show only on focus. */
+.card .uses {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 4px 12px 6px 10px;
+  border-top-left-radius: 6px;
+  background: var(--surface);
+  color: var(--ink3);
+  font-size: max(11px, calc(9px / var(--s)));
+  white-space: nowrap;
+}
+.code {
+  font:
+    11px/14.5px 'IBM Plex Mono',
+    ui-monospace,
+    Menlo,
+    monospace;
+  padding: 7px 0;
+}
+.ln {
+  display: flex;
+  white-space: pre;
+  height: 14.5px;
+}
+.ln i {
+  font-style: normal;
+  width: 38px;
+  text-align: right;
+  padding-right: 12px;
+  color: var(--ink3);
+  flex: none;
+  opacity: 0.8;
+}
+.ln span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 12px;
+}
+.ln.add {
+  background: var(--add-bg);
+}
+.ln.add i {
+  color: var(--add);
+  opacity: 1;
+}
+.ln.del {
+  background: var(--del-bg);
+}
+.ln.del i {
+  color: var(--del);
+  opacity: 1;
+}
+.more {
+  color: var(--ink3);
+  padding: 3px 0 0 50px;
+  font-size: 11px;
+}
+em.k {
+  color: var(--kw);
+}
+em.s {
+  color: var(--str);
+}
+em.c {
+  color: var(--com);
+}
+em.n {
+  color: var(--num);
+}
+
+.selbox {
+  position: absolute;
+  pointer-events: none;
+  box-shadow: 0 0 0 calc(1.5px / var(--s)) var(--sel);
+  border-radius: 2px;
+}
+.selbox.f {
+  display: none;
+}
+.near .selbox.f {
+  display: block;
+}
+.selbox i {
+  position: absolute;
+  width: calc(7px / var(--s));
+  height: calc(7px / var(--s));
+  background: var(--surface);
+  box-shadow: 0 0 0 calc(1.5px / var(--s)) var(--sel);
+}
+.selbox i:nth-child(1) {
+  left: calc(-3.5px / var(--s));
+  top: calc(-3.5px / var(--s));
+}
+.selbox i:nth-child(2) {
+  right: calc(-3.5px / var(--s));
+  top: calc(-3.5px / var(--s));
+}
+.selbox i:nth-child(3) {
+  left: calc(-3.5px / var(--s));
+  bottom: calc(-3.5px / var(--s));
+}
+.selbox i:nth-child(4) {
+  right: calc(-3.5px / var(--s));
+  bottom: calc(-3.5px / var(--s));
+}
+.selbox b {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: calc(8px / var(--s));
+  font:
+    500 calc(11px / var(--s))/1.5 'IBM Plex Sans',
+    sans-serif;
+  padding: 0 calc(6px / var(--s));
+  border-radius: calc(4px / var(--s));
+  background: var(--sel);
+  color: var(--on-sel);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+#marquee {
+  position: absolute;
+  box-shadow: 0 0 0 1px var(--sel);
+  background: var(--sel-soft);
+  display: none;
+  pointer-events: none;
+}

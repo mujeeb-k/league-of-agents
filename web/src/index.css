@@ -1,0 +1,46 @@
+/*
+  Cascade order: Tailwind's theme, a small base reset, the canvas CSS, then Tailwind utilities, so
+  utilities on components always win. Tailwind's full reset (preflight) is not loaded; the base layer
+  holds the parts the app needs. theme.css and app.css are unlayered and win last.
+*/
+@layer theme, base, canvas, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@layer base {
+  /* The parts of Tailwind's reset that shadcn/ui components rely on. */
+  *,
+  ::before,
+  ::after {
+    border: 0 solid var(--border);
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  p,
+  dl,
+  dd,
+  ul,
+  ol,
+  figure {
+    margin: 0;
+  }
+  ul,
+  ol {
+    padding: 0;
+    list-style: none;
+  }
+  button,
+  input,
+  textarea,
+  select {
+    margin: 0;
+    padding: 0;
+    background-color: transparent;
+    color: inherit;
+    font: inherit;
+  }
+}
+@import './styles/index.css' layer(canvas);
+@import 'tailwindcss/utilities.css' layer(utilities);
+@import './theme.css';
+@import './app.css';

@@ -1,0 +1,10 @@
+node_modules/
+web/dist/
+test-results/
+playwright-report/
+.loa/
+.env*
+.DS_Store
+
+# Raw agent recordings: local only, never committed
+tests/fixtures/agents/raw/

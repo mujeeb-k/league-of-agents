@@ -1,0 +1,213 @@
+/* App styles beyond the base canvas and chrome CSS in styles/. */
+
+/* The file being reviewed: a plain ring, no handles or label, so it never reads as scope. */
+.fr.cur {
+  box-shadow: 0 0 0 calc(2px / var(--s)) var(--sel);
+}
+.card.cur {
+  box-shadow:
+    var(--e1),
+    0 0 0 calc(2px / var(--s)) var(--sel);
+}
+.card.k-mod.cur {
+  box-shadow:
+    var(--e1),
+    inset 3px 0 0 var(--mod),
+    0 0 0 calc(2px / var(--s)) var(--sel);
+}
+.card.k-add.cur {
+  box-shadow:
+    var(--e1),
+    inset 3px 0 0 var(--add),
+    0 0 0 calc(2px / var(--s)) var(--sel);
+}
+
+/* Added and removed lines wrap so the whole change is readable; unchanged lines stay on one line. */
+.ln.add,
+.ln.del {
+  height: auto;
+  min-height: 14.5px;
+}
+.ln.add span,
+.ln.del span {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
+/* The exact words that changed, darker than the line's own background. */
+mark.wd {
+  border-radius: 2px;
+  color: inherit;
+}
+.ln.add mark.wd {
+  background: color-mix(in srgb, var(--tick-add) 32%, transparent);
+}
+.ln.del mark.wd {
+  background: color-mix(in srgb, var(--tick-del) 28%, transparent);
+}
+
+/* Markdown typography for agent replies. */
+.md > :first-child {
+  margin-top: 0;
+}
+.md > :last-child {
+  margin-bottom: 0;
+}
+.md p {
+  margin: 0 0 8px;
+}
+.md ul,
+.md ol {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+.md li {
+  margin: 2px 0;
+}
+.md em {
+  font-style: italic;
+}
+.md strong {
+  font-weight: 600;
+}
+.md code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--hair2);
+  font:
+    12px/1.45 'IBM Plex Mono',
+    ui-monospace,
+    Menlo,
+    monospace;
+  overflow-wrap: anywhere;
+}
+.md pre {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg);
+  overflow-x: auto;
+}
+.md pre code {
+  padding: 0;
+  background: none;
+  white-space: pre;
+}
+
+/* File-type icons (FileIcon.tsx), in the explorer and on the canvas's file tiles. */
+svg.ic {
+  width: 1.15em;
+  height: 1.15em;
+  flex: none;
+  color: var(--ink3);
+}
+.fr .n svg.ic {
+  margin-right: 0.4em;
+  vertical-align: -0.22em;
+}
+
+/* Explorer indent guides: a 1 px hairline under each ancestor's chevron, 12 px per level. */
+.ti.guides {
+  background-image: repeating-linear-gradient(90deg, transparent 0 7px, var(--hair) 7px 8px, transparent 8px 12px);
+  background-position: 8px 0;
+  background-size: calc(var(--depth) * 12px) 100%;
+  background-repeat: no-repeat;
+}
+
+.flabel b svg.ic {
+  margin-right: 0.35em;
+  vertical-align: -0.2em;
+}
+
+/* Before, after and diff switch in place: only lines the switch brings in fade in (opacity only). */
+.ln.fresh {
+  animation: line-in 0.16s var(--ease);
+}
+@keyframes line-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The code editor (Editor.tsx, lib/editor.ts): the cards' type and colours, at a reading size. The composer
+   stays above the dimmed map, so the scope follows the editor; the minimap and the hint step aside. */
+#stage:has(#editorLayer) #nav,
+#stage:has(#editorLayer) #tip {
+  visibility: hidden;
+}
+#editor .cm-editor {
+  height: 100%;
+  font:
+    12.5px/1.6 'IBM Plex Mono',
+    ui-monospace,
+    Menlo,
+    monospace;
+  color: var(--ink);
+  background: var(--card);
+}
+#editor .cm-editor.cm-focused {
+  outline: none;
+}
+#editor .cm-scroller {
+  font-family: inherit;
+}
+#editor .cm-gutters {
+  background: var(--card);
+  color: var(--ink3);
+  border-right: 1px solid var(--hair2);
+}
+#editor .cm-lineNumbers .cm-gutterElement {
+  padding: 0 12px 0 16px;
+}
+#editor .cm-activeLine,
+#editor .cm-activeLineGutter {
+  background: color-mix(in srgb, var(--sel) 6%, transparent);
+}
+#editor .cm-cursor {
+  border-left: 2px solid var(--sel);
+}
+#editor .cm-selectionBackground,
+#editor .cm-focused .cm-selectionBackground {
+  background: color-mix(in srgb, var(--sel) 22%, transparent);
+}
+#editor .tk-k {
+  color: var(--kw);
+}
+#editor .tk-s {
+  color: var(--str);
+}
+#editor .tk-c {
+  color: var(--com);
+}
+#editor .tk-n {
+  color: var(--num);
+}
+
+/* The open file's import lines (Editor.tsx, Related): to related cards on screen, outlined above the dim. */
+#editorLinks path {
+  fill: none;
+  stroke: var(--sel);
+  stroke-width: 1.75;
+}
+#editorLinks .rel {
+  pointer-events: all;
+  cursor: pointer;
+}
+#editorLinks .rel rect {
+  fill: transparent;
+  stroke: var(--sel);
+  stroke-width: 2;
+}
+
+/* An agent's change, inline in the editor (lib/editor.ts): added lines tinted, removed lines shown struck. */
+#editor .cm-added {
+  background: var(--add-bg);
+}
+#editor .cm-removed {
+  padding-left: 6px;
+  background: var(--del-bg);
+  color: var(--del);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}

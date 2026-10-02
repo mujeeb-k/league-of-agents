@@ -1,0 +1,3 @@
+# The npm package (leagueofagents-cli) ships web/dist; this file stops web/.gitignore from excluding it.
+node_modules/
+test-results/

@@ -1,0 +1,160 @@
+// Wire types for the local bridge (bridge/loa.mjs). Keep in step with the bridge.
+
+export type RunStatus = 'running' | 'done' | 'failed' | 'cancelled' | 'interrupted';
+
+/** One line of run activity: text, tool, err, warn (blocked by the scope lock), or deny (needs approval). */
+export interface StreamEntry {
+  t: 'text' | 'tool' | 'err' | 'warn' | 'deny';
+  text: string;
+}
+
+/**
+ * Result of one configured check. `ok` is null when the check was skipped or couldn't run on this machine
+ * (`couldNotRun`, with the error's own line as the summary).
+ */
+export interface Check {
+  name: string;
+  ok: boolean | null;
+  couldNotRun?: boolean;
+  summary: string;
+  ms?: number;
+  tail?: string;
+}
+
+export interface AgentInfo {
+  name: string;
+  available: boolean;
+  /** Why Claude Code can't run: not installed, or not logged in (bridges before 0.1.0 don't send it). */
+  problem?: 'missing' | 'loggedOut' | null;
+}
+
+export interface HunkDTO {
+  at: number;
+  del: number;
+  add: string[];
+}
+
+/** computeChanges() output. `pre` is the file at the before snapshot, `at` a 0-based index into it. */
+export interface ChangeDTO {
+  path: string;
+  created: boolean;
+  deleted: boolean;
+  pre: string[];
+  hunks: HunkDTO[];
+}
+
+/** publicRun(): a stored run with the stream trimmed to the last 60 entries. */
+export interface RunDTO {
+  id: number;
+  agent: string;
+  title: string;
+  prompt: string;
+  scope: string[];
+  resumeFrom: number | null;
+  sessionId: string | null;
+  status: RunStatus;
+  startedAt: number;
+  endedAt: number | null;
+  before: string | null;
+  after: string | null;
+  changes: ChangeDTO[];
+  checks: Check[];
+  summary: string;
+  stream: StreamEntry[];
+  cost: number | null;
+  kept: boolean;
+  reverted: boolean;
+  outOfScope?: string[];
+  checksRunning?: boolean;
+  turn?: TurnSummary;
+}
+
+/** Claude Code's verdict on its last turn (post_turn_summary): completed or blocked, and what it needs. */
+export interface TurnSummary {
+  status: string;
+  detail: string;
+  needs: string;
+}
+
+/** GET /api/state. `tree` lists files with their first 400 lines. */
+export interface StateResponse {
+  /** root: the repository's absolute path on this computer, for opening files in another editor. */
+  repo: { name: string; branch: string; root: string };
+  agents: Record<string, AgentInfo>;
+  tree: { path: string; total: number; lines: string[] }[];
+  runs: RunDTO[];
+  active: number | null;
+  seq: number;
+  /** The bridge's version; bridges before 0.1.0 don't send it. */
+  version?: string | null;
+  /** Checks found in the repo, offered while none are set up (bridges before 0.1.0 don't send it). */
+  suggestedChecks?: { name: string; run: string }[];
+  /** The checks set up now, by name (bridges before 0.1.0 don't send it). */
+  checksOn?: string[];
+}
+
+/** Progress payload carried by `progress` events (bridge emit()). */
+export interface RunProgress {
+  id: number;
+  status: RunStatus;
+  stream: StreamEntry[];
+  summary: string;
+  sessionId: string | null;
+  checks: Check[];
+  checksRunning: boolean;
+  cost: number | null;
+  turn?: TurnSummary;
+}
+
+export interface BridgeEvent {
+  seq: number;
+  type: 'state' | 'progress';
+  run?: RunProgress;
+}
+
+/** GET /api/events?since=N */
+export interface EventsResponse {
+  seq: number;
+  events: BridgeEvent[];
+}
+
+/** POST /api/runs body. */
+export interface StartRunBody {
+  agent: string;
+  prompt: string;
+  scope: string[];
+  resumeFrom: number | null;
+}
+
+/** POST /api/runs/:id/revert. 409 carries `conflict`. */
+export type RevertResponse = { ok: true } | { conflict: string[] };
+
+export interface OkResponse {
+  ok: true;
+}
+export interface ErrorBody {
+  error?: string;
+  conflict?: string[];
+  /** POST /api/save, 409: the file as it is on disk now. */
+  text?: string;
+  hash?: string;
+}
+/** GET /api/file: a file's full text, and the hash a save names as its base. */
+export interface FileResponse {
+  path: string;
+  text: string;
+  hash: string;
+}
+export interface SaveBody {
+  path: string;
+  text: string;
+  base: string;
+}
+/** POST /api/save: the run the save became, or nothing when the text is unchanged. */
+export type SaveResponse = RunDTO | { unchanged: true };
+
+/** A bridge connection: base URL and token. */
+export interface Conn {
+  base: string;
+  token: string;
+}

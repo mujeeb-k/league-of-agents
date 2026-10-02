@@ -1,0 +1,46 @@
+#!/usr/bin/env node
+import fs from 'node:fs';
+const args = process.argv.slice(2);
+// While the file FAKE_CLAUDE_LOGGED_OUT names exists, it answers as a logged-out Claude Code does: to
+// `auth status`, and to a prompt.
+const loggedOut = !!process.env.FAKE_CLAUDE_LOGGED_OUT && fs.existsSync(process.env.FAKE_CLAUDE_LOGGED_OUT);
+if (args[0] === 'auth') {
+  console.log(JSON.stringify({ loggedIn: !loggedOut, authMethod: loggedOut ? 'none' : 'claude.ai' }));
+  process.exit(loggedOut ? 1 : 0);
+}
+const prompt = args[args.indexOf('-p') + 1];
+const out = o => console.log(JSON.stringify(o));
+out({ type: 'system', subtype: 'init', session_id: 'sess-123' });
+if (loggedOut) {
+  const text = 'Not logged in · Please run /login';
+  out({ type: 'assistant', error: 'authentication_failed', message: { content: [{ type: 'text', text }] } });
+  out({ type: 'result', is_error: true, result: text, session_id: 'sess-123', total_cost_usd: 0 });
+  process.exit(1);
+}
+out({
+  type: 'assistant',
+  message: {
+    content: [
+      { type: 'text', text: 'Adding a stale-policy guard.' },
+      { type: 'tool_use', name: 'Edit', input: { file_path: process.cwd() + '/shared/allowlist.ts' } },
+    ],
+  },
+});
+let t = fs.readFileSync('shared/allowlist.ts', 'utf8');
+t = t.replace(
+  "throw new Error('ALLOWLIST_VIOLATION');",
+  'throw new Error(`ALLOWLIST_VIOLATION: ${action} on ${origin}`);',
+);
+t += '\nexport function isEmpty(p: Policy) {\n  return p.origins.length === 0;\n}\n';
+fs.writeFileSync('shared/allowlist.ts', t);
+fs.writeFileSync(
+  'shared/policy-cache.ts',
+  "import { loadPolicy } from './allowlist';\n\nexport const cached = loadPolicy();\n",
+);
+await new Promise(r => setTimeout(r, 400));
+out({
+  type: 'result',
+  result: 'Violation errors now name the action and origin. Added isEmpty and a policy cache.',
+  session_id: 'sess-123',
+  total_cost_usd: 0.0123,
+});

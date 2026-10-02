@@ -1,0 +1,276 @@
+@@ relay.config.ts
+import { startDispatcher } from './server/delivery/pipeline/dispatch';
+import { defineRelay } from './server/delivery/tenant-config';
+
+export default defineRelay({
+  port: Number(process.env.PORT ?? 8080),
+  queue: { concurrency: 16, visibilityTimeoutMs: 30_000 },
+  retry: { maxAttempts: 8 },
+  signing: { header: 'x-relay-signature', algorithm: 'sha256' },
+  onReady(app) {
+    startDispatcher(app.queue);
+  },
+});
+@@ server/api/routes/subscriptions.ts
+import { verifySignature } from '../../delivery/verify-signature';
+import { registerEndpoint } from '../../delivery/endpoint-registry';
+
+export async function subscribe(req: Request) {
+  const body = await req.text();
+  const signature = req.headers.get('x-relay-signature') ?? '';
+  if (!verifySignature(body, signature)) {
+    return new Response('Invalid signature', { status: 401 });
+  }
+  const endpoint = await registerEndpoint(JSON.parse(body));
+  return Response.json(endpoint, { status: 201 });
+}
+@@ server/api/routes/endpoints.ts
+import { listEndpoints, removeEndpoint } from '../../delivery/endpoint-registry';
+import { healthOf } from '../../delivery/endpoint-health';
+
+export async function list(tenant: string) {
+  const endpoints = await listEndpoints(tenant);
+  return Response.json(endpoints.map((e) => ({ ...e, health: healthOf(e.id) })));
+}
+
+export async function remove(tenant: string, id: string) {
+  await removeEndpoint(tenant, id);
+  return new Response(null, { status: 204 });
+}
+@@ server/delivery/retry/schedule-retry.ts
+import { enqueue } from '../event-store';
+import { deadLetter } from '../dead-letter';
+import type { Attempt } from '../model/types';
+
+export async function scheduleRetry(attempt: Attempt) {
+  if (attempt.number >= 8) {
+    return deadLetter(attempt, 'max attempts reached');
+  }
+  await enqueue({ ...attempt.event, attempt: attempt.number + 1 });
+  return { scheduled: true, attempt: attempt.number + 1 };
+}
+@@ server/delivery/retry/backoff.ts
+import type { RetryPolicy } from '../model/types';
+import { tenantPolicy } from '../tenant-config';
+
+const BASE_MS = 1_000;
+const CAP_MS = 15 * 60_000;
+
+export function backoffDelay(attempt: number, policy: RetryPolicy = tenantPolicy()) {
+  const exp = Math.min(CAP_MS, BASE_MS * 2 ** attempt * policy.multiplier);
+  return Math.round(exp / 2 + Math.random() * (exp / 2));
+}
+@@ server/delivery/pipeline/dispatch.ts
+import { buildPayload } from './build-payload';
+import { signRequest } from './sign-request';
+import { sendRequest } from './send-request';
+import { recordAttempt } from './record-attempt';
+import type { Queue } from '../model/types';
+
+export function startDispatcher(queue: Queue) {
+  queue.process(async (event) => {
+    const payload = buildPayload(event);
+    const res = await sendRequest(event.endpoint, signRequest(payload));
+    return recordAttempt(event, res);
+  });
+}
+@@ server/delivery/pipeline/build-payload.ts
+import { validatePayload } from '../payload-schema';
+import type { DeliveryEvent } from '../model/types';
+
+export function buildPayload(event: DeliveryEvent) {
+  const body = { id: event.id, type: event.type, data: event.data, sentAt: new Date().toISOString() };
+  validatePayload(body);
+  return JSON.stringify(body);
+}
+@@ server/delivery/pipeline/sign-request.ts
+import { createHmac } from 'node:crypto';
+import { currentSecret } from '../secrets';
+
+export function signRequest(body: string) {
+  const ts = Math.floor(Date.now() / 1000);
+  const mac = createHmac('sha256', currentSecret()).update(`${ts}.${body}`).digest('hex');
+  return { body, headers: { 'x-relay-signature': `t=${ts},v1=${mac}` } };
+}
+@@ server/delivery/pipeline/send-request.ts
+import { httpClient } from '../http-client';
+import { allow } from '../rate-limit';
+import { isOpen } from '../circuit-breaker';
+import type { Endpoint } from '../model/types';
+
+export async function sendRequest(endpoint: Endpoint, req: { body: string; headers: Record<string, string> }) {
+  if (isOpen(endpoint.id)) return { status: 0, error: 'circuit open' };
+  await allow(endpoint.tenant);
+  return httpClient.post(endpoint.url, req.body, { headers: req.headers, timeoutMs: 10_000 });
+}
+@@ server/delivery/pipeline/record-attempt.ts
+import { appendAttempt } from '../attempt-log';
+import { scheduleRetry } from '../retry/schedule-retry';
+import type { DeliveryEvent } from '../model/types';
+
+export async function recordAttempt(event: DeliveryEvent, res: { status: number }) {
+  const attempt = await appendAttempt(event, res.status);
+  if (res.status >= 200 && res.status < 300) return attempt;
+  return scheduleRetry(attempt);
+}
+@@ server/delivery/model/types.ts
+export type Endpoint = { id: string; tenant: string; url: string; secret: string };
+export type DeliveryEvent = { id: string; type: string; data: unknown; endpoint: Endpoint; attempt: number; notBefore?: number };
+export type Attempt = { id: string; number: number; status: number; event: DeliveryEvent; at: number };
+export type RetryPolicy = { maxAttempts: number; multiplier: number };
+export type RateLimit = { perSecond: number; burst: number };
+export type Health = { endpointId: string; failures: number; lastStatus: number };
+export type Tenant = { id: string; limits?: Partial<RateLimit>; retry?: Partial<RetryPolicy> };
+export type Queue = { process(fn: (e: DeliveryEvent) => Promise<unknown>): void };
+export type RelayConfig = { port: number; queue: object; retry: Partial<RetryPolicy>; signing: object };
+@@ server/delivery/endpoint-registry.ts
+import { db } from './event-store';
+import type { Endpoint } from './model/types';
+
+export async function registerEndpoint(input: Omit<Endpoint, 'id'>) {
+  const id = crypto.randomUUID();
+  await db.insert('endpoints', { id, ...input });
+  return { id, ...input };
+}
+
+export const listEndpoints = (tenant: string) => db.select<Endpoint>('endpoints', { tenant });
+export const removeEndpoint = (tenant: string, id: string) => db.remove('endpoints', { tenant, id });
+@@ server/delivery/endpoint-health.ts
+import { recentAttempts } from './attempt-log';
+import type { Attempt, Health } from './model/types';
+
+const FAILURE_LIMIT = 5;
+
+export function healthOf(endpointId: string): Health {
+  const attempts = recentAttempts(endpointId, 20);
+  const failures = attempts.filter((a) => a.status >= 500 || a.status === 0).length;
+  return { endpointId, failures, lastStatus: attempts[0]?.status ?? 0 };
+}
+
+export const isHealthy = (id: string) => healthOf(id).failures < FAILURE_LIMIT;
+@@ server/delivery/http-client.ts
+export const httpClient = {
+  async post(url: string, body: string, opts: { headers: Record<string, string>; timeoutMs: number }) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs);
+    try {
+      const res = await fetch(url, { method: 'POST', body, headers: opts.headers, signal: ctrl.signal });
+      return { status: res.status };
+    } catch (e) {
+      return { status: 0, error: String(e) };
+    } finally {
+      clearTimeout(timer);
+    }
+  },
+};
+@@ server/delivery/rate-limit.ts
+import { tenantById } from './tenant-config';
+import type { RateLimit } from './model/types';
+
+const buckets = new Map<string, { tokens: number; at: number }>();
+const DEFAULT: RateLimit = { perSecond: 10, burst: 20 };
+
+export async function allow(tenant: string) {
+  const b = buckets.get(tenant) ?? { tokens: DEFAULT.burst, at: Date.now() };
+  const limit = { ...DEFAULT, ...tenantById(tenant)?.limits };
+  b.tokens = Math.min(limit.burst, b.tokens + ((Date.now() - b.at) / 1000) * limit.perSecond);
+  b.at = Date.now();
+  if (b.tokens < 1) await new Promise((r) => setTimeout(r, 1000 / limit.perSecond));
+  buckets.set(tenant, { ...b, tokens: b.tokens - 1 });
+}
+@@ server/delivery/verify-signature.ts
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { secretsFor } from './secrets';
+
+export function verifySignature(body: string, header: string) {
+  const { t, v1 } = Object.fromEntries(header.split(',').map((p) => p.split('=')));
+  const expected = secretsFor().map((s) => createHmac('sha256', s).update(`${t}.${body}`).digest('hex'));
+  return expected.some((mac) => mac === v1);
+}
+@@ server/delivery/event-store.ts
+import type { DeliveryEvent } from './model/types';
+
+export const db = connect(process.env.DATABASE_URL ?? 'postgres://localhost/relay');
+
+export async function enqueue(event: DeliveryEvent) {
+  await db.insert('events', { ...event, status: 'queued' });
+}
+
+export async function markDelivered(id: string) {
+  await db.update('events', { id }, { status: 'delivered' });
+}
+@@ server/delivery/attempt-log.ts
+import { db } from './event-store';
+import type { Attempt, DeliveryEvent } from './model/types';
+
+export async function appendAttempt(event: DeliveryEvent, status: number): Promise<Attempt> {
+  const attempt = { id: crypto.randomUUID(), number: event.attempt, status, event, at: Date.now() };
+  await db.insert('attempts', attempt);
+  return attempt;
+}
+
+export const recentAttempts = (endpointId: string, n: number) =>
+  db.select<Attempt>('attempts', { endpointId }, { limit: n, order: 'at desc' });
+@@ server/delivery/payload-schema.ts
+const MAX_BYTES = 256 * 1024;
+
+export type Payload = { id: string; type: string; data: unknown; sentAt: string };
+
+export function validatePayload(p: Payload) {
+  if (!p.id || !p.type) throw new Error('Payload needs an id and a type');
+  if (!/^[a-z]+(\.[a-z_]+)+$/.test(p.type)) throw new Error(`Bad event type: ${p.type}`);
+  const size = new TextEncoder().encode(JSON.stringify(p)).length;
+  if (size > MAX_BYTES) throw new Error(`Payload is ${size} bytes, limit is ${MAX_BYTES}`);
+  return p;
+}
+@@ server/delivery/dead-letter.ts
+import { db } from './event-store';
+import { httpClient } from './http-client';
+import type { Attempt } from './model/types';
+
+export async function deadLetter(attempt: Attempt, reason: string) {
+  await db.insert('dead_letters', {
+    eventId: attempt.event.id,
+    endpointId: attempt.event.endpoint.id,
+    reason,
+  });
+  return { scheduled: false, reason };
+}
+@@ server/delivery/circuit-breaker.ts
+import { healthOf } from './endpoint-health';
+import { tenantById } from './tenant-config';
+
+const openUntil = new Map<string, number>();
+
+export function isOpen(endpointId: string) {
+  const until = openUntil.get(endpointId) ?? 0;
+  if (until > Date.now()) return true;
+  if (healthOf(endpointId).failures < 5) return false;
+  openUntil.set(endpointId, Date.now() + 60_000);
+  return true;
+}
+@@ server/delivery/tenant-config.ts
+import type { RelayConfig, RetryPolicy, Tenant } from './model/types';
+
+const tenants = new Map<string, Tenant>();
+
+export const defineRelay = (config: RelayConfig & { onReady(app: unknown): void }) => config;
+
+export const tenantById = (id: string) => tenants.get(id);
+
+export function tenantPolicy(id?: string): RetryPolicy {
+  const t = id ? tenants.get(id) : undefined;
+  return { maxAttempts: 8, multiplier: 1, ...t?.retry };
+}
+@@ server/delivery/secrets.ts
+import { db } from './event-store';
+
+const cache: string[] = [];
+
+export async function loadSecrets() {
+  const rows = await db.select<{ secret: string }>('signing_keys', { active: true });
+  cache.splice(0, cache.length, ...rows.map((r) => r.secret));
+}
+
+export const currentSecret = () => cache[0] ?? '';
+export const secretsFor = () => cache.slice(0, 2);

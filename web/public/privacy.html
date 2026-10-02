@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Privacy · League of Agents</title>
+<meta name="description" content="What League of Agents collects, and why it never sends your code anywhere.">
+<link rel="canonical" href="https://leagueofagents.dev/privacy">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+<link rel="icon" href="/favicon-16.png" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" sizes="180x180">
+<link rel="stylesheet" href="/fonts/plex.css">
+<style>
+  :root {
+    --canvas: #f2f2f3;
+    --surface: #ffffff;
+    --hair: #e4e4e7;
+    --ink: #18181b;
+    --ink2: #52525b;
+    --sel: #7c2bee;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --canvas: #08080a;
+      --surface: #151517;
+      --hair: #26262a;
+      --ink: #ededef;
+      --ink2: #a1a1aa;
+      --sel: #a871f4;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font: 15px/1.6 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main {
+    max-width: 680px;
+    margin: 48px auto;
+    padding: 32px 40px;
+    background: var(--surface);
+    border: 1px solid var(--hair);
+    border-radius: 16px;
+  }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
+  header img { width: 24px; height: 24px; border-radius: 6px; }
+  header a { color: var(--ink); text-decoration: none; font-weight: 600; font-size: 14px; }
+  h1 { font-size: 24px; line-height: 1.3; margin: 0 0 6px; font-weight: 600; text-wrap: balance; }
+  h2 { font-size: 15px; margin: 28px 0 6px; font-weight: 600; }
+  p, li { color: var(--ink2); text-wrap: pretty; }
+  p { margin: 0 0 10px; }
+  ul { margin: 0 0 10px; padding-left: 20px; }
+  li { margin: 2px 0; }
+  strong { color: var(--ink); font-weight: 500; }
+  code { font: 13px 'IBM Plex Mono', ui-monospace, monospace; }
+  a { color: var(--sel); }
+  .updated { font-size: 13px; margin-bottom: 20px; }
+  @media (width < 720px) {
+    main { margin: 0; border: 0; border-radius: 0; padding: 24px 16px; min-height: 100vh; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="/brand/mark-40.png" alt="">
+    <a href="/">League of Agents</a>
+  </header>
+  <h1>Privacy</h1>
+  <p class="updated">Last updated 2 October 2026</p>
+
+  <h2>League of Agents never sends your code anywhere</h2>
+  <p>League of Agents reads your repository through the bridge, a small program you run on your own computer. This page, leagueofagents.dev, talks to that bridge straight from your browser. Your code, prompts, runs and snapshots go between your browser and your computer only. League of Agents has no servers that receive code. The coding agents you run do send code to their providers; see below.</p>
+
+  <h2>What this site counts</h2>
+  <p>leagueofagents.dev counts page views with Vercel Web Analytics, to know how many people visit and from where. For each page view it may record:</p>
+  <ul>
+    <li>the time, and the page's path (such as <code>/</code>), without anything after <code>?</code> or <code>#</code>, so the link that connects to your bridge is never sent;</li>
+    <li>the site that linked to it;</li>
+    <li>the country, region and city, worked out from the request;</li>
+    <li>the operating system, the browser and the kind of device.</li>
+  </ul>
+  <p>That includes the app on leagueofagents.dev, which League of Agents opens connected to your repository in Chrome, Edge, Brave and Arc: its page views are counted the same way, and never your code, your prompts, or anything after <code>#</code>.</p>
+  <p>It uses no cookies. Visitors are told apart by a hash of the request, which is discarded after 24 hours, and the numbers are only ever seen added up. Nothing is counted in the app the bridge serves on your computer.</p>
+
+  <h2>What your browser keeps</h2>
+  <p>Your browser saves the bridge you connected to (its port and token) and your panel and theme choices in its own storage on your device, so a reload reconnects. Disconnecting removes the connection.</p>
+
+  <h2>Your coding agents</h2>
+  <p>When you run Claude Code, Codex, Cursor or another agent, it sends your prompts and code to its own provider, under that provider's terms. League of Agents only starts the agent on your computer and records what it changed there.</p>
+
+  <h2>Installing</h2>
+  <p>The bridge comes from the npm registry, under npm's own terms. It sends nothing anywhere itself.</p>
+
+  <h2>Questions</h2>
+  <p>Ask on the project's GitHub repository.</p>
+</main>
+</body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "leagueofagents-cli",
+  "version": "0.1.1",
+  "description": "Point your coding agent at any file or block of code, then see every change on a map of your repo. Works with Claude Code, Codex, Cursor and more.",
+  "keywords": ["claude-code", "cursor", "coding-agents", "code-review", "canvas", "git"],
+  "homepage": "https://leagueofagents.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mujeeb-k/league-of-agents.git"
+  },
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "leagueofagents-cli": "bridge/loa.mjs",
+    "loa": "bridge/loa.mjs"
+  },
+  "files": [
+    "NOTICE",
+    "bridge/loa.mjs",
+    "web/dist/"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "prepack": "npm --prefix web ci && npm --prefix web run build"
+  }
+}

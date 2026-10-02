@@ -1,0 +1,179 @@
+/*
+  The theme: one palette for shadcn/ui components and the canvas, from docs/BRAND.md.
+  Dark like Vercel (near-black, neutral grays), light like Cursor (off-white, soft gray panels),
+  purple the only accent. Every text and accent pairing is at least 4.5:1 on every surface it sits on.
+  The resolved theme is always set on <html data-theme>, so one selector rules.
+*/
+
+/* ⌘ ⇧ ⌥ ⌃ ⎋ ↵ ⌫: IBM Plex has none of them, so take them from the system's symbol font. */
+@font-face {
+  font-family: 'LoA Symbols';
+  src:
+    local('Apple Symbols'), local('Segoe UI Symbol'), local('Noto Sans Symbols 2'), local('Noto Sans Symbols'),
+    local('DejaVu Sans');
+  unicode-range: U+2318, U+21E7, U+2325, U+2303, U+238B, U+21B5, U+232B;
+}
+
+:root {
+  --radius: 8px;
+
+  /* shadcn/ui */
+  --background: #fafafa;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
+  --primary: #18181b;
+  --primary-foreground: #fafafa;
+  --secondary: #f1f1f3;
+  --secondary-foreground: #18181b;
+  --muted: #f1f1f3;
+  --muted-foreground: #626269;
+  --accent: #eeeef0;
+  --accent-foreground: #18181b;
+  --destructive: #c1272d;
+  --border: #e4e4e7;
+  --input: #e4e4e7;
+  --ring: #7c2bee;
+
+  /* Canvas and app chrome, from the same palette. */
+  --bg: #fafafa;
+  --panel: #f7f7f8;
+  --canvas: #f2f2f3;
+  --surface: #ffffff;
+  --dot: #d4d4d8;
+  --frame: #f9f9f9;
+  --hair: #e4e4e7;
+  --hair2: #eeeef0;
+  --spark: #d4d4d8;
+  --ink: #18181b;
+  --ink2: #52525b;
+  --ink3: #626269;
+  --sel: #7c2bee;
+  --sel-soft: rgba(124, 43, 238, 0.09);
+  --on-sel: #ffffff;
+  --wire: #c4c4ca;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Data colours: changes, syntax and agents. Not accents; purple stays reserved for selection. */
+  --add: #1a7a39;
+  --add-bg: #e3f2e7;
+  --tick-add: #2da44e;
+  --del: #c1272f;
+  --del-bg: #fbe8e9;
+  --tick-del: #d93a42;
+  --mod: #945600;
+  --kw: #0a5bc4;
+  --str: #0a7560;
+  --com: #626269;
+  --num: #ad4f07;
+  --a-claude: #b34a20;
+  --a-codex: #0a7071;
+  --a-cursor: #2f3440;
+  --a-detected: #7f620e;
+  --a-hermes: #2a62c9;
+  --e1: 0 0 0 1px rgba(24, 24, 27, 0.07), 0 1px 2px rgba(24, 24, 27, 0.04);
+  --e2: 0 0 0 1px rgba(24, 24, 27, 0.08), 0 8px 24px rgba(24, 24, 27, 0.08);
+}
+
+:root[data-theme='dark'] {
+  --background: #0e0e10;
+  --foreground: #ededef;
+  --card: #151517;
+  --card-foreground: #ededef;
+  --popover: #151517;
+  --popover-foreground: #ededef;
+  --primary: #ededef;
+  --primary-foreground: #0e0e10;
+  --secondary: #1c1c1f;
+  --secondary-foreground: #ededef;
+  --muted: #1c1c1f;
+  --muted-foreground: #93939c;
+  --accent: #1c1c1f;
+  --accent-foreground: #ededef;
+  --destructive: #f06a71;
+  --border: #26262a;
+  --input: #26262a;
+  --ring: #a871f4;
+
+  --bg: #0e0e10;
+  --panel: #0e0e10;
+  --canvas: #08080a;
+  --surface: #151517;
+  --dot: #1e1e22;
+  --frame: #0d0d0f;
+  --hair: #26262a;
+  --hair2: #1c1c1f;
+  --spark: #3a3a40;
+  --ink: #ededef;
+  --ink2: #a1a1aa;
+  --ink3: #93939c;
+  --sel: #a871f4;
+  --sel-soft: rgba(168, 113, 244, 0.14);
+  --on-sel: #0e0e10;
+  --wire: #34343a;
+  --add: #57c784;
+  --add-bg: rgba(87, 199, 132, 0.12);
+  --tick-add: #57c784;
+  --del: #f06a71;
+  --del-bg: rgba(240, 106, 113, 0.12);
+  --tick-del: #f06a71;
+  --mod: #e3a945;
+  --kw: #6ea8fe;
+  --str: #5ccfae;
+  --com: #93939c;
+  --num: #efa66a;
+  --a-claude: #e8845c;
+  --a-codex: #3dc2c2;
+  --a-cursor: #c9ced6;
+  --a-detected: #e3b341;
+  --a-hermes: #6f9bf2;
+  --e1: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --e2: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 12px 32px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@theme inline {
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'LoA Symbols', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sel: var(--sel);
+  --color-sel-soft: var(--sel-soft);
+  --color-on-sel: var(--on-sel);
+  --color-panel: var(--panel);
+  --color-canvas: var(--canvas);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink2);
+  --color-ink3: var(--ink3);
+  --color-add: var(--add);
+  --color-del: var(--del);
+  --color-mod: var(--mod);
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+kbd {
+  font-family: var(--font-mono);
+}

@@ -1,0 +1,57 @@
+* {
+  box-sizing: border-box;
+}
+:root {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+html {
+  scroll-padding-top: env(safe-area-inset-top, 0px);
+}
+body {
+  font:
+    13px/1.45 'IBM Plex Sans',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+button,
+textarea,
+input {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+}
+:focus-visible {
+  outline: 2px solid var(--sel);
+  outline-offset: 2px;
+}
+em {
+  font-style: normal;
+}
+.num,
+.stat {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The sidebar floats over the canvas in column 1 (panels.ts); the inspector's width is --insp-w. */
+#app {
+  --side-w: 248px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--insp-w, 316px);
+  grid-template-rows: 48px minmax(0, 1fr);
+  height: 100%;
+}

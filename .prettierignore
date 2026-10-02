@@ -1,0 +1,10 @@
+# Vendored or generated: never formatted.
+**/package-lock.json
+**/pnpm-lock.yaml
+**/yarn.lock
+**/bun.lockb
+**/node_modules/
+web/dist/
+**/test-results/
+tests/fixtures/agents/raw/
+video/
