@@ -1,4 +1,4 @@
-// The 60-second video, one idea per scene, and the 15-second cut. The problem is dark; the reveal turns light at
+// The video (about 67 seconds), one idea per scene, and the 15-second cut. The problem is dark; the reveal turns light at
 // the wordmark; Review goes dark again to read code. Scenes zoom, slide or fade into each other (15 frames each, transitions.tsx),
 // so each scene's length includes the transition into the next.
 import { TransitionSeries } from '@remotion/transitions';
@@ -17,7 +17,7 @@ import { Setup } from './scenes/Setup';
 import { Skim } from './scenes/Skim';
 import { through, timing } from './transitions';
 
-/** The 60-second video: the problem, the product scene by scene, and how to get it. */
+/** The full video: the problem, the product scene by scene, and how to get it. */
 export const Main: React.FC = () => {
   const { fps } = useVideoConfig();
   return (
@@ -42,12 +42,12 @@ export const Main: React.FC = () => {
         <Point duration={255} />
       </TransitionSeries.Sequence>
       <TransitionSeries.Transition presentation={through.slide} timing={timing} />
-      <TransitionSeries.Sequence name="Propagate" durationInFrames={510} premountFor={fps}>
-        <Propagate duration={510} />
+      <TransitionSeries.Sequence name="Propagate" durationInFrames={635} premountFor={fps}>
+        <Propagate duration={635} />
       </TransitionSeries.Sequence>
       <TransitionSeries.Transition presentation={through.fade} timing={timing} />
-      <TransitionSeries.Sequence name="Review" durationInFrames={120} premountFor={fps}>
-        <Review duration={120} />
+      <TransitionSeries.Sequence name="Review" durationInFrames={210} premountFor={fps}>
+        <Review />
       </TransitionSeries.Sequence>
       <TransitionSeries.Transition presentation={through.fade} timing={timing} />
       <TransitionSeries.Sequence name="Keep" durationInFrames={120} premountFor={fps}>

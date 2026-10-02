@@ -91,8 +91,10 @@ export const Layout: React.FC<{
   lines: [string, number][];
   place: 'top' | 'wide' | 'left' | 'right' | 'over';
   dark?: boolean;
+  /** Beside the product only: more below the words, in the same column. */
+  aside?: React.ReactNode;
   children: React.ReactNode;
-}> = ({ lines, place, dark = false, children }) => {
+}> = ({ lines, place, dark = false, aside, children }) => {
   const box =
     place === 'top' ? BOX : place === 'wide' ? WIDE : place === 'left' ? SIDE_LEFT : place === 'right' ? SIDE_RIGHT : FULL;
   const words: React.CSSProperties =
@@ -122,6 +124,13 @@ export const Layout: React.FC<{
             }}
           >
             <Lines lines={lines} size={72} />
+          </div>
+        ) : aside ? (
+          <div style={{ position: 'absolute', ...words, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 40 }}>
+            <div style={{ height: 300 }}>
+              <Lines lines={lines} size={76} />
+            </div>
+            {aside}
           </div>
         ) : (
           <div style={{ position: 'absolute', ...words }}>

@@ -8,9 +8,11 @@ import { C, SHADOW } from '../brand';
 import { SPREAD } from '../data';
 import { Layout, Shot, progress, useFrame, type Region } from '../ui';
 
-// The canvas, without the side panels: the editor large over the dimmed map; then the run's button.
+// The whole app, so the rename and what follows read as one experience; then in on the run's button as the
+// cursor reaches it.
+const APP = { cx: 576, cy: 360, w: 1152 };
 const CANVAS = { cx: 418, cy: 325, w: 835 };
-const BUTTON = { cx: 960, cy: 210, w: 400 };
+const BUTTON = { cx: 880, cy: 230, w: 620 };
 // The steps, without the inspector's foot, which says the recorded run was later reverted.
 const STEPS = { cx: 620, cy: 325, w: 1040 };
 
@@ -45,7 +47,7 @@ function camera(frame: number, keys: [number, Region][]): Region {
 }
 
 /** The scene's parts, in frames: the rename, the click, the folders, then the steps (the full video only). */
-const PARTS = { rename: 150, click: 55, folders: 140 };
+const PARTS = { rename: 210, click: 120, folders: 140 };
 
 /** `short`: the 15-second cut, which goes from the rename straight to the folders, and ends there. */
 export const Propagate: React.FC<{ duration: number; short?: boolean }> = ({ duration, short }) => {
@@ -79,12 +81,16 @@ export const Propagate: React.FC<{ duration: number; short?: boolean }> = ({ dur
       ]}
     >
       <Sequence durationInFrames={renameEnd + 8} premountFor={fps}>
-        <Shot src="rename" from={CANVAS} trim={short ? 3 : 0.3} rate={((short ? 3.8 : 6.8) * fps) / renameEnd} />
+        {short ? (
+          <Shot src="rename" from={CANVAS} trim={3} rate={(3.8 * fps) / renameEnd} />
+        ) : (
+          <Shot src="rename" from={APP} trim={0.3} />
+        )}
       </Sequence>
       {short ? null : (
         <Sequence from={renameEnd} durationInFrames={clickEnd - renameEnd + 8} premountFor={fps}>
           <div style={{ position: 'absolute', inset: 0, opacity: progress(frame, renameEnd - 8, renameEnd) }}>
-            <Shot src="propagate-start" from={BUTTON} rate={(2 * fps) / (clickEnd - renameEnd)} />
+            <Shot src="propagate-start" from={APP} to={BUTTON} push={[0, 40]} rate={0.7} />
           </div>
         </Sequence>
       )}

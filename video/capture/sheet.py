@@ -18,19 +18,22 @@ MAIN = [
     (600, "Point", "Select the exact lines for your agent to work on.", "Close in on the editor: lines 34–56 dragged"),
     (700, "Edit", "Or edit the file yourself.", "config.py's editor open over the dimmed map, a line typed"),
     (772, "Edit", "(same line)", "Saved: \"Saved as run 2\""),
-    (850, "Propagate", "Rename a function.", "The rename typed in coach.py's editor, over the dimmed map"),
-    (925, "Propagate", "(same line)", "Saved: \"Saved as run 3\""),
-    (950, "Propagate", "See every file it worked on, across your project.", "Update what depends on this"),
-    (1010, "Propagate", "(same line)", "The camera on the first folder as it lights up"),
-    (1110, "Propagate", "(same line)", "All three folders, lit in order; the run's numbers"),
-    (1160, "Propagate", "(same line)", "Its files stepped through one by one in Diff, each marked reviewed"),
-    (1240, "Propagate", "(same line)", "The last file; review 4 of 4"),
-    (1345, "Review · dark", "Check every line before you keep it.", "Before, After and Diff in the app's dark theme; the passing backend tests"),
-    (1470, "Keep", "Keep it, or undo it in one click.", "Close in on Keep, then Revert"),
-    (1535, "Agents", "Works with Claude Code, Codex and Cursor.", "The agents' own icons; Beta under Codex and Cursor"),
-    (1605, "Setup", "Try it at leagueofagents.dev", "Paste into your agent: Copy clicked, Copied"),
-    (1645, "Setup", "(same line)", "Or run in your terminal: Copy clicked, Copied"),
-    (1790, "End", "leagueofagents.dev", "The L, the site in italics, then the two lines, each in turn; the card holds"),
+    (900, "Propagate", "Rename a function.", "The whole app: the rename typed in coach.py's editor, over the dimmed map"),
+    (985, "Propagate", "(same line)", "Saved: \"Saved as run 3\""),
+    (1030, "Propagate", "(same line)", "In on \"Update what depends on this\", beside the failing check"),
+    (1070, "Propagate", "(same line)", "Clicked: Claude Code's run starts"),
+    (1140, "Propagate", "See every file it worked on, across your project.", "The camera on the first folder as it lights up"),
+    (1240, "Propagate", "(same line)", "All three folders, lit in order; the run's numbers"),
+    (1300, "Propagate", "(same line)", "Its files stepped through one by one in Diff, each marked reviewed"),
+    (1440, "Review · dark", "Check every line before you keep it. / Before.", "Before"),
+    (1500, "Review · dark", "(same) / After.", "After"),
+    (1545, "Review · dark", "(same) / Diff.", "Diff"),
+    (1585, "Review · dark", "(same) / Checks.", "The passing backend tests"),
+    (1680, "Keep", "Keep it, or undo it in one click.", "Close in on Keep, then Revert"),
+    (1745, "Agents", "Works with Claude Code, Codex and Cursor.", "The agents' own icons; Beta under Codex and Cursor"),
+    (1820, "Setup", "Try it at leagueofagents.dev", "Paste into your agent: Copy clicked, Copied"),
+    (1860, "Setup", "(same line)", "Or run in your terminal: Copy clicked, Copied"),
+    (2005, "End", "leagueofagents.dev", "The L, the site in italics, then the two lines, each in turn; the card holds"),
 ]
 CUT = [(60, "Hook"), (175, "Map"), (315, "Propagate"), (440, "End")]
 
@@ -49,7 +52,7 @@ H = 120 + rows * (TH + CAP + PAD) + 70 + SW * 9 // 16 + 60 + PAD
 font = lambda s, bold=False: ImageFont.truetype("/System/Library/Fonts/HelveticaNeue.ttc", s, index=1 if bold else 0)
 sheet = Image.new("RGB", (W, H), "#ffffff")
 d = ImageDraw.Draw(sheet)
-d.text((PAD, 40), "League of Agents: 60-second video (1920 × 1080, 30 fps)", font=font(34, True), fill="#18181b")
+d.text((PAD, 40), "League of Agents: the video (67 s, 1920 × 1080, 30 fps)", font=font(34, True), fill="#18181b")
 for i, (frame, scene, line, visual) in enumerate(MAIN):
     x, y = PAD + i % COLS * (TW + PAD), 120 + i // COLS * (TH + CAP + PAD)
     sheet.paste(still("Main", frame).resize((TW, TH), Image.LANCZOS), (x, y))
