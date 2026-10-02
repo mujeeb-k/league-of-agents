@@ -13,7 +13,8 @@ import numpy as np
 import soundfile as sf
 from kokoro_onnx import EspeakConfig, Kokoro
 
-VOICE = "af_heart"  # Kokoro's top-graded English voice
+VOICE = "am_michael"  # Kokoro's deepest, calmest American English voice
+SPEED = 1.1  # a touch quicker than its default
 ESPEAK = "/opt/homebrew/opt/espeak-ng"
 OUT = Path("public/narration")
 TARGET_RMS = 10 ** (-20 / 20)  # each line at -20 dBFS RMS
@@ -22,21 +23,21 @@ PEAK = 10 ** (-1.5 / 20)  # and never above -1.5 dBFS
 # (id, start, latest end), in seconds of the full video, and the words. Windows follow the scenes (Main.tsx),
 # with short pauses where scenes change. Words are spelled for the voice where it needs help.
 SCRIPT = [
-    ("hook", 0.3, 4.2, "In a minute, an agent can change code all over your project."),
-    ("skim", 4.6, 9.8, "Then it hands you a long summary, and it's easy to just say yes."),
-    ("logo", 10.1, 12.9, "League of Agents shows you all of it."),
-    ("map", 13.2, 18.2, "Your whole project becomes a map, from every folder down to the code."),
-    ("point", 18.5, 21.6, "Pick the lines an agent may change."),
-    ("edit", 21.8, 26.2, "Or make the edit yourself. Every save is kept, and can be undone."),
-    ("rename", 26.6, 32.9, "Here, a function is renamed by hand. The tests now fail, because other files still use the old name."),
-    ("click", 33.2, 36.8, "One click asks the agent to fix everything that depended on it."),
-    ("folders", 37.1, 41.4, "Each folder lights up as the agent works through it."),
-    ("steps", 41.8, 46.6, "Then you step through every changed file, one at a time."),
-    ("review", 47.1, 53.4, "Flip between the old code, the new code, and exactly what changed. Your tests run on their own."),
-    ("keep", 53.6, 56.9, "If it isn't right, one click puts everything back."),
+    ("hook", 0.2, 4.3, "In under a minute, an agent changed code across your whole project."),
+    ("skim", 4.6, 9.8, "It leaves a long summary behind. Most people skim it, and say yes."),
+    ("logo", 10.0, 12.9, "League of Agents shows you what changed, and where."),
+    ("map", 13.2, 18.2, "Your whole project, laid out as a map. Zoom in from the folders down to the code."),
+    ("point", 18.5, 21.6, "Select the lines you want the agent to work on."),
+    ("edit", 21.8, 26.2, "Or open the file and edit it yourself. Every save can be undone."),
+    ("rename", 26.6, 32.9, "Here, a function gets a new name. The tests fail, because other files still use the old one."),
+    ("click", 33.2, 36.8, "One click asks the agent to update everything that uses it."),
+    ("folders", 37.1, 41.4, "Each folder lights up as the agent reaches it."),
+    ("steps", 41.8, 46.6, "Then you step through every file it changed, one by one."),
+    ("review", 47.1, 53.4, "See the code before, after, and exactly what changed. Your tests run on their own."),
+    ("keep", 53.6, 56.9, "If it's wrong, one click puts every file back."),
     ("agents", 56.9, 59.4, "It works with the agents you already use."),
     ("setup", 59.6, 62.4, "Set it up with one line, or one command."),
-    ("end", 62.7, 67.0, "It's free, it's open source, and it all runs on your computer."),
+    ("end", 62.7, 67.0, "Free, open source, and running on your own computer."),
 ]
 
 
@@ -55,7 +56,7 @@ def main(model, voices):
     OUT.mkdir(parents=True, exist_ok=True)
     lines, late = [], []
     for name, start, end, text in SCRIPT:
-        audio, sr = kokoro.create(text, voice=VOICE, speed=1.0, lang="en-us")
+        audio, sr = kokoro.create(text, voice=VOICE, speed=SPEED, lang="en-us")
         audio = level(np.asarray(audio, dtype=np.float64))
         sf.write(OUT / f"{name}.wav", audio, sr, subtype="PCM_16")
         length = len(audio) / sr
