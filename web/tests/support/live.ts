@@ -15,6 +15,7 @@ export const FAKE_CODEX = path.join(REPO_ROOT, 'tests/fixtures/fake-codex.mjs');
 export const REPLAY_AGENT = path.join(REPO_ROOT, 'tests/fixtures/replay-agent.mjs');
 export const AGENT_FIXTURES = path.join(REPO_ROOT, 'tests/fixtures/agents/claude');
 export const SLOW_AGENT = path.join(here, 'slow-agent.mjs');
+export const PROBE_AGENT = path.join(here, 'probe-agent.mjs');
 
 /** Files seeded into every temp repo. allowlist.ts holds the exact line fake-claude.mjs rewrites. */
 export const SEED: Record<string, string> = {

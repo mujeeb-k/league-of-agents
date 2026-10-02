@@ -105,8 +105,8 @@ const diffField = StateField.define({
 
 export interface EditorHooks {
   onChange(text: string): void;
-  /** The selected lines (1-based, inclusive), or null when nothing is selected. */
-  onSelect(lines: [number, number] | null): void;
+  /** The selected lines (1-based, inclusive) and their text, or null when nothing is selected. */
+  onSelect(lines: [number, number] | null, text: string[]): void;
   onSave(): void;
   onClose(): void;
   /** ⌘K with lines selected: write an instruction for them. */
@@ -118,6 +118,8 @@ export interface Editor {
   setReadOnly(readOnly: boolean): void;
   /** Replaces the whole text, as when the file changed on disk; the undo history starts again. */
   reset(text: string): void;
+  /** Selects whole lines (1-based, inclusive), as when a selection follows its code to new line numbers. */
+  select(lines: [number, number]): void;
   /** Shows an agent's change inline, or clears it. */
   showDiff(diff: InlineDiff | null): void;
 }
@@ -149,12 +151,16 @@ export function createEditor(parent: HTMLElement, text: string, readOnly: boolea
     EditorView.updateListener.of(u => {
       if (u.docChanged) hooks.onChange(u.state.doc.toString());
       if (u.docChanged || u.selectionSet) {
-        const r = u.state.selection.main;
-        hooks.onSelect(
-          r.empty
-            ? null
-            : [u.state.doc.lineAt(r.from).number, u.state.doc.lineAt(r.to - (r.to > r.from ? 1 : 0)).number],
-        );
+        const r = u.state.selection.main,
+          doc = u.state.doc;
+        if (r.empty) hooks.onSelect(null, []);
+        else {
+          const from = doc.lineAt(r.from).number,
+            to = doc.lineAt(r.to - (r.to > r.from ? 1 : 0)).number;
+          const text: string[] = [];
+          for (let n = from; n <= to; n++) text.push(doc.line(n).text);
+          hooks.onSelect([from, to], text);
+        }
       }
     }),
   ];
@@ -163,6 +169,11 @@ export function createEditor(parent: HTMLElement, text: string, readOnly: boolea
     view,
     setReadOnly: ro => view.dispatch({ effects: lock.reconfigure(locked(ro)) }),
     reset: next => view.setState(EditorState.create({ doc: next, extensions })),
+    select: ([from, to]) => {
+      const doc = view.state.doc;
+      if (to > doc.lines) return;
+      view.dispatch({ selection: { anchor: doc.line(from).from, head: doc.line(to).to }, scrollIntoView: true });
+    },
     // The change is brought into view, so it is seen without scrolling for it.
     showDiff: diff => {
       const first = diff && Math.min(...diff.added, ...diff.removed.keys());

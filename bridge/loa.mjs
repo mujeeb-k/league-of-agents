@@ -686,6 +686,30 @@ function scopeEntry(s) {
   const m = /^(.+):(\d+)-(\d+)$/.exec(s);
   return m ? { path: m[1], from: +m[2], to: +m[3] } : { path: s };
 }
+/** A file's text as lines, line endings normalised, without the empty line after a final newline. */
+function textLines(text) {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n');
+  if (lines.length && lines[lines.length - 1] === '') lines.pop();
+  return lines;
+}
+/**
+ * Where selected lines start in the file now (1-based): where they were, if they are still there; else their one
+ * exact match; null when they are gone, changed, or in more than one place. The app applies the same rule
+ * (web/src/lib/anchor.ts): a selection is held by its text, since line numbers point at other code as soon as
+ * anything above them changes.
+ */
+function relocate(lines, wanted, from) {
+  const at = s => wanted.every((w, i) => lines[s - 1 + i] === w);
+  if (!wanted.length) return null;
+  if (from >= 1 && at(from)) return from;
+  let found = null;
+  for (let s = 1; s + wanted.length - 1 <= lines.length; s++)
+    if (at(s)) {
+      if (found !== null) return null;
+      found = s;
+    }
+  return found;
+}
 function inScope(scope, rel) {
   return scope
     .map(scopeEntry)
@@ -907,13 +931,18 @@ function scopePreamble(scope) {
   };
   return `Scope for this task. Only edit these files or folders:\n${scope.map(line).join('\n')}\nEdits outside this scope will be blocked.\n\n`;
 }
-function startAgent(run) {
+function startAgent(run, read = {}) {
   const prompt = scopePreamble(run.scope) + run.prompt;
   const scopeFile = path.join(LOA, 'scope.json');
-  // For line ranges, the hook needs each file as it was when the run started.
+  // For line ranges, the hook needs each file as it was when the run started: as read when its lines were found.
   const ranges = {};
   for (const e of (run.scope || []).map(scopeEntry))
-    if (e.from) ranges[e.path] = { from: e.from, to: e.to, before: fs.readFileSync(path.join(ROOT, e.path), 'utf8') };
+    if (e.from)
+      ranges[e.path] = {
+        from: e.from,
+        to: e.to,
+        before: read[e.path] ?? fs.readFileSync(path.join(ROOT, e.path), 'utf8'),
+      };
   fs.writeFileSync(scopeFile, JSON.stringify({ scope: run.scope || [], ranges }));
   let cmd, args;
   if (run.agent === 'claude') {
@@ -1468,15 +1497,47 @@ const server = http.createServer(async (req, res) => {
         return send(res, 400, { error: `${AGENTS[b.agent].name} is not logged in. Run: claude auth login` }, cors);
       if (!AGENTS[b.agent]?.available)
         return send(res, 400, { error: `${b.agent} is not installed on this machine` }, cors);
+      // Lines selected in the app come with their text. Each range is found by it in the file as it is now, from
+      // one read that the scope lock then holds: moved if its lines moved, refused if they changed.
+      let scope = Array.isArray(b.scope) ? b.scope : [];
+      const read = {};
+      if (b.lines && typeof b.lines === 'object') {
+        const found = [];
+        for (const s of scope) {
+          const e = scopeEntry(s);
+          const want =
+            e.from && typeof b.lines[e.path] === 'string' ? b.lines[e.path].replace(/\r/g, '').split('\n') : null;
+          if (!want) {
+            found.push(s);
+            continue;
+          }
+          const abs = repoFile(e.path);
+          const text = abs ? fs.readFileSync(abs, 'utf8') : null;
+          const at = text === null ? null : relocate(textLines(text), want, e.from);
+          if (at === null)
+            return send(
+              res,
+              409,
+              {
+                error: `The lines you selected in ${path.basename(e.path)} changed. Select them again.`,
+                stale: e.path,
+              },
+              cors,
+            );
+          read[e.path] = text;
+          found.push(`${e.path}:${at}-${at + want.length - 1}`);
+        }
+        scope = found;
+      }
       const parent = b.resumeFrom ? runs.get(b.resumeFrom) : null;
       const run = await beginRun({
         agent: b.agent,
         prompt: b.prompt,
-        scope: b.scope || [],
+        scope,
         resumeFrom: parent?.id ?? null,
         sessionId: parent?.agent === b.agent ? parent.sessionId : null,
       });
-      startAgent(run);
+      startAgent(run, read);
       return send(res, 200, publicRun(run), cors);
     }
     const m = p.match(/^\/api\/runs\/(\d+)\/(cancel|keep|revert)$/);

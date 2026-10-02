@@ -124,6 +124,8 @@ export interface StartRunBody {
   prompt: string;
   scope: string[];
   resumeFrom: number | null;
+  /** For each file scoped to lines, the text of those lines: the bridge finds them by it (bridges before 0.1.2 ignore it). */
+  lines?: Record<string, string>;
 }
 
 /** POST /api/runs/:id/revert. 409 carries `conflict`. */

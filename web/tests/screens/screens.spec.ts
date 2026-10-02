@@ -172,6 +172,24 @@ test('live screens', async ({ page }) => {
       await expect(page.locator('#claudeProblem')).toBeVisible();
       await shoot(page, 'claude-logged-out');
     }
+    // Lines selected, then changed under the selection: the chip and the composer say so.
+    {
+      const repo = makeRepo();
+      await open(repo);
+      await page.keyboard.press('0');
+      await page.locator('.fr[data-path="shared/allowlist.ts"]').click();
+      await page.keyboard.press('Enter');
+      await page.locator('#editor .cm-line').nth(2).click();
+      await page.keyboard.press('Home');
+      for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowDown');
+      fs.writeFileSync(
+        path.join(repo, 'shared/allowlist.ts'),
+        fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8').replace('loadPolicy()', 'loadPolicy(env)'),
+      );
+      await expect(page.locator('#staleSelection')).toBeVisible({ timeout: 10_000 });
+      await page.locator('#prompt').fill('Load the policy from the environment');
+      await shoot(page, 'selection-changed');
+    }
     // A revert conflict in live mode.
     {
       const repo = makeRepo();

@@ -6,7 +6,7 @@ import { examplePrompt } from '../lib/examplePrompt';
 import { DEMO_AGENTS } from '../demo/sample';
 import { S, dom, st } from '../state/app';
 import { followTarget, isOffline, send } from '../state/actions';
-import { rangeScope } from '../state/editing';
+import { ed, rangeScope, staleSelection } from '../state/editing';
 import { renderComposer, renderSel, useRegion } from '../state/render';
 import { Button } from './ui/button';
 import {
@@ -40,8 +40,11 @@ function ScopeRow() {
         items.map(i => (
           <ScopeChip
             key={i.k}
-            label={i.label}
-            title={range ?? (i.k.replace(/^d:/, '') || root?.name)}
+            label={range && ed.stale ? `${i.label} · changed` : i.label}
+            tone={range && ed.stale ? 'stale' : 'scope'}
+            title={
+              range && ed.stale && ed.path ? staleSelection(ed.path) : (range ?? (i.k.replace(/^d:/, '') || root?.name))
+            }
             removeLabel={`Remove ${i.label} from scope`}
             removeData={{ 'data-unsel': i.k }}
             onRemove={() => {
@@ -203,7 +206,7 @@ export function Composer() {
     const prompt = dom.prompt,
       sendBtn = dom.sendBtn;
     const onInput = () => {
-      sendBtn.disabled = !prompt.value.trim();
+      sendBtn.disabled = !prompt.value.trim() || (!!rangeScope() && ed.stale);
       prompt.style.height = 'auto';
       prompt.style.height = Math.min(120, prompt.scrollHeight) + 'px';
     };
@@ -240,8 +243,10 @@ export function Composer() {
   const placeholder = blocked ?? 'Describe a change';
   // Written on every render, as renderComposer() did. The input handler also writes it directly,
   // so a React prop would go stale (React only writes props that changed since its last render).
+  // Selected lines that changed under the selection: nothing runs on them until they are selected again.
+  const stale = !!rangeScope() && ed.stale && ed.path ? staleSelection(ed.path) : null;
   useLayoutEffect(() => {
-    dom.sendBtn.disabled = !!blocked || st.busy === 'send' || !dom.prompt.value.trim();
+    dom.sendBtn.disabled = !!blocked || !!stale || st.busy === 'send' || !dom.prompt.value.trim();
   });
   return (
     <div
@@ -255,6 +260,11 @@ export function Composer() {
         <AgentPicker />
       </div>
       {claudeProblem ? <ClaudeProblem problem={claudeProblem} /> : null}
+      {stale ? (
+        <p id="staleSelection" role="status" className="px-1 pb-2 text-xs text-ink2 text-pretty">
+          {stale}
+        </p>
+      ) : null}
       {S.LIVE && !blocked && !S.RUNS.length ? <FirstRun /> : null}
       <div className="flex items-end gap-2 rounded-lg bg-muted py-1 pr-1 pl-3 focus-within:ring-2 focus-within:ring-ring/40">
         <Textarea

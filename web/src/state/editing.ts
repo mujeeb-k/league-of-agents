@@ -1,6 +1,8 @@
 // Editing on the map: the file open in the editor, unsaved drafts, and saving. A save is a run by
 // "You", with the same history, review and revert as an agent's run; in the demo it stays in the browser.
 import { bridge } from '../api/client';
+import type { Conn } from '../api/types';
+import { relocate, toLines } from '../lib/anchor';
 import { explain } from '../api/errors';
 import type { InlineDiff } from '../lib/editor';
 import { diffRows, linesAt } from '../lib/model';
@@ -29,7 +31,15 @@ export const ed = {
   conflict: null as { text: string; hash: string } | null,
   /** The lines selected in the editor (1-based, inclusive): the composer's scope while the editor is open. */
   range: null as [number, number] | null,
+  /** Their text: the selection is held by it, and follows it when lines above change (lib/anchor). */
+  rangeText: [] as string[],
+  /** The selected lines changed or can no longer be told apart: nothing runs on them until selected again. */
+  stale: false,
 };
+
+/** Said when the selected lines can't be found as they were. */
+export const staleSelection = (path: string) =>
+  `The lines you selected in ${path.split('/').pop()} changed. Select them again.`;
 
 /** The scope while lines are selected in the open file: "path:12-18", or null. */
 export function rangeScope(): string | null {
@@ -39,10 +49,44 @@ export function rangeScope(): string | null {
 }
 
 /** The selection inside the editor changed; the composer's scope follows it. */
-export function selectLines(lines: [number, number] | null) {
-  if (lines?.[0] === ed.range?.[0] && lines?.[1] === ed.range?.[1]) return;
+export function selectLines(lines: [number, number] | null, text: string[]) {
+  const same = lines?.[0] === ed.range?.[0] && lines?.[1] === ed.range?.[1];
+  ed.rangeText = lines ? text : [];
+  if (same && !ed.stale) return;
   ed.range = lines;
+  ed.stale = false;
   renderComposer();
+}
+
+/** Moves the selection to where its lines are in `text`, or marks it stale when they can't be found. */
+function follow(text: string) {
+  if (!ed.range || !ed.rangeText.length) return;
+  const at = relocate(toLines(text), ed.rangeText, ed.range[0]);
+  if (at === null) ed.stale = true;
+  else ed.range = [at, at + ed.rangeText.length - 1];
+  renderComposer();
+}
+
+/**
+ * Before a run on selected lines: the agent works on the file as it is on disk, so the selection is checked
+ * against it now. Returns why the run can't go ahead, or null, with the selection moved if its lines moved.
+ */
+export async function checkSelection(conn: Conn): Promise<string | null> {
+  const path = ed.path;
+  if (!path || !ed.range || !rangeScope()) return null;
+  if (drafts.has(path))
+    return `Save your changes to ${path.split('/').pop()} first: the agent works on the saved file.`;
+  if (ed.stale) return staleSelection(path);
+  const r = await bridge.file(conn, path);
+  if (ed.path !== path) return null;
+  follow(r.text);
+  if (ed.stale) return staleSelection(path);
+  if (r.text !== ed.saved) {
+    ed.saved = r.text;
+    ed.hash = r.hash;
+    bump('editor');
+  }
+  return null;
 }
 
 /** ⌘K with lines selected: write the instruction in the composer, scoped to those lines. */
@@ -72,6 +116,8 @@ export async function openEditor(path: string) {
   ed.path = path;
   ed.conflict = null;
   ed.range = null;
+  ed.rangeText = [];
+  ed.stale = false;
   ed.loading = true;
   renderSel();
   bump('editor');
@@ -101,6 +147,7 @@ export async function refreshEditor() {
     if (ed.path !== path || drafts.has(path) || r.text === ed.saved) return;
     ed.saved = r.text;
     ed.hash = r.hash;
+    follow(r.text);
     bump('editor');
   } catch {
     // The bridge stopped answering; the offline state says so.
@@ -112,6 +159,8 @@ export function closeEditor() {
   ed.path = null;
   ed.conflict = null;
   ed.range = null;
+  ed.rangeText = [];
+  ed.stale = false;
   st.editing = false;
   applyPanels();
   bump('editor');

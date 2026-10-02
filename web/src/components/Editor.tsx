@@ -282,6 +282,8 @@ export function Editor() {
     } else if (cm.current.editor.view.state.doc.toString() !== text) {
       cm.current.editor.reset(text);
       cm.current.editor.setReadOnly(!!editingBlocked());
+      // Selected lines follow their code to where it is now (refreshEditor); a stale selection stays unselected.
+      if (ed.range && !ed.stale) cm.current.editor.select(ed.range);
     }
   });
 

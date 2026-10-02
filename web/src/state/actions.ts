@@ -12,7 +12,7 @@ import { DEMO_AGENTS, SAMPLE_BRANCH, SAMPLE_REPO, SAMPLE_RUNS, SAMPLE_TREE } fro
 import { SAMPLE_TEXT } from '../demo/sampleText';
 import { toast } from '../ui/toast';
 import { S, dom, st } from './app';
-import { ed, rangeScope } from './editing';
+import { checkSelection, ed, rangeScope } from './editing';
 import {
   renderAll,
   renderComposer,
@@ -236,13 +236,26 @@ export async function send() {
       return;
     }
     if (!v) return;
-    const scope = scopeFromSelection();
     const fu = followTarget();
     if (st.busy === 'send') return;
     st.busy = 'send';
     renderComposer();
     try {
-      const r = await bridge.startRun(conn, { agent: st.agent, prompt: v, scope, resumeFrom: fu ? fu.id : null });
+      // Selected lines are checked against the file as it is now, and sent with their text.
+      const why = await checkSelection(conn);
+      if (why) {
+        toast(why);
+        return;
+      }
+      const scope = scopeFromSelection();
+      const lines = rangeScope() && ed.path ? { [ed.path]: ed.rangeText.join('\n') } : undefined;
+      const r = await bridge.startRun(conn, {
+        agent: st.agent,
+        prompt: v,
+        scope,
+        resumeFrom: fu ? fu.id : null,
+        lines,
+      });
       clearPrompt();
       dom.prompt.blur();
       live.pendingSelect = r.id;
