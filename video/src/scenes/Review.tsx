@@ -5,16 +5,21 @@ import { Layout, Shot, progress, useInk } from '../ui';
 
 const CARD = { cx: 418, cy: 355, w: 470 };
 const CHECKS = { cx: 990, cy: 480, w: 300 };
-/** The clip from 1 s, at its own speed: where it switches to each view, in scene frames; then the checks. */
+/** The clip from 1 s: where it switches to each view, in seconds of the clip; then the checks, in scene frames. */
 const TRIM = 1;
-const VIEWS: [string, number][] = [
-  ['Before.', Math.round((1.4 - TRIM) * 30)],
-  ['After.', Math.round((3.4 - TRIM) * 30)],
-  ['Diff.', Math.round((5.3 - TRIM) * 30)],
-  ['Checks.', 160],
+const AT: [string, number][] = [
+  ['Before.', 1.4],
+  ['After.', 3.4],
+  ['Diff.', 5.3],
+];
+/** The scene's full length at the clip's own speed; a shorter scene plays it quicker, in proportion. */
+const FULL = 210;
+const views = (pace: number): [string, number][] => [
+  ...AT.map(([name, t]): [string, number] => [name, Math.round((t - TRIM) * 30 * pace)]),
+  ['Checks.', Math.round(160 * pace)],
 ];
 
-const Views: React.FC = () => {
+const Views: React.FC<{ VIEWS: [string, number][] }> = ({ VIEWS }) => {
   const frame = useCurrentFrame();
   const C = useInk();
   return (
@@ -33,11 +38,13 @@ const Views: React.FC = () => {
   );
 };
 
-export const Review: React.FC = () => {
+export const Review: React.FC<{ duration?: number }> = ({ duration = FULL }) => {
   const frame = useCurrentFrame();
+  const pace = duration / FULL;
+  const VIEWS = views(pace);
   return (
-    <Layout dark place="right" lines={[['Check every line before you keep it.', 6]]} aside={<Views />}>
-      <Shot src="review-dark" from={CARD} trim={TRIM} />
+    <Layout dark place="right" lines={[['Check every line before you keep it.', 6]]} aside={<Views VIEWS={VIEWS} />}>
+      <Shot src="review-dark" from={CARD} trim={TRIM} rate={1 / pace} />
       <div style={{ position: 'absolute', left: 40, bottom: 40, opacity: progress(frame, VIEWS[3]![1], VIEWS[3]![1] + 12) }}>
         <Shot src="checks-dark" still from={CHECKS} box={{ w: 760, h: 170 }} />
       </div>

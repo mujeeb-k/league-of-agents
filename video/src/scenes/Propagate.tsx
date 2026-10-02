@@ -48,6 +48,8 @@ function camera(frame: number, keys: [number, Region][]): Region {
 
 /** The scene's parts, in frames: the rename, the click, the folders, then the steps (the full video only). */
 const PARTS = { rename: 210, click: 120, folders: 140 };
+/** The scene's full length at that pace; a shorter scene plays every part quicker, in proportion. */
+const FULL = 635;
 
 /** `short`: the 15-second cut, which goes from the rename straight to the folders, and ends there. */
 export const Propagate: React.FC<{ duration: number; short?: boolean }> = ({ duration, short }) => {
@@ -55,9 +57,10 @@ export const Propagate: React.FC<{ duration: number; short?: boolean }> = ({ dur
   const { fps } = useVideoConfig();
   const { box } = useFrame();
   const ALL = all(box.w / box.h);
-  const renameEnd = short ? Math.round(duration * 0.3) : PARTS.rename,
-    clickEnd = short ? renameEnd : renameEnd + PARTS.click,
-    foldersEnd = short ? duration : clickEnd + PARTS.folders;
+  const pace = short ? 1 : Math.min(1, duration / FULL);
+  const renameEnd = short ? Math.round(duration * 0.3) : Math.round(PARTS.rename * pace),
+    clickEnd = short ? renameEnd : renameEnd + Math.round(PARTS.click * pace),
+    foldersEnd = short ? duration : clickEnd + Math.round(PARTS.folders * pace);
   // After a moment on all three: a beat on each folder, then back to all three, then the numbers.
   const beat = Math.round((foldersEnd - clickEnd - 60) / order.length);
   const lit = order.map((_, i) => clickEnd + 18 + i * beat);
@@ -84,13 +87,13 @@ export const Propagate: React.FC<{ duration: number; short?: boolean }> = ({ dur
         {short ? (
           <Shot src="rename" from={CANVAS} trim={3} rate={(3.8 * fps) / renameEnd} />
         ) : (
-          <Shot src="rename" from={APP} trim={0.3} />
+          <Shot src="rename" from={APP} trim={0.3} rate={1 / pace} />
         )}
       </Sequence>
       {short ? null : (
         <Sequence from={renameEnd} durationInFrames={clickEnd - renameEnd + 8} premountFor={fps}>
           <div style={{ position: 'absolute', inset: 0, opacity: progress(frame, renameEnd - 8, renameEnd) }}>
-            <Shot src="propagate-start" from={APP} to={BUTTON} push={[0, 40]} rate={0.7} />
+            <Shot src="propagate-start" from={APP} to={BUTTON} push={[0, Math.round(40 * pace)]} rate={0.7 / pace} />
           </div>
         </Sequence>
       )}

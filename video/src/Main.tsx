@@ -15,56 +15,52 @@ import { Propagate } from './scenes/Propagate';
 import { Review } from './scenes/Review';
 import { Setup } from './scenes/Setup';
 import { Skim } from './scenes/Skim';
+import TIMING from './timing.json';
 import { through, timing } from './transitions';
 
+type Scene = keyof typeof TIMING.scenes;
+/** Each scene's length in frames, the transition into the next included. */
+export type Lengths = Record<Scene, number>;
+export const MAIN: Lengths = TIMING.scenes;
+/** A cut's length: its scenes, less the overlap of each transition. */
+export const total = (l: Lengths) => Object.values(l).reduce((a, b) => a + b, 0) - TIMING.transition * (Object.keys(l).length - 1);
+
+const SCENES: [Scene, (d: number) => React.ReactNode][] = [
+  ['Hook', d => <Hook duration={d} second={80} />],
+  ['Skim', d => <Skim duration={d} />],
+  ['Logo', () => <Logo />],
+  ['Map', () => <Map />],
+  ['Point', d => <Point duration={d} />],
+  ['Propagate', d => <Propagate duration={d} />],
+  ['Review', d => <Review duration={d} />],
+  ['Keep', d => <Keep duration={d} />],
+  ['Agents', () => <Agents />],
+  ['Setup', d => <Setup duration={d} />],
+  ['End', d => <End duration={d} />],
+];
+const INTO: (keyof typeof through)[] = ['fade', 'zoom', 'zoom', 'slide', 'slide', 'fade', 'fade', 'slide', 'slide', 'zoom'];
+
+/** One scene into the next. */
+const transition = (kind: keyof typeof through, key: string) =>
+  kind === 'zoom' ? (
+    <TransitionSeries.Transition key={key} presentation={through.zoom} timing={timing} />
+  ) : kind === 'slide' ? (
+    <TransitionSeries.Transition key={key} presentation={through.slide} timing={timing} />
+  ) : (
+    <TransitionSeries.Transition key={key} presentation={through.fade} timing={timing} />
+  );
+
 /** The full video: the problem, the product scene by scene, and how to get it. */
-export const Main: React.FC = () => {
+export const Main: React.FC<{ lengths?: Lengths }> = ({ lengths = MAIN }) => {
   const { fps } = useVideoConfig();
   return (
     <TransitionSeries>
-      <TransitionSeries.Sequence name="Hook" durationInFrames={135} premountFor={fps}>
-        <Hook duration={135} second={80} />
-      </TransitionSeries.Sequence>
-      <TransitionSeries.Transition presentation={through.fade} timing={timing} />
-      <TransitionSeries.Sequence name="Skim" durationInFrames={180} premountFor={fps}>
-        <Skim duration={180} />
-      </TransitionSeries.Sequence>
-      <TransitionSeries.Transition presentation={through.zoom} timing={timing} />
-      <TransitionSeries.Sequence name="Logo" durationInFrames={105} premountFor={fps}>
-        <Logo />
-      </TransitionSeries.Sequence>
-      <TransitionSeries.Transition presentation={through.zoom} timing={timing} />
-      <TransitionSeries.Sequence name="Map" durationInFrames={180} premountFor={fps}>
-        <Map />
-      </TransitionSeries.Sequence>
-      <TransitionSeries.Transition presentation={through.slide} timing={timing} />
-      <TransitionSeries.Sequence name="Point" durationInFrames={255} premountFor={fps}>
-        <Point duration={255} />
-      </TransitionSeries.Sequence>
-      <TransitionSeries.Transition presentation={through.slide} timing={timing} />
-      <TransitionSeries.Sequence name="Propagate" durationInFrames={635} premountFor={fps}>
-        <Propagate duration={635} />
-      </TransitionSeries.Sequence>
-      <TransitionSeries.Transition presentation={through.fade} timing={timing} />
-      <TransitionSeries.Sequence name="Review" durationInFrames={210} premountFor={fps}>
-        <Review />
-      </TransitionSeries.Sequence>
-      <TransitionSeries.Transition presentation={through.fade} timing={timing} />
-      <TransitionSeries.Sequence name="Keep" durationInFrames={120} premountFor={fps}>
-        <Keep duration={120} />
-      </TransitionSeries.Sequence>
-      <TransitionSeries.Transition presentation={through.slide} timing={timing} />
-      <TransitionSeries.Sequence name="Agents" durationInFrames={75} premountFor={fps}>
-        <Agents />
-      </TransitionSeries.Sequence>
-      <TransitionSeries.Transition presentation={through.slide} timing={timing} />
-      <TransitionSeries.Sequence name="Setup" durationInFrames={120} premountFor={fps}>
-        <Setup duration={120} />
-      </TransitionSeries.Sequence>
-      <TransitionSeries.Transition presentation={through.zoom} timing={timing} />
-      <TransitionSeries.Sequence name="End" durationInFrames={150} premountFor={fps}>
-        <End duration={150} />
-      </TransitionSeries.Sequence>
+      {SCENES.flatMap(([name, scene], i) => [
+        <TransitionSeries.Sequence key={name} name={name} durationInFrames={lengths[name]} premountFor={fps}>
+          {scene(lengths[name])}
+        </TransitionSeries.Sequence>,
+        ...(i < INTO.length ? [transition(INTO[i]!, `${name}-into`)] : []),
+      ])}
     </TransitionSeries>
   );
 };

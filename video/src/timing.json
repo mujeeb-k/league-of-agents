@@ -1,0 +1,36 @@
+{
+  "transition": 15,
+  "scenes": {
+    "Hook": 135,
+    "Skim": 180,
+    "Logo": 105,
+    "Map": 180,
+    "Point": 255,
+    "Propagate": 635,
+    "Review": 210,
+    "Keep": 120,
+    "Agents": 75,
+    "Setup": 120,
+    "End": 150
+  },
+  "documentary": {
+    "Hook": 168,
+    "Point": 285,
+    "Keep": 135,
+    "Agents": 138,
+    "Setup": 105,
+    "Logo": 90
+  },
+  "clear": {
+    "Hook": 120,
+    "Skim": 165,
+    "Logo": 90,
+    "Map": 165,
+    "Point": 225,
+    "Propagate": 560,
+    "Review": 190,
+    "Keep": 110,
+    "Setup": 105,
+    "End": 135
+  }
+}
