@@ -2,8 +2,8 @@
 // averroes), light theme, driven by Playwright with a visible cursor, and real Claude Code runs. Writes motion
 // clips (MP4, 30 fps, 2880 × 1800), their first and last frames, and the runs' data to public/footage/.
 // Usage: node capture/footage.mjs <averroes clone> <python with the backend's requirements>
-// CLIPS=map,review-dark records only those clips, which need no new agent run (review-dark replays the clone's
-// first recorded run in the dark theme), and keeps every other clip.
+// CLIPS=map,review-dark,steps records only those clips, which need no new agent run (review-dark replays the
+// clone's first recorded run in the dark theme, steps its Propagate run), and keeps every other clip.
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -312,6 +312,26 @@ try {
     await pause(600);
     await page.screenshot({ path: path.join(OUT, 'checks-dark.jpg'), quality: 92 });
     fs.writeFileSync(path.join(OUT, 'checks-dark.json'), JSON.stringify(await frameBox(page.locator('#insp .checks'))));
+  }
+
+  // Stepping through the Propagate run's files one by one (J), on the clone's recorded run, for Propagate's end.
+  if (ONLY?.has('steps')) {
+    await page.keyboard.press(']');
+    const spreadRun = (await api('/api/state')).runs.find(r => r.agent === 'claude' && r.changes.length > 1);
+    await openRun(spreadRun.id);
+    await page.keyboard.press('d');
+    await page.locator('#insp .flist').scrollIntoViewIfNeeded();
+    await pause(1500);
+    // Each file in turn: J brings it into view, R marks it reviewed, and the list and the progress follow.
+    await record('steps', async () => {
+      await pause(600);
+      for (let i = 0; i < spreadRun.changes.length; i++) {
+        await page.keyboard.press('j');
+        await pause(1500);
+        await page.keyboard.press('r');
+        await pause(700);
+      }
+    });
   }
 
   // Everything after the map needs Claude Code's runs.

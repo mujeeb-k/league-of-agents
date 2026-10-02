@@ -1,15 +1,18 @@
-// A real Propagate run: a rename saved, "Update what depends on this", then the three folders it changed, framed
-// alone: the camera goes to each as it lights up, in the order the agent worked through them, then pulls back
-// to all three and the run's own numbers.
+// A real Propagate run: a rename in the editor over the map, saved; "Update what depends on this"; then the three
+// folders it changed, framed alone: the camera goes to each as it lights up, in the order the agent worked
+// through them, then pulls back to all three and the run's own numbers. Last, its files stepped through one by
+// one in Diff, each marked reviewed.
 import { Sequence, useCurrentFrame, useVideoConfig } from 'remotion';
 import folders from '../../public/footage/propagate-folders.json';
 import { C, SHADOW } from '../brand';
 import { SPREAD } from '../data';
-import { Layout, Shot, progress, type Region } from '../ui';
+import { Layout, Shot, progress, useFrame, type Region } from '../ui';
 
-const RENAME_WIDE = { cx: 340, cy: 210, w: 520 };
-const RENAME_LINE = { cx: 280, cy: 172, w: 440 };
-const BUTTON = { cx: 965, cy: 140, w: 400 };
+// The canvas, without the side panels: the editor large over the dimmed map; then the run's button.
+const CANVAS = { cx: 418, cy: 325, w: 835 };
+const BUTTON = { cx: 960, cy: 210, w: 400 };
+// The steps, without the inspector's foot, which says the recorded run was later reverted.
+const STEPS = { cx: 620, cy: 325, w: 1040 };
 
 /** The folders in the order the agent first edited a file in each, with their labels in app pixels. */
 const order = [...new Set(SPREAD.edited.map(e => e.folder))].filter(f => f in folders);
@@ -18,14 +21,14 @@ const label = (f: string) => {
   return { x: b.x / 2.5, y: b.y / 2.5, w: b.w / 2.5, h: b.h / 2.5 };
 };
 const labels = order.map(label);
-// All three, and each alone: its label with its files below it.
-const ALL: Region = (() => {
+// All three, in a box of the given shape, and each alone: its label with its files below it.
+const all = (aspect: number): Region => {
   const x0 = Math.min(...labels.map(l => l.x)) - 40,
     x1 = Math.max(...labels.map(l => l.x + l.w)) + 120,
     y0 = Math.min(...labels.map(l => l.y)) - 20,
     y1 = Math.max(...labels.map(l => l.y + l.h)) + 70;
-  return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: Math.max(x1 - x0, ((y1 - y0) * 1760) / 810) };
-})();
+  return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: Math.max(x1 - x0, (y1 - y0) * aspect) };
+};
 const ONE = (l: { x: number; y: number; w: number }): Region => ({ cx: l.x + 150, cy: l.y + 50, w: 420 });
 
 /** The camera between keyframes, eased. */
@@ -41,14 +44,20 @@ function camera(frame: number, keys: [number, Region][]): Region {
   return keys[0]![1];
 }
 
-/** `short`: the 15-second cut, which goes from the rename straight to the map. */
+/** The scene's parts, in frames: the rename, the click, the folders, then the steps (the full video only). */
+const PARTS = { rename: 150, click: 55, folders: 140 };
+
+/** `short`: the 15-second cut, which goes from the rename straight to the folders, and ends there. */
 export const Propagate: React.FC<{ duration: number; short?: boolean }> = ({ duration, short }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const renameEnd = Math.round(duration * (short ? 0.3 : 0.28)),
-    clickEnd = short ? renameEnd : Math.round(duration * 0.42);
+  const { box } = useFrame();
+  const ALL = all(box.w / box.h);
+  const renameEnd = short ? Math.round(duration * 0.3) : PARTS.rename,
+    clickEnd = short ? renameEnd : renameEnd + PARTS.click,
+    foldersEnd = short ? duration : clickEnd + PARTS.folders;
   // After a moment on all three: a beat on each folder, then back to all three, then the numbers.
-  const beat = Math.round((duration - clickEnd - 90) / order.length);
+  const beat = Math.round((foldersEnd - clickEnd - 60) / order.length);
   const lit = order.map((_, i) => clickEnd + 18 + i * beat);
   const back = clickEnd + 18 + order.length * beat;
   const keys: [number, Region][] = [
@@ -63,23 +72,23 @@ export const Propagate: React.FC<{ duration: number; short?: boolean }> = ({ dur
   const view = camera(frame, keys);
   return (
     <Layout
-      place="top"
+      place="wide"
       lines={[
         ['Rename a function.', 4],
         ['See every file it worked on, across your project.', clickEnd],
       ]}
     >
       <Sequence durationInFrames={renameEnd + 8} premountFor={fps}>
-        <Shot src="rename" from={RENAME_WIDE} to={RENAME_LINE} push={[10, renameEnd]} trim={3} rate={(3.8 * fps) / renameEnd} />
+        <Shot src="rename" from={CANVAS} trim={short ? 3 : 0.3} rate={((short ? 3.8 : 6.8) * fps) / renameEnd} />
       </Sequence>
       {short ? null : (
         <Sequence from={renameEnd} durationInFrames={clickEnd - renameEnd + 8} premountFor={fps}>
           <div style={{ position: 'absolute', inset: 0, opacity: progress(frame, renameEnd - 8, renameEnd) }}>
-            <Shot src="propagate-start" from={BUTTON} rate={(4 * fps) / (clickEnd - renameEnd)} />
+            <Shot src="propagate-start" from={BUTTON} rate={(2 * fps) / (clickEnd - renameEnd)} />
           </div>
         </Sequence>
       )}
-      <Sequence from={clickEnd} premountFor={fps}>
+      <Sequence from={clickEnd} durationInFrames={foldersEnd - clickEnd + 8} premountFor={fps}>
         <div style={{ position: 'absolute', inset: 0, opacity: progress(frame, clickEnd - 8, clickEnd) }}>
           <Shot src="propagate-end-last" still from={view}>
             {(toBox, k) =>
@@ -131,6 +140,13 @@ export const Propagate: React.FC<{ duration: number; short?: boolean }> = ({ dur
           </div>
         </div>
       </Sequence>
+      {short ? null : (
+        <Sequence from={foldersEnd} premountFor={fps}>
+          <div style={{ position: 'absolute', inset: 0, opacity: progress(frame, foldersEnd - 8, foldersEnd) }}>
+            <Shot src="steps" from={STEPS} trim={1} rate={(8.4 * fps) / (duration - foldersEnd - 10)} />
+          </div>
+        </Sequence>
+      )}
     </Layout>
   );
 };

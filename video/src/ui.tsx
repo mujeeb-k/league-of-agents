@@ -15,6 +15,8 @@ export const progress = (frame: number, from: number, to: number) =>
 type Box = { x: number; y: number; w: number; h: number };
 /** The product's box with the words above it: 1760 × 810. */
 export const BOX: Box = { x: 80, y: 240, w: 1760, h: 810 };
+// The app's own shape (1152 × 720), for scenes that show all of it.
+const WIDE: Box = { x: 240, y: 170, w: 1440, h: 900 };
 const SIDE_LEFT: Box = { x: 780, y: 80, w: 1060, h: 920 },
   SIDE_RIGHT: Box = { x: 80, y: 80, w: 1060, h: 920 },
   FULL: Box = { x: 80, y: 80, w: 1760, h: 920 };
@@ -80,20 +82,24 @@ export const Lines: React.FC<{ lines: [string, number][]; size: number; align?: 
 /**
  * A scene: its words and its product, placed one of five ways.
  * - top: the words above the product, centred;
+ * - wide: the same, with the whole app in its own shape below;
  * - left / right: the words in a column beside the product;
  * - over: the product filling the frame, the words on a card over its upper left;
  * - center: the words alone, centred (children sit below them).
  */
 export const Layout: React.FC<{
   lines: [string, number][];
-  place: 'top' | 'left' | 'right' | 'over';
+  place: 'top' | 'wide' | 'left' | 'right' | 'over';
   dark?: boolean;
   children: React.ReactNode;
 }> = ({ lines, place, dark = false, children }) => {
-  const box = place === 'top' ? BOX : place === 'left' ? SIDE_LEFT : place === 'right' ? SIDE_RIGHT : FULL;
+  const box =
+    place === 'top' ? BOX : place === 'wide' ? WIDE : place === 'left' ? SIDE_LEFT : place === 'right' ? SIDE_RIGHT : FULL;
   const words: React.CSSProperties =
     place === 'top'
       ? { left: BOX.x, right: BOX.x, top: 30, height: 190 }
+      : place === 'wide'
+        ? { left: BOX.x, right: BOX.x, top: 10, height: 160 }
       : place === 'left'
         ? { left: 100, width: 600, top: 80, height: 920 }
         : place === 'right'
@@ -119,7 +125,11 @@ export const Layout: React.FC<{
           </div>
         ) : (
           <div style={{ position: 'absolute', ...words }}>
-            <Lines lines={lines} size={place === 'top' ? 80 : 84} align={place === 'top' ? 'center' : 'left'} />
+            <Lines
+              lines={lines}
+              size={place === 'wide' ? 72 : place === 'top' ? 80 : 84}
+              align={place === 'top' || place === 'wide' ? 'center' : 'left'}
+            />
           </div>
         )}
       </Frame.Provider>

@@ -38,6 +38,7 @@ export const fontsLoaded = Promise.all([
   font('IBM Plex Sans', 'ibm-plex-sans-latin-400-normal.woff2', '400'),
   font('IBM Plex Sans', 'ibm-plex-sans-latin-500-normal.woff2', '500'),
   font('IBM Plex Sans', 'ibm-plex-sans-latin-600-normal.woff2', '600'),
+  loadFont({ family: 'IBM Plex Sans', url: staticFile('fonts/ibm-plex-sans-latin-500-italic.woff2'), weight: '500', style: 'italic' }),
   font('IBM Plex Mono', 'ibm-plex-mono-latin-400-normal.woff2', '400'),
   font('IBM Plex Mono', 'ibm-plex-mono-latin-500-normal.woff2', '500'),
 ]);

@@ -7,7 +7,7 @@ import { BOX, Layout, progress } from '../ui';
 export const SETUP = 'Read leagueofagents.dev/setup.md and set up League of Agents in this repo.';
 const ROWS = [
   { label: 'Paste into your agent', text: SETUP, mono: false },
-  { label: 'Or run', text: 'npx leagueofagents-cli', mono: true },
+  { label: 'Or run in your terminal', text: 'npx leagueofagents-cli', mono: true },
 ];
 const W = 1400,
   H = 150,
@@ -39,7 +39,7 @@ export const Setup: React.FC<{ duration: number }> = ({ duration }) => {
     t = seg(at);
   const cursor = { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
   return (
-    <Layout place="top" lines={[['Set it up with one line.', 4]]}>
+    <Layout place="top" lines={[['Try it at leagueofagents.dev', 4]]}>
       <div style={{ position: 'relative', width: BOX.w, height: BOX.h }}>
         {ROWS.map((r, i) => {
           const copied = frame >= clicks[i]!;

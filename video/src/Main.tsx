@@ -22,48 +22,48 @@ export const Main: React.FC = () => {
   const { fps } = useVideoConfig();
   return (
     <TransitionSeries>
-      <TransitionSeries.Sequence name="Hook" durationInFrames={180} premountFor={fps}>
-        <Hook duration={180} second={105} />
+      <TransitionSeries.Sequence name="Hook" durationInFrames={135} premountFor={fps}>
+        <Hook duration={135} second={80} />
       </TransitionSeries.Sequence>
       <TransitionSeries.Transition presentation={through.fade} timing={timing} />
-      <TransitionSeries.Sequence name="Skim" durationInFrames={210} premountFor={fps}>
-        <Skim duration={210} />
+      <TransitionSeries.Sequence name="Skim" durationInFrames={180} premountFor={fps}>
+        <Skim duration={180} />
       </TransitionSeries.Sequence>
       <TransitionSeries.Transition presentation={through.zoom} timing={timing} />
-      <TransitionSeries.Sequence name="Logo" durationInFrames={120} premountFor={fps}>
+      <TransitionSeries.Sequence name="Logo" durationInFrames={105} premountFor={fps}>
         <Logo />
       </TransitionSeries.Sequence>
       <TransitionSeries.Transition presentation={through.zoom} timing={timing} />
-      <TransitionSeries.Sequence name="Map" durationInFrames={240} premountFor={fps}>
+      <TransitionSeries.Sequence name="Map" durationInFrames={180} premountFor={fps}>
         <Map />
       </TransitionSeries.Sequence>
       <TransitionSeries.Transition presentation={through.slide} timing={timing} />
-      <TransitionSeries.Sequence name="Point" durationInFrames={195} premountFor={fps}>
-        <Point duration={195} />
+      <TransitionSeries.Sequence name="Point" durationInFrames={255} premountFor={fps}>
+        <Point duration={255} />
       </TransitionSeries.Sequence>
       <TransitionSeries.Transition presentation={through.slide} timing={timing} />
-      <TransitionSeries.Sequence name="Propagate" durationInFrames={270} premountFor={fps}>
-        <Propagate duration={270} />
+      <TransitionSeries.Sequence name="Propagate" durationInFrames={510} premountFor={fps}>
+        <Propagate duration={510} />
       </TransitionSeries.Sequence>
       <TransitionSeries.Transition presentation={through.fade} timing={timing} />
-      <TransitionSeries.Sequence name="Review" durationInFrames={165} premountFor={fps}>
-        <Review duration={165} />
+      <TransitionSeries.Sequence name="Review" durationInFrames={120} premountFor={fps}>
+        <Review duration={120} />
       </TransitionSeries.Sequence>
       <TransitionSeries.Transition presentation={through.fade} timing={timing} />
-      <TransitionSeries.Sequence name="Keep" durationInFrames={150} premountFor={fps}>
-        <Keep duration={150} />
+      <TransitionSeries.Sequence name="Keep" durationInFrames={120} premountFor={fps}>
+        <Keep duration={120} />
       </TransitionSeries.Sequence>
       <TransitionSeries.Transition presentation={through.slide} timing={timing} />
-      <TransitionSeries.Sequence name="Agents" durationInFrames={105} premountFor={fps}>
+      <TransitionSeries.Sequence name="Agents" durationInFrames={75} premountFor={fps}>
         <Agents />
       </TransitionSeries.Sequence>
       <TransitionSeries.Transition presentation={through.slide} timing={timing} />
-      <TransitionSeries.Sequence name="Setup" durationInFrames={135} premountFor={fps}>
-        <Setup duration={135} />
+      <TransitionSeries.Sequence name="Setup" durationInFrames={120} premountFor={fps}>
+        <Setup duration={120} />
       </TransitionSeries.Sequence>
       <TransitionSeries.Transition presentation={through.zoom} timing={timing} />
-      <TransitionSeries.Sequence name="End" durationInFrames={180} premountFor={fps}>
-        <End duration={180} />
+      <TransitionSeries.Sequence name="End" durationInFrames={150} premountFor={fps}>
+        <End duration={150} />
       </TransitionSeries.Sequence>
     </TransitionSeries>
   );

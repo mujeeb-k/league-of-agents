@@ -7,27 +7,32 @@ from PIL import Image, ImageDraw, ImageFont
 
 FPS = 30
 MAIN = [
-    (150, "Hook · dark", "Claude Code just took 25 actions. / What did it change?", "The real 52-second session scrolling in the terminal; the counter runs to 25"),
-    (245, "Skim · dark", "You skim the changes and hope.", "A real 80-second task (25 actions, $0.43): its summary scrolls past"),
-    (315, "Skim · dark", "If you review the code at all.", "The person types \"continue and make no mistakes\" at the prompt"),
-    (350, "Skim · dark", "(same line)", "Sent: done"),
-    (430, "Wordmark · turns light", "Introducing / See every change your agents make.", "Zooms through from the dark terminal"),
-    (505, "Map", "Your whole project, on one screen.", "The whole map, in the app, at 6%; the line on a card over the empty canvas"),
-    (550, "Map", "(same line)", "The app's own zoom: folders with their files' names, at 13%"),
-    (675, "Map", "(same line)", "On in to one file's code, at 100%, held"),
-    (750, "Point", "Select the exact lines for your agent to work on.", "Close in on the editor: lines 34–56 dragged"),
-    (840, "Point", "Or edit the file yourself.", "A comment typed into config.py and saved"),
-    (930, "Propagate", "Rename a function.", "_extract_refined_prompt renamed in the editor and saved"),
-    (1010, "Propagate", "See every file it worked on, across your project.", "The camera on the first folder as it lights up"),
-    (1105, "Propagate", "(same line)", "Back to all three folders, lit in order; the run's numbers"),
-    (1205, "Review · dark", "Check every line before you keep it.", "Before, After and Diff in the app's dark theme; the passing backend tests"),
-    (1375, "Keep", "Keep it, or undo it in one click.", "Close in on Keep, then Revert"),
-    (1470, "Agents", "Works with Claude Code, Codex and Cursor.", "The agents' own icons; Beta under Codex and Cursor"),
-    (1570, "Setup", "Set it up with one line.", "Paste into your agent: Copy clicked, Copied"),
-    (1615, "Setup", "(same line)", "Or run: Copy clicked, Copied"),
-    (1790, "End", "npx leagueofagents-cli · leagueofagents.dev", "Each line in turn, slowly; the whole card holds for about 3 s"),
+    (110, "Hook · dark", "Claude Code just took 25 actions. / What did it change?", "The real 52-second session scrolling in the terminal; the counter runs to 25"),
+    (190, "Skim · dark", "You skim the changes and hope.", "A real 80-second task (25 actions, $0.43): its summary scrolls past"),
+    (250, "Skim · dark", "If you review the code at all.", "The person types \"continue and make no mistakes\""),
+    (272, "Skim · dark", "(same line)", "Sent"),
+    (345, "Wordmark · turns light", "Introducing / See every change your agents make.", "Zooms through from the dark terminal"),
+    (395, "Map", "Your whole project, on one screen.", "The whole map, in the app"),
+    (435, "Map", "(same line)", "The app's own zoom: folders with their files' names, at 13%"),
+    (525, "Map", "(same line)", "On in to one file's code, at 100%, held"),
+    (600, "Point", "Select the exact lines for your agent to work on.", "Close in on the editor: lines 34–56 dragged"),
+    (700, "Edit", "Or edit the file yourself.", "config.py's editor open over the dimmed map, a line typed"),
+    (772, "Edit", "(same line)", "Saved: \"Saved as run 2\""),
+    (850, "Propagate", "Rename a function.", "The rename typed in coach.py's editor, over the dimmed map"),
+    (925, "Propagate", "(same line)", "Saved: \"Saved as run 3\""),
+    (950, "Propagate", "See every file it worked on, across your project.", "Update what depends on this"),
+    (1010, "Propagate", "(same line)", "The camera on the first folder as it lights up"),
+    (1110, "Propagate", "(same line)", "All three folders, lit in order; the run's numbers"),
+    (1160, "Propagate", "(same line)", "Its files stepped through one by one in Diff, each marked reviewed"),
+    (1240, "Propagate", "(same line)", "The last file; review 4 of 4"),
+    (1345, "Review · dark", "Check every line before you keep it.", "Before, After and Diff in the app's dark theme; the passing backend tests"),
+    (1470, "Keep", "Keep it, or undo it in one click.", "Close in on Keep, then Revert"),
+    (1535, "Agents", "Works with Claude Code, Codex and Cursor.", "The agents' own icons; Beta under Codex and Cursor"),
+    (1605, "Setup", "Try it at leagueofagents.dev", "Paste into your agent: Copy clicked, Copied"),
+    (1645, "Setup", "(same line)", "Or run in your terminal: Copy clicked, Copied"),
+    (1790, "End", "leagueofagents.dev", "The L, the site in italics, then the two lines, each in turn; the card holds"),
 ]
-CUT = [(60, "Hook"), (170, "Map"), (325, "Propagate"), (440, "End")]
+CUT = [(60, "Hook"), (175, "Map"), (315, "Propagate"), (440, "End")]
 
 
 def still(comp, frame):
