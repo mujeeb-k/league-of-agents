@@ -1,5 +1,5 @@
 // A real Claude Code session finishing a long task: its last steps and summary scroll past in the terminal, faster
-// than anyone reads them, then "looks good", and it's done.
+// than anyone reads them, then the person's reply, and it's done.
 import { Easing, interpolate, useCurrentFrame } from 'remotion';
 import { MONO } from '../brand';
 import { useSession } from '../data';
@@ -7,7 +7,7 @@ import { Layout, useFrame, useInk } from '../ui';
 
 const ROW = 42;
 const COLS = 56;
-const REPLY = 'looks good';
+const REPLY = 'continue and make no mistakes';
 /** A terminal's own wrapping: long lines break at the window's width, indented under their bullet. */
 const wrap = (text: string) => {
   const out: string[] = [];
@@ -31,7 +31,9 @@ const Terminal: React.FC<{ duration: number }> = ({ duration }) => {
   const rows = s.lines.slice(-30).flatMap(l => wrap(l.text.replace(/\*\*/g, '')));
   const typedFrom = Math.round(duration * 0.62),
     sent = Math.round(duration * 0.8);
-  const typed = REPLY.slice(0, Math.max(0, Math.floor((frame - typedFrom) / 2.5)));
+  // Typed at a steady pace, finished a moment before it is sent.
+  const perChar = (sent - 6 - typedFrom) / REPLY.length;
+  const typed = REPLY.slice(0, Math.max(0, Math.floor((frame - typedFrom) / perChar)));
   const done = frame >= sent;
   // Lines above the prompt: the session, and once sent, the reply.
   const all = done ? [...rows, '', `> ${REPLY}`] : rows;

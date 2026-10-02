@@ -9,7 +9,7 @@ FPS = 30
 MAIN = [
     (150, "Hook · dark", "Claude Code just took 25 actions. / What did it change?", "The real 52-second session scrolling in the terminal; the counter runs to 25"),
     (245, "Skim · dark", "You skim the changes and hope.", "A real 80-second task (25 actions, $0.43): its summary scrolls past"),
-    (315, "Skim · dark", "If you review the code at all.", "The person types \"looks good\" at the prompt"),
+    (315, "Skim · dark", "If you review the code at all.", "The person types \"continue and make no mistakes\" at the prompt"),
     (350, "Skim · dark", "(same line)", "Sent: done"),
     (430, "Wordmark · turns light", "Introducing / See every change your agents make.", "Zooms through from the dark terminal"),
     (505, "Map", "Your whole project, on one screen.", "The whole map, in the app, at 6%; the line on a card over the empty canvas"),
