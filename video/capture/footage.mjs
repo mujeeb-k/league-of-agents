@@ -2,7 +2,8 @@
 // averroes), light theme, driven by Playwright with a visible cursor, and real Claude Code runs. Writes motion
 // clips (MP4, 30 fps, 2880 × 1800), their first and last frames, and the runs' data to public/footage/.
 // Usage: node capture/footage.mjs <averroes clone> <python with the backend's requirements>
-// CLIPS=map records only the map clip, which needs no agent run, and keeps every other clip.
+// CLIPS=map,review-dark records only those clips, which need no new agent run (review-dark replays the clone's
+// first recorded run in the dark theme), and keeps every other clip.
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -33,11 +34,11 @@ const OLD_NAME = '_extract_refined_prompt';
 const NEW_NAME = 'extract_refined_prompt';
 const git = (...args) => execFileSync('git', args, { cwd: REPO, encoding: 'utf8', maxBuffer: 64 << 20 });
 
-const ONLY = process.env.CLIPS === 'map';
+const ONLY = process.env.CLIPS ? new Set(process.env.CLIPS.split(',')) : null;
 // Keep what other steps wrote (the long session for the hook); replace everything this script makes.
 fs.mkdirSync(OUT, { recursive: true });
 for (const f of fs.readdirSync(OUT))
-  if (f !== 'hook-session.jsonl' && (!ONLY || /^map[-.]/.test(f)))
+  if (!f.endsWith('-session.jsonl') && (!ONLY || [...ONLY].some(n => f === `${n}.mp4` || f.startsWith(`${n}-`) || (n === 'review-dark' && f.startsWith('checks-dark')))))
     fs.rmSync(path.join(OUT, f), { recursive: true, force: true });
 
 // The backend's own tests are the runs' check. The tests never call the model, so the key is a placeholder.
@@ -282,15 +283,36 @@ try {
   await centerFile();
   await pause(800);
   const target = await frameBox(page.locator(`[data-path="${FILE}"]`).first());
-  await record('map', async () => {
-    await pause(1200);
-    await glide(target.x + target.w / 2, target.y + target.h / 2, 900);
-    await pause(500);
-    await zoomTo(13);
-    await pause(1800);
-    await zoomTo(100);
-    await pause(1800);
-  });
+  if (!ONLY || ONLY.has('map'))
+    await record('map', async () => {
+      await pause(1200);
+      await glide(target.x + target.w / 2, target.y + target.h / 2, 900);
+      await pause(500);
+      await zoomTo(13);
+      await pause(1800);
+      await zoomTo(100);
+      await pause(1800);
+    });
+
+  // Before, After and Diff in the dark theme, on the clone's first recorded run, for the Review scene.
+  if (ONLY?.has('review-dark')) {
+    await page.locator('#themeBtn').evaluate(b => b.click());
+    await page.keyboard.press(']');
+    await openRun(1);
+    await pause(1500);
+    await record('review-dark', async () => {
+      for (const m of ['before', 'after', 'diff']) {
+        await glideClick(page.locator(`[data-mode="${m}"]`), { ms: 600 });
+        await pause(1100);
+      }
+    });
+    // The checks that ran, in the inspector, as a still.
+    await page.locator('#insp .checks').scrollIntoViewIfNeeded();
+    await page.mouse.move(5, FRAME.height - 5);
+    await pause(600);
+    await page.screenshot({ path: path.join(OUT, 'checks-dark.jpg'), quality: 92 });
+    fs.writeFileSync(path.join(OUT, 'checks-dark.json'), JSON.stringify(await frameBox(page.locator('#insp .checks'))));
+  }
 
   // Everything after the map needs Claude Code's runs.
   if (!ONLY) {

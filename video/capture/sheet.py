@@ -7,27 +7,27 @@ from PIL import Image, ImageDraw, ImageFont
 
 FPS = 30
 MAIN = [
-    (150, "Hook", "Claude Code just took 25 actions. / What did it change?", "The real 52-second session on averroes scrolling; the counter runs to 25"),
-    (250, "Skim", "You skim the changes and hope.", "A real 80-second Claude Code task (25 actions, $0.43): its last steps and summary scroll past"),
-    (330, "Skim", "If you review the code at all.", "The end of that summary, as the terminal shows it"),
-    (380, "Logo", "(no headline) Introducing", "Introducing, over the L"),
-    (430, "Logo", "", "Into the L"),
-    (490, "Logo", "League of Agents / See every change your agents make.", "The name, then the line, as every line in the video comes up"),
-    (540, "Map", "Your whole project, on one screen.", "The whole map in the app, at 6%"),
-    (640, "Map", "(same line)", "The app's own zoom: folders with their files' names, at 13%"),
-    (740, "Map", "(same line)", "On in to code, at 100%"),
-    (830, "Point", "Select the exact lines for your agent to work on, or edit the file yourself.", "Lines 34–56 of coach.py dragged; the scope reads coach.py:34–56"),
-    (910, "Point", "(same line)", "A comment typed into config.py and saved"),
-    (990, "Propagate", "Rename a function.", "_extract_refined_prompt renamed in the editor and saved"),
-    (1180, "Propagate", "See every file it touched, across your project.", "routers/, tests/, docs/ light up in edit order; the run's numbers as a caption"),
-    (1300, "Review", "Check every line before you keep it.", "The diff with changed words marked; the passing backend tests on screen"),
-    (1450, "Keep", "Keep it, or undo it in one click.", "Keep, then Revert on the Propagate run"),
-    (1570, "Agents", "Works with Claude Code, Codex and Cursor.", "The agents' own logos; Beta under Codex and Cursor"),
-    (1650, "Setup", "Set it up with one line.", "Paste into your agent: Copy clicked, Copied"),
-    (1700, "Setup", "(same line)", "Or run: Copy clicked, Copied"),
-    (1780, "End", "npx leagueofagents-cli · leagueofagents.dev", "Free · Open source · Runs on your machine / Available for macOS · Windows coming soon"),
+    (150, "Hook · dark", "Claude Code just took 25 actions. / What did it change?", "The real 52-second session scrolling in the terminal; the counter runs to 25"),
+    (245, "Skim · dark", "You skim the changes and hope.", "A real 80-second task (25 actions, $0.43): its summary scrolls past"),
+    (315, "Skim · dark", "If you review the code at all.", "The person types \"looks good\" at the prompt"),
+    (350, "Skim · dark", "(same line)", "Sent: done"),
+    (430, "Wordmark · turns light", "Introducing / See every change your agents make.", "Zooms through from the dark terminal"),
+    (505, "Map", "Your whole project, on one screen.", "The whole map, in the app, at 6%; the line on a card over the empty canvas"),
+    (550, "Map", "(same line)", "The app's own zoom: folders with their files' names, at 13%"),
+    (675, "Map", "(same line)", "On in to one file's code, at 100%, held"),
+    (750, "Point", "Select the exact lines for your agent to work on.", "Close in on the editor: lines 34–56 dragged"),
+    (840, "Point", "Or edit the file yourself.", "A comment typed into config.py and saved"),
+    (930, "Propagate", "Rename a function.", "_extract_refined_prompt renamed in the editor and saved"),
+    (1010, "Propagate", "See every file it worked on, across your project.", "The camera on the first folder as it lights up"),
+    (1105, "Propagate", "(same line)", "Back to all three folders, lit in order; the run's numbers"),
+    (1205, "Review · dark", "Check every line before you keep it.", "Before, After and Diff in the app's dark theme; the passing backend tests"),
+    (1375, "Keep", "Keep it, or undo it in one click.", "Close in on Keep, then Revert"),
+    (1470, "Agents", "Works with Claude Code, Codex and Cursor.", "The agents' own icons; Beta under Codex and Cursor"),
+    (1570, "Setup", "Set it up with one line.", "Paste into your agent: Copy clicked, Copied"),
+    (1615, "Setup", "(same line)", "Or run: Copy clicked, Copied"),
+    (1790, "End", "npx leagueofagents-cli · leagueofagents.dev", "Each line in turn, slowly; the whole card holds for about 3 s"),
 ]
-CUT = [(60, "Hook"), (185, "Map"), (345, "Propagate"), (420, "End")]
+CUT = [(60, "Hook"), (170, "Map"), (325, "Propagate"), (440, "End")]
 
 
 def still(comp, frame):

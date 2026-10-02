@@ -2,7 +2,7 @@
 // is clicked, and says so.
 import { useCurrentFrame } from 'remotion';
 import { C, MONO, SHADOW } from '../brand';
-import { BOX, Stacked, progress } from '../ui';
+import { BOX, Layout, progress } from '../ui';
 
 export const SETUP = 'Read leagueofagents.dev/setup.md and set up League of Agents in this repo.';
 const ROWS = [
@@ -39,7 +39,7 @@ export const Setup: React.FC<{ duration: number }> = ({ duration }) => {
     t = seg(at);
   const cursor = { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
   return (
-    <Stacked lines={[['Set it up with one line.', 0]]}>
+    <Layout place="top" lines={[['Set it up with one line.', 4]]}>
       <div style={{ position: 'relative', width: BOX.w, height: BOX.h }}>
         {ROWS.map((r, i) => {
           const copied = frame >= clicks[i]!;
@@ -61,6 +61,6 @@ export const Setup: React.FC<{ duration: number }> = ({ duration }) => {
           <path d="M1 1 L1 16 L5 12 L8 19 L10 18 L7 11 L12 11 Z" fill={C.ink} stroke="#fff" strokeWidth="1.2" strokeLinejoin="round" />
         </svg>
       </div>
-    </Stacked>
+    </Layout>
   );
 };

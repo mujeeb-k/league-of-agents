@@ -20,6 +20,17 @@ export const C = {
 export const SANS = "'IBM Plex Sans', system-ui, sans-serif";
 export const MONO = "'IBM Plex Mono', ui-monospace, monospace";
 export const SHADOW = `0 0 0 1px ${C.hair}, 0 12px 40px rgba(24, 24, 27, 0.08)`;
+/** The app's dark theme (web/src/theme.css): the problem scenes, and Review's focus on code. */
+export const D = {
+  canvas: '#08080a',
+  surface: '#151517',
+  hair: '#26262a',
+  ink: '#ededef',
+  ink2: '#a1a1aa',
+  claude: '#d97757',
+  add: '#3fb950',
+};
+export const SHADOW_DARK = `0 0 0 1px ${D.hair}, 0 12px 40px rgba(0, 0, 0, 0.5)`;
 
 const font = (family: string, file: string, weight: string) =>
   loadFont({ family, url: staticFile(`fonts/${file}`), weight });
