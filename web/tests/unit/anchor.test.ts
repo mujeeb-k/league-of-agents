@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { relocate, toLines } from '../../src/lib/anchor';
+import { grown, relocate, toLines } from '../../src/lib/anchor';
 
 const file = ['type P = {};', '', 'function load() {', '  return 1;', '}', '', 'function check() {', '}'];
 const selected = file.slice(2, 5); // lines 3–5
@@ -42,5 +42,24 @@ describe('toLines', () => {
   it('drops the empty line after a final newline', () => {
     expect(toLines('a\nb\n')).toEqual(['a', 'b']);
     expect(toLines('a\r\nb')).toEqual(['a', 'b']);
+  });
+});
+
+describe('grown', () => {
+  const inside = (at: number, add: string[], remove = 0) => [...file.slice(0, at), ...add, ...file.slice(at + remove)];
+  it('takes in lines added inside the selection', () => {
+    expect(grown(file, inside(3, ['  const x = 1;', '  log(x);']), [3, 5])).toEqual([3, 7]);
+  });
+  it('lets go of lines removed inside it, and holds a rewrite of every line', () => {
+    expect(grown(file, inside(3, [], 1), [3, 5])).toEqual([3, 4]);
+    expect(grown(file, inside(2, ['load = () => 1;'], 3), [3, 5])).toEqual([3, 3]);
+  });
+  it('is the same range when nothing changed', () => {
+    expect(grown(file, file, [3, 5])).toEqual([3, 5]);
+  });
+  it('is null when a line outside the selection changed, or nothing of it is left', () => {
+    expect(grown(file, ['// header', ...file], [3, 5])).toBeNull();
+    expect(grown(file, [...file.slice(0, -1), '} // check'], [3, 5])).toBeNull();
+    expect(grown(file, inside(2, [], 3), [3, 5])).toBeNull();
   });
 });

@@ -12,7 +12,7 @@ import { DEMO_AGENTS, SAMPLE_BRANCH, SAMPLE_REPO, SAMPLE_RUNS, SAMPLE_TREE } fro
 import { SAMPLE_TEXT } from '../demo/sampleText';
 import { toast } from '../ui/toast';
 import { S, dom, st } from './app';
-import { checkSelection, ed, rangeScope } from './editing';
+import { checkSelection, ed, rangeScope, sending } from './editing';
 import {
   renderAll,
   renderComposer,
@@ -249,6 +249,7 @@ export async function send() {
       }
       const scope = scopeFromSelection();
       const lines = rangeScope() && ed.path ? { [ed.path]: ed.rangeText.join('\n') } : undefined;
+      if (lines) sending();
       const r = await bridge.startRun(conn, {
         agent: st.agent,
         prompt: v,
@@ -256,12 +257,14 @@ export async function send() {
         resumeFrom: fu ? fu.id : null,
         lines,
       });
+      if (lines && ed.sent) ed.sent.id = r.id;
       clearPrompt();
       dom.prompt.blur();
       live.pendingSelect = r.id;
       st.tab = 'runs';
       toast(`${agentOf(st.agent).name} started run ${r.id}`);
     } catch (e) {
+      ed.sent = null;
       toast(explain(e));
     } finally {
       st.busy = null;

@@ -210,6 +210,38 @@ test('a follow-up on the same selection after the first run added lines above it
     repo => ({ PROBE_PREPEND: path.join(repo, FILE) }),
   ));
 
+test('an agent edits inside the selection: the selection takes the lines it left, and a follow-up runs on them', ({
+  page,
+}) =>
+  withProbe(
+    async (b, repo, log) => {
+      const sent: { scope: string[]; lines: Record<string, string> }[] = [];
+      page.on('request', r => {
+        if (r.method() === 'POST' && r.url().endsWith('/api/runs')) sent.push(r.postDataJSON());
+      });
+      await page.goto(linkFor(b));
+      await expect(page.locator('#conn')).toHaveText('Live');
+      await selectLines(page, 3, 5);
+      await run(page, 'First');
+      await expect.poll(() => prompts(log).length, { timeout: 15_000 }).toBe(1);
+      // The agent added a line after line 3: the selection is lines 3–6 now, not "changed".
+      await expect(chip(page)).toHaveText(['allowlist.ts:3–6'], { timeout: 10_000 });
+      await expect(page.locator('#staleSelection')).toHaveCount(0);
+      await expect
+        .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).active, {
+          timeout: 15_000,
+        })
+        .toBeFalsy();
+      const grownLines = fs.readFileSync(path.join(repo, FILE), 'utf8').split('\n').slice(2, 6);
+      expect(grownLines[1]).toBe('  // added by the agent');
+      await run(page, 'Second');
+      await expect.poll(() => prompts(log).length, { timeout: 15_000 }).toBe(2);
+      expect(sent[1]).toMatchObject({ scope: [`${FILE}:3-6`], lines: { [FILE]: grownLines.join('\n') } });
+      expect(named(prompts(log)[1]!.prompt)).toEqual([3, 6]);
+    },
+    repo => ({ PROBE_INSERT: `${path.join(repo, FILE)}:3` }),
+  ));
+
 test('the bridge finds selected lines by their text: moved, kept, or refused', () =>
   withProbe(async (b, repo) => {
     const lines = { [FILE]: SELECTED.join('\n') };
@@ -284,6 +316,50 @@ test('after a move, the scope lock holds the lines where they are now, not the o
     ).toBe('allowed');
     // What now sits at the old numbers, 3–5, is outside the selection: blocked.
     expect(pre({ old_string: 'export type Policy', new_string: 'export type Rules' })).toBe('blocked');
+    await call(b, `/api/runs/${(r.body as unknown as RunDTO).id}/cancel`, {});
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test('after the selection grows, the scope lock holds the new range: its new line is open, the line after is not', async () => {
+  const repo = makeRepo();
+  const b = await startBridge(repo, SLOW_AGENT, {}, ['--no-hooks']);
+  try {
+    const lines = SEED[FILE]!.split('\n');
+    lines.splice(3, 0, '  // added by the agent');
+    fs.writeFileSync(path.join(repo, FILE), lines.join('\n'));
+    const r = await call(b, '/api/runs', {
+      agent: 'claude',
+      prompt: 'Probe',
+      scope: [`${FILE}:3-6`],
+      resumeFrom: null,
+      lines: { [FILE]: lines.slice(2, 6).join('\n') },
+    });
+    expect(r.body.scope).toEqual([`${FILE}:3-6`]);
+    const pre = (line: number) => {
+      const edited = [...lines];
+      edited[line - 1] += ' // edited';
+      try {
+        execFileSync(process.execPath, [BRIDGE, 'hook', 'pre'], {
+          cwd: repo,
+          input: JSON.stringify({
+            cwd: repo,
+            tool_input: { file_path: path.join(repo, FILE), content: edited.join('\n') },
+          }),
+          env: { ...process.env, LOA_SCOPE_FILE: path.join(repo, '.loa/scope.json') },
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+        return 'allowed';
+      } catch (e) {
+        return (e as { status: number }).status === 2 ? 'blocked' : 'error';
+      }
+    };
+    expect(pre(4)).toBe('allowed');
+    expect(pre(6)).toBe('allowed');
+    expect(pre(7)).toBe('blocked');
+    expect(pre(2)).toBe('blocked');
     await call(b, `/api/runs/${(r.body as unknown as RunDTO).id}/cancel`, {});
   } finally {
     b.stop();

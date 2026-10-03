@@ -26,3 +26,17 @@ export function relocate(lines: string[], wanted: string[], from: number): numbe
     }
   return found;
 }
+
+/**
+ * Where lines from..to of `before` are in `after` when every line around them is unchanged: an edit inside the
+ * selection, which grows or shrinks it. Null when anything outside them changed, or nothing of them is left.
+ */
+export function grown(before: string[], after: string[], [from, to]: [number, number]): [number, number] | null {
+  const head = from - 1,
+    tail = before.length - to;
+  if (after.length < head + tail) return null;
+  for (let i = 0; i < head; i++) if (before[i] !== after[i]) return null;
+  for (let i = 1; i <= tail; i++) if (before[before.length - i] !== after[after.length - i]) return null;
+  const end = after.length - tail;
+  return end >= from ? [from, end] : null;
+}

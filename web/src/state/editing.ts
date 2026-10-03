@@ -2,7 +2,7 @@
 // "You", with the same history, review and revert as an agent's run; in the demo it stays in the browser.
 import { bridge } from '../api/client';
 import type { Conn } from '../api/types';
-import { relocate, toLines } from '../lib/anchor';
+import { grown, relocate, toLines } from '../lib/anchor';
 import { explain } from '../api/errors';
 import type { InlineDiff } from '../lib/editor';
 import { diffRows, linesAt } from '../lib/model';
@@ -35,6 +35,12 @@ export const ed = {
   rangeText: [] as string[],
   /** The selected lines changed or can no longer be told apart: nothing runs on them until selected again. */
   stale: false,
+  /**
+   * The run started on the selected lines, with the file and the lines as it started: its edits inside them
+   * grow or shrink the selection rather than leave it changed. Set as the run is asked for (its id comes with the
+   * answer); cleared once it ends, fails to start, or the selection changes.
+   */
+  sent: null as { id: number | null; path: string; before: string[]; range: [number, number] } | null,
 };
 
 /** Said when the selected lines can't be found as they were. */
@@ -53,18 +59,35 @@ export function selectLines(lines: [number, number] | null, text: string[]) {
   const same = lines?.[0] === ed.range?.[0] && lines?.[1] === ed.range?.[1];
   ed.rangeText = lines ? text : [];
   if (same && !ed.stale) return;
+  ed.sent = null;
   ed.range = lines;
   ed.stale = false;
   renderComposer();
 }
 
-/** Moves the selection to where its lines are in `text`, or marks it stale when they can't be found. */
+/**
+ * Moves the selection to where its lines are in `text`: the run started on them takes it to the lines it left
+ * there; otherwise it follows their text, and is stale when that can't be found.
+ */
 function follow(text: string) {
   if (!ed.range || !ed.rangeText.length) return;
-  const at = relocate(toLines(text), ed.rangeText, ed.range[0]);
-  if (at === null) ed.stale = true;
-  else ed.range = [at, at + ed.rangeText.length - 1];
+  const lines = toLines(text);
+  const run = ed.sent && ed.sent.path === ed.path ? grown(ed.sent.before, lines, ed.sent.range) : null;
+  if (run) {
+    ed.range = run;
+    ed.rangeText = lines.slice(run[0] - 1, run[1]);
+    ed.stale = false;
+  } else {
+    const at = relocate(lines, ed.rangeText, ed.range[0]);
+    if (at === null) ed.stale = true;
+    else ed.range = [at, at + ed.rangeText.length - 1];
+  }
   renderComposer();
+}
+
+/** A run is asked for on the selected lines: the selection takes the lines it leaves there (follow). */
+export function sending() {
+  ed.sent = ed.path && ed.range ? { id: null, path: ed.path, before: toLines(ed.saved), range: ed.range } : null;
 }
 
 /**
@@ -118,6 +141,7 @@ export async function openEditor(path: string) {
   ed.range = null;
   ed.rangeText = [];
   ed.stale = false;
+  ed.sent = null;
   ed.loading = true;
   renderSel();
   bump('editor');
@@ -144,11 +168,15 @@ export async function refreshEditor() {
   if (!path || ed.loading || ed.saving || drafts.has(path)) return;
   try {
     const r = await load(path);
-    if (ed.path !== path || drafts.has(path) || r.text === ed.saved) return;
-    ed.saved = r.text;
-    ed.hash = r.hash;
-    follow(r.text);
-    bump('editor');
+    if (ed.path !== path || drafts.has(path)) return;
+    if (r.text !== ed.saved) {
+      ed.saved = r.text;
+      ed.hash = r.hash;
+      follow(r.text);
+      bump('editor');
+    }
+    const sent = ed.sent && S.RUNS.find(x => x.id === ed.sent!.id);
+    if (sent && sent.status !== 'running') ed.sent = null;
   } catch {
     // The bridge stopped answering; the offline state says so.
   }
@@ -161,6 +189,7 @@ export function closeEditor() {
   ed.range = null;
   ed.rangeText = [];
   ed.stale = false;
+  ed.sent = null;
   st.editing = false;
   applyPanels();
   bump('editor');
