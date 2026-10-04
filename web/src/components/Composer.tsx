@@ -6,7 +6,7 @@ import { examplePrompt } from '../lib/examplePrompt';
 import { DEMO_AGENTS } from '../demo/sample';
 import { S, dom, st } from '../state/app';
 import { followTarget, isOffline, send } from '../state/actions';
-import { ed, rangeScope, staleSelection } from '../state/editing';
+import { clearLines, ed, rangeScope, staleSelection } from '../state/editing';
 import { renderComposer, renderSel, useRegion } from '../state/render';
 import { Button } from './ui/button';
 import {
@@ -40,14 +40,16 @@ function ScopeRow() {
         items.map(i => (
           <ScopeChip
             key={i.k}
-            label={range && ed.stale ? `${i.label} · changed` : i.label}
+            label={range && ed.stale ? `${i.label} · ${ed.stale}` : i.label}
             tone={range && ed.stale ? 'stale' : 'scope'}
             title={
               range && ed.stale && ed.path ? staleSelection(ed.path) : (range ?? (i.k.replace(/^d:/, '') || root?.name))
             }
-            removeLabel={`Remove ${i.label} from scope`}
+            removeLabel={range && ed.stale ? 'Clear the selected lines' : `Remove ${i.label} from scope`}
             removeData={{ 'data-unsel': i.k }}
             onRemove={() => {
+              // Lines that changed or were removed clear in one click, leaving their file in scope.
+              if (range && ed.stale) return clearLines();
               st.sel.delete(i.k);
               renderSel();
             }}
@@ -206,7 +208,7 @@ export function Composer() {
     const prompt = dom.prompt,
       sendBtn = dom.sendBtn;
     const onInput = () => {
-      sendBtn.disabled = !prompt.value.trim() || (!!rangeScope() && ed.stale);
+      sendBtn.disabled = !prompt.value.trim() || (!!rangeScope() && !!ed.stale);
       prompt.style.height = 'auto';
       prompt.style.height = Math.min(120, prompt.scrollHeight) + 'px';
     };

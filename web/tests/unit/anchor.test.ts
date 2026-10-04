@@ -57,9 +57,13 @@ describe('grown', () => {
   it('is the same range when nothing changed', () => {
     expect(grown(file, file, [3, 5])).toEqual([3, 5]);
   });
-  it('is null when a line outside the selection changed, or nothing of it is left', () => {
+  it('is removed when the edit took out every selected line, even with a copy of them elsewhere', () => {
+    expect(grown(file, inside(2, [], 3), [3, 5])).toBe('removed');
+    const copied = [...file, ...selected];
+    expect(grown(copied, [...copied.slice(0, 2), ...copied.slice(5)], [3, 5])).toBe('removed');
+  });
+  it('is null when a line outside the selection changed', () => {
     expect(grown(file, ['// header', ...file], [3, 5])).toBeNull();
     expect(grown(file, [...file.slice(0, -1), '} // check'], [3, 5])).toBeNull();
-    expect(grown(file, inside(2, [], 3), [3, 5])).toBeNull();
   });
 });

@@ -242,6 +242,48 @@ test('an agent edits inside the selection: the selection takes the lines it left
     repo => ({ PROBE_INSERT: `${path.join(repo, FILE)}:3` }),
   ));
 
+test('an agent removes every selected line while a copy of them sits elsewhere: the selection is removed, not moved to the copy', ({
+  page,
+}) =>
+  withProbe(
+    async (b, repo, log) => {
+      fs.writeFileSync(path.join(repo, FILE), SEED[FILE] + '\n' + SELECTED.join('\n') + '\n');
+      git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qam', 'copy');
+      const sent: { scope: string[]; lines?: Record<string, string> }[] = [];
+      page.on('request', r => {
+        if (r.method() === 'POST' && r.url().endsWith('/api/runs')) sent.push(r.postDataJSON());
+      });
+      await page.goto(linkFor(b));
+      await expect(page.locator('#conn')).toHaveText('Live');
+      await selectLines(page, 3, 5);
+      await run(page, 'Remove loadPolicy');
+      await expect.poll(() => prompts(log).length, { timeout: 15_000 }).toBe(1);
+      const removed = 'The lines you selected in allowlist.ts were removed. Select lines again.';
+      await expect(chip(page)).toHaveText(['allowlist.ts:3–5 · removed'], { timeout: 10_000 });
+      await expect(page.locator('#staleSelection')).toHaveText(removed);
+      await expect
+        .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).active, {
+          timeout: 15_000,
+        })
+        .toBeFalsy();
+      await page.locator('#prompt').fill('Next');
+      await expect(page.locator('#sendBtn')).toBeDisabled();
+      await page.locator('#prompt').press('Enter');
+      await expect(page.locator(TOAST)).toHaveText(removed);
+      await page.waitForTimeout(1000);
+      expect(sent).toHaveLength(1);
+      // One click clears the lines and keeps the file in scope: the next prompt goes out on the whole file.
+      await page.getByRole('button', { name: 'Clear the selected lines' }).click();
+      await expect(chip(page)).toHaveText(['allowlist.ts']);
+      await expect(page.locator('#staleSelection')).toHaveCount(0);
+      await page.locator('#prompt').press('Enter');
+      await expect.poll(() => sent.length, { timeout: 10_000 }).toBe(2);
+      expect(sent[1]!.scope).toEqual([FILE]);
+      expect(sent[1]!.lines).toBeUndefined();
+    },
+    repo => ({ PROBE_DELETE: `${path.join(repo, FILE)}:3-5` }),
+  ));
+
 test('the bridge finds selected lines by their text: moved, kept, or refused', () =>
   withProbe(async (b, repo) => {
     const lines = { [FILE]: SELECTED.join('\n') };

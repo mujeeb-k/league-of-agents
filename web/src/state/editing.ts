@@ -33,8 +33,11 @@ export const ed = {
   range: null as [number, number] | null,
   /** Their text: the selection is held by it, and follows it when lines above change (lib/anchor). */
   rangeText: [] as string[],
-  /** The selected lines changed or can no longer be told apart: nothing runs on them until selected again. */
-  stale: false,
+  /**
+   * The selected lines can't be found as they were: 'changed', or 'removed' by the run started on them. Nothing
+   * runs on them until lines are selected again or the selection is cleared.
+   */
+  stale: null as 'changed' | 'removed' | null,
   /**
    * The run started on the selected lines, with the file and the lines as it started: its edits inside them
    * grow or shrink the selection rather than leave it changed. Set as the run is asked for (its id comes with the
@@ -45,7 +48,9 @@ export const ed = {
 
 /** Said when the selected lines can't be found as they were. */
 export const staleSelection = (path: string) =>
-  `The lines you selected in ${path.split('/').pop()} changed. Select them again.`;
+  ed.stale === 'removed'
+    ? `The lines you selected in ${path.split('/').pop()} were removed. Select lines again.`
+    : `The lines you selected in ${path.split('/').pop()} changed. Select them again.`;
 
 /** The scope while lines are selected in the open file: "path:12-18", or null. */
 export function rangeScope(): string | null {
@@ -61,25 +66,36 @@ export function selectLines(lines: [number, number] | null, text: string[]) {
   if (same && !ed.stale) return;
   ed.sent = null;
   ed.range = lines;
-  ed.stale = false;
+  ed.stale = null;
+  renderComposer();
+}
+
+/** Clears the selected lines, keeping their file in scope: the next prompt goes out on the whole file. */
+export function clearLines() {
+  ed.range = null;
+  ed.rangeText = [];
+  ed.stale = null;
+  ed.sent = null;
   renderComposer();
 }
 
 /**
  * Moves the selection to where its lines are in `text`: the run started on them takes it to the lines it left
- * there; otherwise it follows their text, and is stale when that can't be found.
+ * there, or marks it removed when it took them all out (never to a copy elsewhere); otherwise it follows their
+ * text, and is stale when that can't be found.
  */
 function follow(text: string) {
   if (!ed.range || !ed.rangeText.length) return;
   const lines = toLines(text);
   const run = ed.sent && ed.sent.path === ed.path ? grown(ed.sent.before, lines, ed.sent.range) : null;
-  if (run) {
+  if (run === 'removed') ed.stale = 'removed';
+  else if (run) {
     ed.range = run;
     ed.rangeText = lines.slice(run[0] - 1, run[1]);
-    ed.stale = false;
+    ed.stale = null;
   } else {
     const at = relocate(lines, ed.rangeText, ed.range[0]);
-    if (at === null) ed.stale = true;
+    if (at === null) ed.stale = 'changed';
     else ed.range = [at, at + ed.rangeText.length - 1];
   }
   renderComposer();
@@ -140,7 +156,7 @@ export async function openEditor(path: string) {
   ed.conflict = null;
   ed.range = null;
   ed.rangeText = [];
-  ed.stale = false;
+  ed.stale = null;
   ed.sent = null;
   ed.loading = true;
   renderSel();
@@ -188,7 +204,7 @@ export function closeEditor() {
   ed.conflict = null;
   ed.range = null;
   ed.rangeText = [];
-  ed.stale = false;
+  ed.stale = null;
   ed.sent = null;
   st.editing = false;
   applyPanels();
