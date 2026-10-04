@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import type { RunDTO, StateResponse } from '../../src/api/types';
+import { anchorAt, toLines } from '../../src/lib/anchor';
 import { BRIDGE, PROBE_AGENT, SEED, SLOW_AGENT, git, makeRepo, startBridge, type Bridge } from '../support/live';
 import { TOAST } from '../support/targets';
 
@@ -12,6 +13,11 @@ const FILE = 'shared/allowlist.ts';
 const linkFor = (b: Bridge) => `http://127.0.0.1:${b.port}/#t=${b.token}`;
 // Lines 3 to 5 of the seeded file: loadPolicy.
 const SELECTED = SEED[FILE]!.split('\n').slice(2, 5);
+/** What the app sends with selected lines: their text and the lines around them, taken from `text`. */
+const held = (text: string, from: number, to: number) => {
+  const { text: t, ...near } = anchorAt(toLines(text), from, to);
+  return { lines: { [FILE]: t.join('\n') }, context: { [FILE]: near } };
+};
 
 async function call(b: Bridge, route: string, body?: object) {
   const res = await fetch(`http://127.0.0.1:${b.port}${route}`, {
@@ -284,10 +290,9 @@ test('an agent removes every selected line while a copy of them sits elsewhere: 
     repo => ({ PROBE_DELETE: `${path.join(repo, FILE)}:3-5` }),
   ));
 
-test('the bridge finds selected lines by their text: moved, kept, or refused', () =>
+test('the bridge finds selected lines by their text and the lines around them: moved, kept, or refused', () =>
   withProbe(async (b, repo) => {
-    const lines = { [FILE]: SELECTED.join('\n') };
-    const start = (scope: string[], body: object = { lines }) =>
+    const start = (scope: string[], body: object = held(SEED[FILE]!, 3, 5)) =>
       call(b, '/api/runs', { agent: 'claude', prompt: 'Probe', scope, resumeFrom: null, ...body });
     const settle = () =>
       expect
@@ -295,31 +300,69 @@ test('the bridge finds selected lines by their text: moved, kept, or refused', (
           timeout: 15_000,
         })
         .toBeFalsy();
+    const write = (text: string) => fs.writeFileSync(path.join(repo, FILE), text);
     // Moved: two lines above them. The run is scoped to where they are now.
-    fs.writeFileSync(path.join(repo, FILE), '// a\n// b\n' + SEED[FILE]);
+    write('// a\n// b\n' + SEED[FILE]);
     const moved = await start([`${FILE}:3-5`]);
     expect(moved.status).toBe(200);
     expect(moved.body.scope).toEqual([`${FILE}:5-7`]);
     await settle();
     // Windows line endings, in the file and in the selection.
-    fs.writeFileSync(path.join(repo, FILE), SEED[FILE]!.replace(/\n/g, '\r\n'));
-    const crlf = await start([`${FILE}:3-5`], { lines: { [FILE]: SELECTED.join('\r\n') } });
+    write(SEED[FILE]!.replace(/\n/g, '\r\n'));
+    const crlf = await start([`${FILE}:3-5`], {
+      ...held(SEED[FILE]!, 3, 5),
+      lines: { [FILE]: SELECTED.join('\r\n') },
+    });
     expect(crlf.body.scope).toEqual([`${FILE}:3-5`]);
     await settle();
     // Changed: refused, with the reason, and no run.
-    fs.writeFileSync(path.join(repo, FILE), SEED[FILE]!.replace('loadPolicy()', 'loadPolicy(env)'));
-    const changed = await start([`${FILE}:3-5`]);
-    expect(changed).toEqual({
+    const refused = {
       status: 409,
       body: { error: 'The lines you selected in allowlist.ts changed. Select them again.', stale: FILE },
-    });
-    // A line found in more than one place, and no longer where it was: refused too.
-    fs.writeFileSync(path.join(repo, FILE), '// a\n' + SEED[FILE]);
-    expect((await start([`${FILE}:5-5`], { lines: { [FILE]: '}' } })).status).toBe(409);
-    // Without the text (bridges and apps before 0.1.2), the numbers are used as given.
+    };
+    write(SEED[FILE]!.replace('loadPolicy()', 'loadPolicy(env)'));
+    expect(await start([`${FILE}:3-5`])).toEqual(refused);
+    // A line found in more than one place: the lines above the selected one tell it apart.
+    write('// a\n' + SEED[FILE]);
+    const brace = await start([`${FILE}:5-5`], held(SEED[FILE]!, 5, 5));
+    expect(brace.body.scope).toEqual([`${FILE}:6-6`]);
+    await settle();
+    // Deleted, with an identical copy elsewhere: refused, never moved to the copy.
+    const withCopy = SEED[FILE] + '\n// Kept for the old console.\n' + SELECTED.join('\n') + '\n';
+    const deleted = withCopy.split('\n');
+    deleted.splice(2, 3);
+    write(deleted.join('\n'));
+    expect(await start([`${FILE}:3-5`], held(withCopy, 3, 5))).toEqual(refused);
+    // Without the lines around them (apps before 0.1.2): taken only where their numbers say.
+    write('// a\n// b\n' + SEED[FILE]);
+    expect(await start([`${FILE}:3-5`], { lines: { [FILE]: SELECTED.join('\n') } })).toEqual(refused);
+    write(SEED[FILE]!);
+    const still = await start([`${FILE}:3-5`], { lines: { [FILE]: SELECTED.join('\n') } });
+    expect(still.body.scope).toEqual([`${FILE}:3-5`]);
+    await settle();
+    // Without the text, the numbers are used as given.
     const plain = await start([`${FILE}:3-5`], {});
     expect(plain.body.scope).toEqual([`${FILE}:3-5`]);
     await settle();
+  }));
+
+test('a rebase moves code that has an identical copy: the selection follows the copy that was picked', ({ page }) =>
+  withProbe(async (b, repo, log) => {
+    const withCopy = SEED[FILE] + '\n// Kept for the old console.\n' + SELECTED.join('\n') + '\n';
+    fs.writeFileSync(path.join(repo, FILE), withCopy);
+    git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qam', 'copy');
+    git(repo, 'checkout', '-qb', 'upstream');
+    fs.writeFileSync(path.join(repo, FILE), '// one\n// two\n// three\n' + withCopy);
+    git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qam', 'header');
+    git(repo, 'checkout', '-q', 'main');
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await selectLines(page, 3, 5);
+    git(repo, 'rebase', '-q', 'upstream');
+    await expect(chip(page)).toHaveText(['allowlist.ts:6–8'], { timeout: 10_000 });
+    await run(page);
+    await expect.poll(() => prompts(log).length, { timeout: 15_000 }).toBe(1);
+    expect(named(prompts(log)[0]!.prompt)).toEqual([6, 8]);
   }));
 
 test('after a move, the scope lock holds the lines where they are now, not the old numbers', async () => {
@@ -332,7 +375,7 @@ test('after a move, the scope lock holds the lines where they are now, not the o
       prompt: 'Probe',
       scope: [`${FILE}:3-5`],
       resumeFrom: null,
-      lines: { [FILE]: SELECTED.join('\n') },
+      ...held(SEED[FILE]!, 3, 5),
     });
     expect(r.body.scope).toEqual([`${FILE}:5-7`]);
     const scopeFile = path.join(repo, '.loa/scope.json');

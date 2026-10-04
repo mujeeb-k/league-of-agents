@@ -126,6 +126,11 @@ export interface StartRunBody {
   resumeFrom: number | null;
   /** For each file scoped to lines, the text of those lines: the bridge finds them by it (bridges before 0.1.2 ignore it). */
   lines?: Record<string, string>;
+  /**
+   * For the same files, the lines around them that tell them apart from identical copies, and whether a copy
+   * existed (web/src/lib/anchor.ts). Without it, the bridge takes lines only where their numbers say.
+   */
+  context?: Record<string, { before: string[]; after: string[]; twin: boolean }>;
 }
 
 /** POST /api/runs/:id/revert. 409 carries `conflict`. */

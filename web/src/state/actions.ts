@@ -248,7 +248,11 @@ export async function send() {
         return;
       }
       const scope = scopeFromSelection();
-      const lines = rangeScope() && ed.path ? { [ed.path]: ed.rangeText.join('\n') } : undefined;
+      const held = rangeScope() && ed.path && ed.anchor ? { path: ed.path, anchor: ed.anchor } : null;
+      const lines = held ? { [held.path]: held.anchor.text.join('\n') } : undefined;
+      const context = held
+        ? { [held.path]: { before: held.anchor.before, after: held.anchor.after, twin: held.anchor.twin } }
+        : undefined;
       if (lines) sending();
       const r = await bridge.startRun(conn, {
         agent: st.agent,
@@ -256,6 +260,7 @@ export async function send() {
         scope,
         resumeFrom: fu ? fu.id : null,
         lines,
+        context,
       });
       if (lines && ed.sent) ed.sent.id = r.id;
       clearPrompt();

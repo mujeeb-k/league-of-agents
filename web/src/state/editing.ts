@@ -2,7 +2,7 @@
 // "You", with the same history, review and revert as an agent's run; in the demo it stays in the browser.
 import { bridge } from '../api/client';
 import type { Conn } from '../api/types';
-import { grown, relocate, toLines } from '../lib/anchor';
+import { anchorAt, grown, relocate, toLines, type Anchor } from '../lib/anchor';
 import { explain } from '../api/errors';
 import type { InlineDiff } from '../lib/editor';
 import { diffRows, linesAt } from '../lib/model';
@@ -31,8 +31,8 @@ export const ed = {
   conflict: null as { text: string; hash: string } | null,
   /** The lines selected in the editor (1-based, inclusive): the composer's scope while the editor is open. */
   range: null as [number, number] | null,
-  /** Their text: the selection is held by it, and follows it when lines above change (lib/anchor). */
-  rangeText: [] as string[],
+  /** What the selection is held by: its text and the lines around it (lib/anchor), taken again after each move. */
+  anchor: null as Anchor | null,
   /**
    * The selected lines can't be found as they were: 'changed', or 'removed' by the run started on them. Nothing
    * runs on them until lines are selected again or the selection is cleared.
@@ -60,9 +60,10 @@ export function rangeScope(): string | null {
 }
 
 /** The selection inside the editor changed; the composer's scope follows it. */
-export function selectLines(lines: [number, number] | null, text: string[]) {
+export function selectLines(lines: [number, number] | null) {
   const same = lines?.[0] === ed.range?.[0] && lines?.[1] === ed.range?.[1];
-  ed.rangeText = lines ? text : [];
+  const doc = ed.path ? (drafts.get(ed.path)?.text ?? ed.saved) : '';
+  ed.anchor = lines ? anchorAt(toLines(doc), lines[0], lines[1]) : null;
   if (same && !ed.stale) return;
   ed.sent = null;
   ed.range = lines;
@@ -73,7 +74,7 @@ export function selectLines(lines: [number, number] | null, text: string[]) {
 /** Clears the selected lines, keeping their file in scope: the next prompt goes out on the whole file. */
 export function clearLines() {
   ed.range = null;
-  ed.rangeText = [];
+  ed.anchor = null;
   ed.stale = null;
   ed.sent = null;
   renderComposer();
@@ -81,23 +82,19 @@ export function clearLines() {
 
 /**
  * Moves the selection to where its lines are in `text`: the run started on them takes it to the lines it left
- * there, or marks it removed when it took them all out (never to a copy elsewhere); otherwise it follows their
- * text, and is stale when that can't be found.
+ * there, or marks it removed when it took them all out (never to a copy elsewhere); otherwise it follows its
+ * anchor, and is stale when that can't tell where they are. After a keep or a move, the anchor is taken again.
  */
 function follow(text: string) {
-  if (!ed.range || !ed.rangeText.length) return;
+  if (!ed.range || !ed.anchor || ed.stale) return;
   const lines = toLines(text);
   const run = ed.sent && ed.sent.path === ed.path ? grown(ed.sent.before, lines, ed.sent.range) : null;
+  const at = run ? null : relocate(lines, ed.anchor, ed.range[0]);
   if (run === 'removed') ed.stale = 'removed';
-  else if (run) {
-    ed.range = run;
-    ed.rangeText = lines.slice(run[0] - 1, run[1]);
-    ed.stale = null;
-  } else {
-    const at = relocate(lines, ed.rangeText, ed.range[0]);
-    if (at === null) ed.stale = 'changed';
-    else ed.range = [at, at + ed.rangeText.length - 1];
-  }
+  else if (run) ed.range = run;
+  else if (at === null) ed.stale = 'changed';
+  else ed.range = [at, at + ed.anchor.text.length - 1];
+  if (!ed.stale) ed.anchor = anchorAt(lines, ed.range[0], ed.range[1]);
   renderComposer();
 }
 
@@ -155,7 +152,7 @@ export async function openEditor(path: string) {
   ed.path = path;
   ed.conflict = null;
   ed.range = null;
-  ed.rangeText = [];
+  ed.anchor = null;
   ed.stale = null;
   ed.sent = null;
   ed.loading = true;
@@ -203,7 +200,7 @@ export function closeEditor() {
   ed.path = null;
   ed.conflict = null;
   ed.range = null;
-  ed.rangeText = [];
+  ed.anchor = null;
   ed.stale = null;
   ed.sent = null;
   st.editing = false;

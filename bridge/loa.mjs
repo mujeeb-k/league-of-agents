@@ -693,22 +693,27 @@ function textLines(text) {
   return lines;
 }
 /**
- * Where selected lines start in the file now (1-based): where they were, if they are still there; else their one
- * exact match; null when they are gone, changed, or in more than one place. The app applies the same rule
- * (web/src/lib/anchor.ts): a selection is held by its text, since line numbers point at other code as soon as
- * anything above them changes.
+ * Where selected lines start in the file now (1-based), or null when that can't be told. A selection is held by its
+ * text and the lines around it (`context`: up to 3 lines before and after that told it apart from identical copies,
+ * and whether a copy existed), never by numbers alone, which point at other code as soon as anything above changes.
+ * The app applies the same rule (web/src/lib/anchor.ts): kept where it was if no copy could be there instead; else
+ * the one copy whose lines on either side still match; else, for code that had no copy, its one exact match. Without
+ * context, lines are taken only where their numbers say.
  */
-function relocate(lines, wanted, from) {
-  const at = s => wanted.every((w, i) => lines[s - 1 + i] === w);
-  if (!wanted.length) return null;
-  if (from >= 1 && at(from)) return from;
-  let found = null;
-  for (let s = 1; s + wanted.length - 1 <= lines.length; s++)
-    if (at(s)) {
-      if (found !== null) return null;
-      found = s;
-    }
-  return found;
+function relocate(lines, wanted, from, context) {
+  const n = wanted.length;
+  if (!n) return null;
+  const found = [];
+  for (let s = 1; s + n - 1 <= lines.length; s++) if (wanted.every((w, i) => lines[s - 1 + i] === w)) found.push(s);
+  if (!context) return found.includes(from) ? from : null;
+  const { before = [], after = [], twin = true } = context;
+  const told = s =>
+    (before.length > 0 && before.every((b, i) => lines[s - 1 - before.length + i] === b)) ||
+    (after.length > 0 && after.every((x, i) => lines[s - 1 + n + i] === x));
+  if (found.includes(from) && (found.length === 1 || told(from))) return from;
+  const kept = found.filter(told);
+  if (kept.length === 1) return kept[0];
+  return !twin && found.length === 1 ? found[0] : null;
 }
 function inScope(scope, rel) {
   return scope
@@ -1497,8 +1502,9 @@ const server = http.createServer(async (req, res) => {
         return send(res, 400, { error: `${AGENTS[b.agent].name} is not logged in. Run: claude auth login` }, cors);
       if (!AGENTS[b.agent]?.available)
         return send(res, 400, { error: `${b.agent} is not installed on this machine` }, cors);
-      // Lines selected in the app come with their text. Each range is found by it in the file as it is now, from
-      // one read that the scope lock then holds: moved if its lines moved, refused if they changed.
+      // Lines selected in the app come with their text and the lines around them. Each range is found by them in the
+      // file as it is now, from one read that the scope lock then holds: moved if its lines moved, refused if they
+      // changed or can't be told apart from a copy.
       let scope = Array.isArray(b.scope) ? b.scope : [];
       const read = {};
       if (b.lines && typeof b.lines === 'object') {
@@ -1513,7 +1519,16 @@ const server = http.createServer(async (req, res) => {
           }
           const abs = repoFile(e.path);
           const text = abs ? fs.readFileSync(abs, 'utf8') : null;
-          const at = text === null ? null : relocate(textLines(text), want, e.from);
+          const near = b.context?.[e.path];
+          const context =
+            near && typeof near === 'object'
+              ? {
+                  before: Array.isArray(near.before) ? near.before.map(String) : [],
+                  after: Array.isArray(near.after) ? near.after.map(String) : [],
+                  twin: near.twin !== false,
+                }
+              : null;
+          const at = text === null ? null : relocate(textLines(text), want, e.from, context);
           if (at === null)
             return send(
               res,
