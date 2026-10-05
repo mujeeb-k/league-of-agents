@@ -928,7 +928,8 @@ function push(run, entry) {
 // ---------------------------------------------------------------- agents
 /**
  * The scope, written above the prompt. What it says holds for every agent: changes outside the scope are reported
- * and can be undone. Only Claude Code's edit tools are blocked outside it, by the scope lock (runHook 'pre').
+ * and can be undone. Only Claude Code's edit tools are blocked outside it, by the scope lock (runHook 'pre'), which
+ * is one of the hooks: without them, Claude Code isn't told it is blocked.
  */
 function scopePreamble(scope, agent) {
   if (!scope?.length) return '';
@@ -938,7 +939,7 @@ function scopePreamble(scope, agent) {
       ? `- ${e.path}, lines ${e.from} to ${e.to} only: keep every other line of this file as it is`
       : '- ' + s;
   };
-  const blocked = agent === 'claude' ? '\nEdits outside it made with edit tools are blocked.' : '';
+  const blocked = agent === 'claude' && HOOKS ? '\nEdits outside it made with edit tools are blocked.' : '';
   return `Scope for this task:\n${scope.map(line).join('\n')}\nEdit only inside this scope. Changes outside it are reported to the user and can be undone.${blocked}\n\n`;
 }
 function startAgent(run, read = {}) {

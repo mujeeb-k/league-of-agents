@@ -290,7 +290,7 @@ test('an agent removes every selected line while a copy of them sits elsewhere: 
     repo => ({ PROBE_DELETE: `${path.join(repo, FILE)}:3-5` }),
   ));
 
-test('each agent is told to edit only inside the scope; Claude Code is also told its edit tools are blocked', () =>
+test('each agent is told to edit only inside the scope; Claude Code is told its edit tools are blocked only when the hooks are on', () =>
   withProbe(
     async (b, _repo, log) => {
       const settle = () =>
@@ -322,9 +322,37 @@ test('each agent is told to edit only inside the scope; Claude Code is also told
         '- apps/',
         'Edit only inside this scope. Changes outside it are reported to the user and can be undone.',
       ].join('\n');
-      expect(told(lines[0]!)).toBe(common + '\nEdits outside it made with edit tools are blocked.\n\nProbe');
-      expect(told(lines[1]!)).toBe(common + '\n\nProbe');
-      expect(told(lines[2]!)).toBe(common + '\n\nProbe');
+      // This bridge runs without the hooks, so nothing blocks Claude Code either.
+      for (const args of lines) expect(told(args)).toBe(common + '\n\nProbe');
+      // With the hooks on, the scope lock blocks Claude Code's edit tools, and it is told so.
+      // One bridge per repo: this one stops so a bridge with the hooks can start there.
+      b.stop();
+      await expect
+        .poll(
+          () =>
+            call(b, '/api/state').then(
+              () => 'running',
+              () => 'stopped',
+            ),
+          { timeout: 5_000 },
+        )
+        .toBe('stopped');
+      const hooked = await startBridge(_repo, PROBE_AGENT, { PROBE_LOG: log, LOA_QUIET_MS: '300' }, []);
+      try {
+        const r = await call(hooked, '/api/runs', {
+          agent: 'claude',
+          prompt: 'Probe',
+          scope: [`${FILE}:3-5`, 'apps/'],
+          resumeFrom: null,
+          ...held(SEED[FILE]!, 3, 5),
+        });
+        expect(r.status).toBe(200);
+        await expect.poll(() => fs.readFileSync(log, 'utf8').trim().split('\n').length, { timeout: 15_000 }).toBe(4);
+        const last = (JSON.parse(fs.readFileSync(log, 'utf8').trim().split('\n')[3]!) as { args: string[] }).args;
+        expect(told(last)).toBe(common + '\nEdits outside it made with edit tools are blocked.\n\nProbe');
+      } finally {
+        hooked.stop();
+      }
     },
     () => ({ LOA_CODEX_BIN: PROBE_AGENT, LOA_CURSOR_BIN: PROBE_AGENT }),
   ));
