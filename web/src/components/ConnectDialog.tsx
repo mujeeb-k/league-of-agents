@@ -169,8 +169,9 @@ export function ConnectDialog() {
                 </p>
               ) : null}
               <p className="mt-2 text-xs text-muted-foreground text-pretty">
-                Chrome and Edge will ask to let this site reach your computer: choose Allow. In other browsers, open the
-                link the bridge prints instead.
+                Chrome, Edge, Brave and Arc ask once to let this site reach apps on your computer, because the bridge
+                runs there: choose Allow. To skip it, open the link the bridge prints that starts with http://127.0.0.1,
+                the local app.
               </p>
             </Step>
           </ol>

@@ -38,7 +38,7 @@ The person may not be a developer. Explain each step in plain words, and never e
    Use `--no-hooks` if they said no, or if you don't support hooks: changes are still recorded, by watch mode. The bridge keeps running in the background and opens the map in their browser.
 
 5. **Tell them** it is running, and give them the link it printed.
-   - If it opened leagueofagents.dev (in Chrome, Edge, Brave or Arc), the page explains, and then the browser asks to let the site reach apps on their computer: they choose **Allow**. If they would rather not, the other link it printed, the local app, works with no permission.
+   - If it opened leagueofagents.dev (in Chrome, Edge, Brave or Arc), the page explains, and then the browser asks to let the site reach apps on their computer: they choose **Allow**. It asks because a public site is connecting to the bridge on their own computer (127.0.0.1). If they would rather not, the other link it printed, the local app, works with no permission, and starting it with `--web ''` always opens the local app.
    - If it also printed that Claude Code isn't installed or isn't logged in, tell them that too, with the command it gave: they need it to run Claude Code from the map.
    - If you are Codex and added hooks, tell them to trust the new hooks once with `/hooks`.
 

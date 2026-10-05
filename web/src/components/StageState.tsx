@@ -100,7 +100,7 @@ function AskAccess({ conn }: { conn: Conn }) {
         {`League of Agents runs on your computer, and this page connects to it there. Next, your browser asks to let ${location.host} reach apps on this device. Choose Allow.`}
       </p>
       <p className="text-xs text-muted-foreground text-pretty">
-        Your code goes only between this browser and your computer.
+        League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized.
       </p>
       <div className="flex flex-col items-center gap-1">
         <Button size="sm" id="askContinue" onClick={() => startConnect(conn, true)}>
