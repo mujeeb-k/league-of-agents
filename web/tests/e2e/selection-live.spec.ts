@@ -290,6 +290,45 @@ test('an agent removes every selected line while a copy of them sits elsewhere: 
     repo => ({ PROBE_DELETE: `${path.join(repo, FILE)}:3-5` }),
   ));
 
+test('each agent is told to edit only inside the scope; Claude Code is also told its edit tools are blocked', () =>
+  withProbe(
+    async (b, _repo, log) => {
+      const settle = () =>
+        expect
+          .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).active, {
+            timeout: 15_000,
+          })
+          .toBeFalsy();
+      for (const agent of ['claude', 'codex', 'cursor']) {
+        const r = await call(b, '/api/runs', {
+          agent,
+          prompt: 'Probe',
+          scope: [`${FILE}:3-5`, 'apps/'],
+          resumeFrom: null,
+          ...held(SEED[FILE]!, 3, 5),
+        });
+        expect(r.status).toBe(200);
+        await settle();
+      }
+      const lines = fs
+        .readFileSync(log, 'utf8')
+        .trim()
+        .split('\n')
+        .map(l => (JSON.parse(l) as { args: string[] }).args);
+      const told = (args: string[]) => args.find(a => a.startsWith('Scope for this task'));
+      const common = [
+        'Scope for this task:',
+        `- ${FILE}, lines 3 to 5 only: keep every other line of this file as it is`,
+        '- apps/',
+        'Edit only inside this scope. Changes outside it are reported to the user and can be undone.',
+      ].join('\n');
+      expect(told(lines[0]!)).toBe(common + '\nEdits outside it made with edit tools are blocked.\n\nProbe');
+      expect(told(lines[1]!)).toBe(common + '\n\nProbe');
+      expect(told(lines[2]!)).toBe(common + '\n\nProbe');
+    },
+    () => ({ LOA_CODEX_BIN: PROBE_AGENT, LOA_CURSOR_BIN: PROBE_AGENT }),
+  ));
+
 test('the bridge finds selected lines by their text and the lines around them: moved, kept, or refused', () =>
   withProbe(async (b, repo) => {
     const start = (scope: string[], body: object = held(SEED[FILE]!, 3, 5)) =>

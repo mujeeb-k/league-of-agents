@@ -926,7 +926,11 @@ function push(run, entry) {
 }
 
 // ---------------------------------------------------------------- agents
-function scopePreamble(scope) {
+/**
+ * The scope, written above the prompt. What it says holds for every agent: changes outside the scope are reported
+ * and can be undone. Only Claude Code's edit tools are blocked outside it, by the scope lock (runHook 'pre').
+ */
+function scopePreamble(scope, agent) {
   if (!scope?.length) return '';
   const line = s => {
     const e = scopeEntry(s);
@@ -934,10 +938,11 @@ function scopePreamble(scope) {
       ? `- ${e.path}, lines ${e.from} to ${e.to} only: keep every other line of this file as it is`
       : '- ' + s;
   };
-  return `Scope for this task. Only edit these files or folders:\n${scope.map(line).join('\n')}\nEdits outside this scope will be blocked.\n\n`;
+  const blocked = agent === 'claude' ? '\nEdits outside it made with edit tools are blocked.' : '';
+  return `Scope for this task:\n${scope.map(line).join('\n')}\nEdit only inside this scope. Changes outside it are reported to the user and can be undone.${blocked}\n\n`;
 }
 function startAgent(run, read = {}) {
-  const prompt = scopePreamble(run.scope) + run.prompt;
+  const prompt = scopePreamble(run.scope, run.agent) + run.prompt;
   const scopeFile = path.join(LOA, 'scope.json');
   // For line ranges, the hook needs each file as it was when the run started: as read when its lines were found.
   const ranges = {};
