@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Privacy · League of Agents</title>
-<meta name="description" content="What League of Agents collects, and why it never sends your code anywhere.">
+<meta name="description" content="What League of Agents collects. It never uploads your code anywhere: your code goes only to the agent you authorized.">
 <link rel="canonical" href="https://leagueofagents.dev/privacy">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
@@ -74,10 +74,11 @@
     <a href="/">League of Agents</a>
   </header>
   <h1>Privacy</h1>
-  <p class="updated">Last updated 2 October 2026</p>
+  <p class="updated">Last updated 4 October 2026</p>
 
-  <h2>League of Agents never sends your code anywhere</h2>
-  <p>League of Agents reads your repository through the bridge, a small program you run on your own computer. This page, leagueofagents.dev, talks to that bridge straight from your browser. Your code, prompts, runs and snapshots go between your browser and your computer only. League of Agents has no servers that receive code. The coding agents you run do send code to their providers; see below.</p>
+  <h2>League of Agents never uploads your code anywhere</h2>
+  <p>Your code goes only to the agent you authorized.</p>
+  <p>League of Agents reads your repository through the bridge, a small program you run on your own computer. The bridge talks only to 127.0.0.1, on your computer. This page, leagueofagents.dev, talks to that bridge straight from your browser. Your code, prompts, runs and snapshots go between your browser and your computer only. League of Agents has no servers that receive code.</p>
 
   <h2>What this site counts</h2>
   <p>leagueofagents.dev counts page views with Vercel Web Analytics, to know how many people visit and from where. For each page view it may record:</p>
@@ -94,10 +95,10 @@
   <p>Your browser saves the bridge you connected to (its port and token) and your panel and theme choices in its own storage on your device, so a reload reconnects. Disconnecting removes the connection.</p>
 
   <h2>Your coding agents</h2>
-  <p>When you run Claude Code, Codex, Cursor or another agent, it sends your prompts and code to its own provider, under that provider's terms. League of Agents only starts the agent on your computer and records what it changed there.</p>
+  <p>When you run Claude Code, Codex, Cursor or another agent, it sends your prompts and code to its own provider, under that provider's terms. League of Agents starts the agent on your computer and records what it changed there. It gives the agent your prompt and the selected files or lines, as paths and line numbers. "Update what depends on this" also puts the diff of your change in the prompt.</p>
 
   <h2>Installing</h2>
-  <p>The bridge comes from the npm registry, under npm's own terms. It sends nothing anywhere itself.</p>
+  <p>The bridge comes from the npm registry, under npm's own terms.</p>
 
   <h2>Questions</h2>
   <p>Ask on the project's GitHub repository.</p>

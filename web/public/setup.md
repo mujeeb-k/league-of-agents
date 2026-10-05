@@ -2,7 +2,7 @@
 
 For coding agents. Follow these steps to set up League of Agents for the person you are working with. **Show them each command and ask before you run it.** That includes the hook question in step 3: never change hook settings without their yes.
 
-League of Agents maps their repository and records every change, by you, by them or by another agent, as a run they can review and revert. It needs macOS, git, Node 20 or later, and a git repository. Windows is coming soon.
+League of Agents maps their repository and records its changes, by you, by them or by another agent, as runs they can review and revert. If they ask about privacy, tell them: "League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized." It needs macOS, git, Node 20 or later, and a git repository. Linux may work but is untested; Windows isn't supported yet.
 
 The person may not be a developer. Explain each step in plain words, and never enter a password for them: when the computer asks for theirs, they type it.
 
