@@ -116,9 +116,14 @@ function RunView({ run }: { run: Run }) {
           </p>
           {run.agent === 'you' && !run.reverted ? (
             // Propagate: the agent updates whatever depends on this save.
-            <Button variant="outline" size="sm" className="mt-3" id="propagate" onClick={() => void propagate(run)}>
-              Update what depends on this
-            </Button>
+            <>
+              <Button variant="outline" size="sm" className="mt-3" id="propagate" onClick={() => void propagate(run)}>
+                Update what depends on this
+              </Button>
+              <p className="mt-2 text-xs text-muted-foreground text-pretty">
+                The diff of your change goes into the agent's prompt.
+              </p>
+            </>
           ) : null}
         </Section>
       ) : (
@@ -540,7 +545,7 @@ function RepoView() {
           <p className="mt-3 mb-2 text-xs text-muted-foreground">Or run it yourself in the repo:</p>
           <CopyCommand ids={['tryCommand', 'tryCopy']} compact />
           <ul className="mt-3 flex list-disc flex-col gap-1 pl-4 text-xs text-muted-foreground">
-            <li>macOS, Node 20 or later, and a git repo. Windows coming soon.</li>
+            <li>macOS, Node 20 or later, and a git repo. Linux is untested; Windows isn't supported yet.</li>
             <li>Claude Code or Cursor to run from the canvas. Changes made in any editor show up as runs.</li>
           </ul>
           <Button variant="outline" size="sm" className="mt-3" id="tryConnect" onClick={() => setConnectOpen(true)}>
