@@ -1,6 +1,6 @@
 {
   "name": "leagueofagents-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Point your coding agent at any file or block of code, then see every change on a map of your repo. Works with Claude Code, Codex, Cursor and more.",
   "keywords": ["claude-code", "cursor", "coding-agents", "code-review", "canvas", "git"],
   "homepage": "https://leagueofagents.dev",

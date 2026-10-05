@@ -23,16 +23,16 @@ The person may not be a developer. Explain each step in plain words, and never e
 
 3. **Ask about hooks.** Only if you support hooks (Claude Code, Codex, Cursor), ask:
 
-   > May I add hooks so the prompts you send me become runs, titled by the prompt? They go next to your own hooks, which are kept, and `npx leagueofagents-cli@0.1.1 hooks remove` takes them out.
+   > May I add hooks so the prompts you send me become runs, titled by the prompt? They go next to your own hooks, which are kept, and `npx leagueofagents-cli@0.1.2 hooks remove` takes them out.
 
 4. **Start it.** From the repository root, run one of these, with their answer:
 
    ```bash
-   npx leagueofagents-cli@0.1.1 start --hooks
+   npx leagueofagents-cli@0.1.2 start --hooks
    ```
 
    ```bash
-   npx leagueofagents-cli@0.1.1 start --no-hooks
+   npx leagueofagents-cli@0.1.2 start --no-hooks
    ```
 
    Use `--no-hooks` if they said no, or if you don't support hooks: changes are still recorded, by watch mode. The bridge keeps running in the background and opens the map in their browser.
@@ -42,4 +42,4 @@ The person may not be a developer. Explain each step in plain words, and never e
    - If it also printed that Claude Code isn't installed or isn't logged in, tell them that too, with the command it gave: they need it to run Claude Code from the map.
    - If you are Codex and added hooks, tell them to trust the new hooks once with `/hooks`.
 
-To stop it: `npx leagueofagents-cli@0.1.1 stop`. To see the link again: `npx leagueofagents-cli@0.1.1 status`. To remove it from the repo entirely: `npx leagueofagents-cli@0.1.1 uninstall`.
+To stop it: `npx leagueofagents-cli@0.1.2 stop`. To see the link again: `npx leagueofagents-cli@0.1.2 status`. To remove it from the repo entirely: `npx leagueofagents-cli@0.1.2 uninstall`.
