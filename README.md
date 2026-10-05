@@ -13,7 +13,7 @@ It runs on your computer, works with the agents you already use, and is open sou
 ## What you can do
 
 - **See your project at once.** Its folders and code files on one map. Zoom out for the shape, zoom in to read the code.
-- **Point an agent at exact lines.** Select a file, a folder, or a few lines, and describe the change. With the hooks on, Claude Code is blocked from editing outside your selection with its edit tools. Codex and Cursor edits outside it are flagged after the run, and so are Claude Code's when the hooks are off or it uses a shell command.
+- **Point an agent at exact lines.** Select a file, a folder, or a few lines, and describe the change. With the hooks on, Claude Code is blocked from editing outside your selection with its edit tools. The hooks are off until you say yes: the first `npx leagueofagents-cli@latest` in a terminal asks once and remembers, and without a terminal they stay off unless you pass `--hooks`. To check, look for `"hooks": true` in `.loa/bridge.json`. Codex and Cursor edits outside your selection are flagged after the run, and so are Claude Code's when the hooks are off or it uses a shell command.
 - **Edit files yourself.** Double-click a file's code to open it in the editor. Saved edits are recorded and can be undone like any agent run.
 - **Update what depends on a change.** Rename a function, then ask the agent to update every file that uses it. The diff of your change goes into the agent's prompt. The map shows each file it touched.
 - **Review before you keep.** Switch between Before, After and Diff, step through changed files, then keep the run or undo it in one click.
@@ -98,7 +98,6 @@ To remove it:
 | Snapshot objects in `.git/objects` | Unreferenced after `uninstall`. Git prunes them on its own after two weeks, or right away with `git gc --prune=now`. |
 | `loa.config.json` | Delete it, if you created it. |
 | What your browser keeps | Click Disconnect, or clear the site's data for leagueofagents.dev. |
-| The Claude Code plugin, if you added it | In Claude Code: `/plugin uninstall league-of-agents` |
 
 ## What it sends
 
@@ -122,7 +121,7 @@ When you run an agent from the map, the bridge starts it in your repo with these
 
 A follow-up adds `--resume <session>` for Claude Code and Cursor, and `resume <session>` for Codex. What each permission flag allows:
 
-- **Claude Code, `--permission-mode acceptEdits`:** it creates and edits files in the repo without asking, and **runs `mkdir`, `touch`, `rm`, `rmdir`, `mv`, `cp` and `sed` there without asking.** Other shell commands and network requests need a rule you set in Claude Code; with `-p` there is no one to ask, so they're denied. ([permission modes](https://code.claude.com/docs/en/permission-modes#auto-approve-file-edits-with-acceptedits-mode), [non-interactive runs](https://code.claude.com/docs/en/headless#auto-approve-tools)) The scope lock is one of the hooks, so it works only when you've said yes to the hooks or added the Claude Code plugin. It checks Claude Code's edit tools only. A change made with one of those shell commands isn't blocked; it's flagged after the run if it's outside your selection.
+- **Claude Code, `--permission-mode acceptEdits`:** it creates and edits files in the repo without asking, and **runs `mkdir`, `touch`, `rm`, `rmdir`, `mv`, `cp` and `sed` there without asking.** Other shell commands and network requests need a rule you set in Claude Code; with `-p` there is no one to ask, so they're denied. ([permission modes](https://code.claude.com/docs/en/permission-modes#auto-approve-file-edits-with-acceptedits-mode), [non-interactive runs](https://code.claude.com/docs/en/headless#auto-approve-tools)) The scope lock is one of the hooks, so it works only when you've said yes to the hooks. It checks Claude Code's edit tools only. A change made with one of those shell commands isn't blocked; it's flagged after the run if it's outside your selection.
 - **Cursor, `-p --force`:** **it runs shell commands without asking.** `-p` gives it every tool, including write and shell, and `--force` allows commands unless you've explicitly denied them. ([CLI parameters](https://cursor.com/docs/cli/reference/parameters))
 - **Codex, `exec --sandbox workspace-write`:** **it runs commands in the repo without asking.** It reads and edits files and runs commands inside the repo. Network access is off, and it can't go beyond the repo. ([non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode), [approvals and security](https://learn.chatgpt.com/docs/agent-approvals-security))
 
@@ -158,8 +157,6 @@ League of Agents never uploads your code anywhere. Your code goes only to the ag
 | `LOA_CLAUDE_BIN` | `claude` | Claude Code command |
 | `LOA_CODEX_BIN` | `codex` | Codex command |
 | `LOA_CURSOR_BIN` | `cursor-agent` | Cursor command (newer installs may call it `agent`) |
-
-Using Claude Code? There's also a plugin: `/plugin marketplace add mujeeb-k/league-of-agents-plugin`, then `/plugin install league-of-agents@league-of-agents`.
 
 ## How it works
 
