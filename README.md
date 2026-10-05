@@ -4,7 +4,7 @@
 
 League of Agents is an agentic code canvas: a map of your codebase where you direct coding agents and review their work.
 
-Coding agents change more code than anyone can review line by line. League of Agents shows your whole project as a map, and every change an agent makes lands on it. You see what changed, where, and whether it still works, then keep it or undo it.
+Coding agents change more code than anyone can review line by line. League of Agents shows your project as a map, and every change an agent makes lands on it. You see what changed, where, and whether it still works, then keep it or undo it.
 
 It runs on your computer, works with the agents you already use, and is open source.
 
@@ -12,12 +12,12 @@ It runs on your computer, works with the agents you already use, and is open sou
 
 ## What you can do
 
-- **See your whole project at once.** Every folder and file on one map. Zoom out for the shape, zoom in to read the code.
-- **Point an agent at exact lines.** Select a file, a folder, or a few lines, and describe the change. Claude Code can't edit anything outside your selection; edits outside it by Codex or Cursor are flagged.
+- **See your project at once.** Its folders and code files on one map. Zoom out for the shape, zoom in to read the code.
+- **Point an agent at exact lines.** Select a file, a folder, or a few lines, and describe the change. Claude Code is blocked from editing outside your selection with its edit tools. Codex and Cursor edits outside it are flagged after the run, and so are Claude Code's, if it makes them with a shell command.
 - **Edit files yourself.** Double-click a file's code to open it in the editor. Saved edits are recorded and can be undone like any agent run.
-- **Update what depends on a change.** Rename a function, then ask the agent to update every file that uses it. The map shows each file it touched.
+- **Update what depends on a change.** Rename a function, then ask the agent to update every file that uses it. The diff of your change goes into the agent's prompt. The map shows each file it touched.
 - **Review before you keep.** Switch between Before, After and Diff, step through changed files, then keep the run or undo it in one click.
-- **Run your checks automatically.** Tests and type checks run after every change, so you know if it still works.
+- **Run your checks automatically.** Tests and type checks run after each run that changes files, so you know if it still works.
 
 ## Quick start
 
@@ -43,7 +43,7 @@ What happens next:
 
 ### Requirements
 
-- macOS (Windows coming soon)
+- macOS. Linux may work but is untested; Windows isn't supported yet.
 - git. On a Mac, this comes with Apple's command line developer tools: `xcode-select --install`
 - Node 20 or later
 - A git repository
@@ -59,41 +59,86 @@ Claude Code, from the map or your terminal. Codex and Cursor are in beta. Change
 
 **From the map.** Select files, folders or lines, pick an agent, describe the change and press Enter. When the run finishes, review it and keep it or undo it. With a finished run selected, your next prompt continues the same session. Remove the "Follow-up" chip to start fresh.
 
+Selected lines are held by their text and the lines around them, not by their numbers. If edits, a branch switch or a rebase move the code, the selection follows it. If the code changed, was removed, or can't be told apart from an identical copy, the selection says so and nothing runs until you select again. When an agent edits inside your selection, the selection takes the new lines.
+
+Edits made during an agent's run are counted in that run, including your own. One run happens at a time.
+
 **From your terminal.** Use Claude Code, Codex or Cursor as usual. With the hooks on, each prompt you send becomes a run on the map, titled by the prompt.
 
-**From any editor.** Just work. When files you changed go quiet for a few seconds, League of Agents records them as one run, such as "Edited main.py". Files ignored by `.gitignore` never make a run, and branch switches and pulls are never recorded.
+**From any editor.** Just work. When files you changed go quiet for a few seconds, League of Agents records them as one run, such as "Edited main.py". Files git ignores and new `.env` files are never recorded, and branch switches and pulls never make a run.
+
+A rename is recorded as the old file deleted and a new file created, so the file gets a new place on the map.
 
 ### Checks
 
 If your repo has none set up, League of Agents looks for test and typecheck scripts and pytest, and offers to turn them on. They're kept in `.loa/`, out of your repo, unless you choose to share them with your team in `loa.config.json`. A check that can't run on your machine, because something it needs isn't installed, shows as "Couldn't run" instead of failing, and can be turned off in one click. See [`loa.config.example.json`](loa.config.example.json) to write your own.
 
-### What it changes in your repo
+### What it writes on your machine
 
-- Creates `.loa/` for run records, and excludes it from git through `.git/info/exclude`.
-- Stores run snapshots under private `refs/loa/` refs.
-- Asks before adding hooks, then adds them to `.claude/settings.local.json` and `.codex/hooks.json` in the repo, and to `~/.cursor/hooks.json` for Cursor. Your own hooks are never changed.
-- Never commits to your branch, never touches staging, and never reads `.env` files.
+In your repo:
 
-To remove everything:
+- `.loa/`: run records, the bridge's port and token, a private snapshot index, a copy of the bridge the hooks run, your private check list, and a log. It's kept out of git through `.git/info/exclude`.
+- Snapshots: git commits under private `refs/loa/` refs, stored in `.git/objects`. They never touch your branch or staging area.
+- `loa.config.json`, only if you choose to share your checks with your team.
 
-```bash
-npx leagueofagents-cli@latest uninstall
-```
+In agent settings, only after you say yes to the hooks:
 
-It stops League of Agents, removes its hooks, snapshots, `.loa/` and its lines in `.git/info/exclude`, and tells you what it removed. To remove only the hooks, use `hooks remove`.
+- Claude Code: `.claude/settings.local.json` in the repo, kept out of git.
+- Codex: `.codex/hooks.json` in the repo, kept out of git if League of Agents created it.
+- Cursor: `~/.cursor/hooks.json` in your home folder. Cursor reads project hooks only from the folder it opened, which is often above the repo.
+
+Your own hooks in these files are never changed. Your browser also keeps the bridge's port and token, and your panel and theme choices, in its own storage.
+
+To remove it:
+
+| What | How |
+|---|---|
+| Hooks, in all three files | `npx leagueofagents-cli@latest hooks remove`. A file League of Agents created is deleted; a file you had is put back as it was. |
+| Everything in the repo: hooks, `refs/loa/`, `.loa/` and its lines in `.git/info/exclude` | `npx leagueofagents-cli@latest uninstall` |
+| Snapshot objects in `.git/objects` | Unreferenced after `uninstall`. Git prunes them on its own after two weeks, or right away with `git gc --prune=now`. |
+| `loa.config.json` | Delete it, if you created it. |
+| What your browser keeps | Click Disconnect, or clear the site's data for leagueofagents.dev. |
+| The Claude Code plugin, if you added it | In Claude Code: `/plugin uninstall league-of-agents` |
+
+## What it sends
+
+League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized.
+
+- **The bridge** talks to 127.0.0.1 only: the app in your browser, and the hooks of your agents. It makes no other network requests. It runs git locally and never fetches or pushes. When it starts, it opens your browser on leagueofagents.dev or on the local app, and it runs `claude auth status` to see whether Claude Code is logged in.
+- **leagueofagents.dev** serves static files: the page, its scripts, fonts and images. It talks to the bridge straight from your browser, so your code, prompts and runs go between your browser and your computer only. It counts page views with Vercel Web Analytics: the page's path, without anything after `?` or `#`; the site that linked to it; country, region and city, worked out from the request; and the operating system, browser and kind of device. No cookies. The app the bridge serves on your computer counts nothing. Details are on the [privacy page](https://leagueofagents.dev/privacy).
+- **Installing** downloads the package from the npm registry.
+- **Your agent** gets your prompt and a list of the selected files or lines, as paths and line numbers. "Update what depends on this" also puts the diff of your change in the prompt. The agent sends what it reads and is given to its own provider, under that provider's terms.
+- **Your checks** run the commands you set up. What they do is up to them.
+
+## How it starts your agent
+
+When you run an agent from the map, the bridge starts it in your repo with these commands. `<prompt>` is your prompt with the scope written above it.
+
+| Agent | Command |
+|---|---|
+| Claude Code | `claude -p <prompt> --output-format stream-json --verbose --permission-mode acceptEdits` |
+| Cursor | `cursor-agent -p --force --output-format stream-json <prompt>` |
+| Codex | `codex exec --json --sandbox workspace-write <prompt>` |
+
+A follow-up adds `--resume <session>` for Claude Code and Cursor, and `resume <session>` for Codex. What each permission flag allows:
+
+- **Claude Code, `--permission-mode acceptEdits`:** it creates and edits files in the repo without asking, and **runs `mkdir`, `touch`, `rm`, `rmdir`, `mv`, `cp` and `sed` there without asking.** Other shell commands and network requests need a rule you set in Claude Code; with `-p` there is no one to ask, so they're denied. ([permission modes](https://code.claude.com/docs/en/permission-modes#auto-approve-file-edits-with-acceptedits-mode), [non-interactive runs](https://code.claude.com/docs/en/headless#auto-approve-tools)) The scope lock checks Claude Code's edit tools only. A change made with one of those shell commands isn't blocked; it's flagged after the run if it's outside your selection.
+- **Cursor, `-p --force`:** **it runs shell commands without asking.** `-p` gives it every tool, including write and shell, and `--force` allows commands unless you've explicitly denied them. ([CLI parameters](https://cursor.com/docs/cli/reference/parameters))
+- **Codex, `exec --sandbox workspace-write`:** **it runs commands in the repo without asking.** It reads and edits files and runs commands inside the repo. Network access is off, and it can't go beyond the repo. ([non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode), [approvals and security](https://learn.chatgpt.com/docs/agent-approvals-security))
 
 ## Privacy and security
 
-League of Agents runs on your computer and never sends your code anywhere. The agents you use send code to their own providers, under their terms. leagueofagents.dev counts page views only: see the [privacy page](https://leagueofagents.dev/privacy). Who can reach League of Agents on your computer, and how it's protected, is in [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md). Report security issues privately, as [SECURITY.md](SECURITY.md) explains.
+League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized. What it sends, and to where, is [above](#what-it-sends). Who can reach League of Agents on your computer, and how it's protected, is in [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md). Report security issues privately, as [SECURITY.md](SECURITY.md) explains.
 
-## Not supported yet
+## Limits
 
-- Windows. Linux is untested.
-- Remote machines, SSH and dev containers. League of Agents must run on the same computer as your browser.
-- Repos with more than 1,500 files. The map shows the first 1,500.
-- Files over 400 KB, and diffs past a file's first 4,000 lines.
-- More than one run at a time in the same repo.
-- The website in Safari and Firefox. They use the local app instead.
+- macOS. Linux may work but is untested. Windows isn't supported yet.
+- Remote machines, SSH and dev containers aren't supported. League of Agents must run on the same computer as your browser.
+- The map shows up to 1,500 code files, and the first 400 lines of each. Files over 400 KB aren't on the map. Diffs keep a file's first 4,000 lines.
+- Non-code files, such as images, are in snapshots and undo, but not on the map.
+- Files git ignores and new `.env` files are never recorded.
+- One run at a time in a repo.
+- The website needs Chrome, Edge, Brave or Arc. Safari and Firefox use the local app instead.
 
 ## Commands and options
 
