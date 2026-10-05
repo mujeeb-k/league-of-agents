@@ -1,4 +1,4 @@
-// A bridge older than this app asks to be updated. It sits in the canvas's top-right corner, clear of
+// A bridge older than this app asks to be updated. It still works: the banner only asks. It sits in the canvas's top-right corner, clear of
 // the sidebar and of toasts, and can be closed for this connection. The canvas hint steps aside meanwhile.
 import { TriangleAlert, X } from 'lucide-react';
 import { useEffect } from 'react';
@@ -29,7 +29,7 @@ export function UpdateBanner() {
         <p>
           <span className="font-semibold">Update your bridge.</span>{' '}
           <span className="text-ink2">
-            {`It's ${S.bridgeVersion ? `version ${S.bridgeVersion}` : 'an older version'}; this app needs ${MIN_BRIDGE} or later. Stop it, then start the latest in your repo:`}
+            {`It's ${S.bridgeVersion ? `version ${S.bridgeVersion}` : 'an older version'}. It still works; ${MIN_BRIDGE} or later has fixes. Stop it, then start the latest in your repo:`}
           </span>
         </p>
         <CopyCommand ids={['updateCommand', 'updateCopy']} compact />
