@@ -267,6 +267,39 @@ test('offline: when the bridge stops answering, the last state stays and nothing
   }
 });
 
+test("a repository never shows the demo's introduction, not even before the app starts", async ({ page }) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo, undefined, {}, ['--no-hooks']);
+  // What the introduction looks like as the page is parsed, before the app's script runs.
+  await page.addInitScript(() => {
+    document.addEventListener('readystatechange', () => {
+      if (document.readyState !== 'interactive') return;
+      const el = document.getElementById('introStatic');
+      (window as unknown as { early: unknown }).early = el && {
+        display: getComputedStyle(el).display,
+        height: el.getBoundingClientRect().height,
+      };
+    });
+  });
+  const early = () => page.evaluate(() => (window as unknown as { early: unknown }).early);
+  try {
+    for (const link of [linkFor(b), `${APP}/#bridge=${b.port}&t=${b.token}`]) {
+      await page.goto(link);
+      expect(await early()).toEqual({ display: 'none', height: 0 });
+      await expect(page.locator('#conn')).toHaveText('Live');
+      await expect(page.locator('#intro, #introStatic, h1')).toHaveCount(0);
+    }
+    // A saved connection, with nothing in the address: the same.
+    await page.reload();
+    expect(await early()).toEqual({ display: 'none', height: 0 });
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await expect(page.locator('#intro, #introStatic, h1')).toHaveCount(0);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('startup: a link shows "Connecting", never the demo first, and offers the demo as a way out', async ({ page }) => {
   const repo = makeRepo(),
     b = await startBridge(repo);

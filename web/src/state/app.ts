@@ -77,6 +77,8 @@ export const st = {
   treeFocus: 'd:',
   /** The update banner was closed for this connection. */
   updateDismissed: false,
+  /** The demo's introduction card (under 860 px) was closed. */
+  introClosed: false,
 };
 
 /** Persistent elements the controller touches directly, outside React. */

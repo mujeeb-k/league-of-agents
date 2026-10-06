@@ -194,8 +194,9 @@ const DEMO: Element[] = [
 
 const away = (p: Page) => p.mouse.move(720, 22);
 
-/** A screenshot of the element with room for rings and shadows, as a data URL. */
+/** A screenshot of the element, scrolled into view, with room for rings and shadows, as a data URL. */
 async function shot(page: Page, loc: Locator) {
+  await loc.scrollIntoViewIfNeeded();
   await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
   const b = (await loc.boundingBox())!;
   const pad = 10;

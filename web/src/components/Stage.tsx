@@ -14,6 +14,7 @@ import { toast } from '../ui/toast';
 import { Composer } from './Composer';
 import { Minimap } from './Minimap';
 import { StageState } from './StageState';
+import { IntroCard } from './Intro';
 import { UpdateBanner } from './UpdateBanner';
 import { Kbd } from './ui/kbd';
 import { useScene } from './Scene';
@@ -45,7 +46,7 @@ function showTileName(tile: HTMLElement | null) {
   el.hidden = false;
 }
 
-const inChrome = (t: Element) => t.closest('#nav,#composer,#tip,#updateBanner,#stageState,#editorLayer');
+const inChrome = (t: Element) => t.closest('#nav,#composer,#tip,#updateBanner,#intro,#stageState,#editorLayer');
 const hideTip = () => dom.tip.classList.add('gone');
 
 function bindStage(stage: HTMLElement) {
@@ -280,6 +281,7 @@ export function Stage() {
         </div>
       </div>
       <UpdateBanner />
+      <IntroCard />
       <div
         data-inset=""
         className="pointer-events-none absolute inset-0 translate-x-[calc(var(--inset,0px)/2)] transition-[translate] duration-200 ease-(--ease)"

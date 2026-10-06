@@ -44,6 +44,29 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#world')).not.toHaveClass(/near/);
 });
 
+test("the demo introduces itself: the tagline as the page's only heading, at the top of the inspector", async ({
+  page,
+}) => {
+  await expect(page.locator('h1')).toHaveCount(1);
+  await expect(page.locator('#insp #intro h1')).toHaveText('See every change your agents make.');
+  await expect(page.locator('#intro p')).toHaveText(
+    'League of Agents is a map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.',
+  );
+  await expect(page.locator('#introCommand')).toHaveText('npx leagueofagents-cli@latest');
+  await expect(page.locator('#introStatic')).toHaveCount(0);
+});
+
+test('under 860 px, the introduction is a card at the top of the canvas, and closes', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 900 });
+  await expect(page.locator('#stage #intro h1')).toHaveText('See every change your agents make.');
+  await expect(page.locator('#insp #intro')).toHaveCount(0);
+  await expect(page.locator('h1')).toHaveCount(1);
+  await page.locator('#closeIntro').click();
+  await expect(page.locator('#intro')).toHaveCount(0);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(page.locator('#insp #intro')).toHaveCount(1);
+});
+
 test('the first view is readable: the latest run, at a zoom where its names read in full', async ({ page }) => {
   for (const size of [
     { width: 1440, height: 900 },

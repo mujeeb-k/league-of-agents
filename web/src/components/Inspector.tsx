@@ -30,6 +30,7 @@ import { Kbd, KbdGroup } from './ui/kbd';
 import { Markdown } from './Markdown';
 import { ScopeChip } from './ScopeChip';
 import { BetaTag, Dot, Spinner, Stat } from './bits';
+import { IntroSection } from './Intro';
 
 const Section = ({ children, className }: { children: React.ReactNode; className?: string }) => (
   <section className={cn('border-b p-4', className)}>{children}</section>
@@ -648,6 +649,7 @@ export function Inspector() {
       }}
       className="col-start-2 row-start-2 overflow-auto border-l bg-panel max-[860px]:col-start-1 max-[860px]:row-start-3 max-[860px]:max-h-[38vh] max-[860px]:border-t max-[860px]:border-l-0 [&[inert]]:invisible"
     >
+      <IntroSection />
       {body}
     </aside>
   );

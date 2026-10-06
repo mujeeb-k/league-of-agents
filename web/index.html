@@ -4,13 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>League of Agents: The Agentic Code Canvas</title>
-<meta name="description" content="Point your coding agent at any file or block of code, then see every change on a map of your repo. Works with Claude Code, Codex, Cursor and more.">
+<meta name="description" content="See every change your agents make. A map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.">
 <script>
   (function () {
     var c = null;
     try { c = localStorage.getItem('loa.theme'); } catch (e) {}
     var dark = c === 'dark' || (c !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    // Opening a repository (a connect link, or a saved connection): the demo's introduction below never shows,
+    // not even before the app starts.
+    var conn = null;
+    try { conn = localStorage.getItem('loa.conn'); } catch (e) {}
+    if (/[#&]t=/.test(location.hash) || conn) document.documentElement.dataset.boot = 'repo';
   })();
 </script>
 <link rel="canonical" href="https://leagueofagents.dev/">
@@ -23,7 +28,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="League of Agents">
 <meta property="og:title" content="League of Agents: The Agentic Code Canvas">
-<meta property="og:description" content="See every change your agents make.">
+<meta property="og:description" content="See every change your agents make. A map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.">
 <meta property="og:image" content="https://leagueofagents.dev/brand/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -31,11 +36,41 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://leagueofagents.dev/brand/og.png">
 <meta name="twitter:title" content="League of Agents: The Agentic Code Canvas">
-<meta name="twitter:description" content="See every change your agents make.">
+<meta name="twitter:description" content="See every change your agents make. A map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.">
 <link rel="stylesheet" href="./fonts/plex.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebSite","@id":"https://leagueofagents.dev/#website","name":"League of Agents","url":"https://leagueofagents.dev/"}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","@id":"https://leagueofagents.dev/#app","name":"League of Agents","description":"See every change your agents make. A map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.","url":"https://leagueofagents.dev/","applicationCategory":"DeveloperApplication","operatingSystem":"macOS","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://github.com/mujeeb-k/league-of-agents/blob/main/LICENSE","sameAs":["https://github.com/mujeeb-k/league-of-agents","https://www.npmjs.com/package/leagueofagents-cli"],"author":{"@id":"https://leagueofagents.dev/#person"}}
+</script>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"Person","@id":"https://leagueofagents.dev/#person","name":"Mujeeb Khan","url":"https://leagueofagents.dev/","sameAs":["https://github.com/mujeeb-k"]}
+</script>
+<style>
+  /* The demo's introduction as plain HTML, for crawlers and until the app starts; the app then shows the same
+     text in the inspector (src/components/Intro.tsx). Where the inspector will be, so nothing jumps. */
+  #introStatic { position: fixed; top: 48px; right: 0; width: 316px; box-sizing: border-box; padding: 16px;
+    border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--panel);
+    color: var(--foreground); font: 15px/1.5 'IBM Plex Sans', system-ui, sans-serif; }
+  #introStatic h1 { margin: 0; font-size: 18px; line-height: 1.375; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+  #introStatic p { margin: 8px 0 0; font-size: 13px; line-height: 1.625; color: var(--ink2); text-wrap: pretty; }
+  #introStatic code { display: block; margin-top: 12px; padding: 8px 12px; border-radius: 8px; background: var(--muted);
+    font: 12px 'IBM Plex Mono', ui-monospace, monospace; white-space: nowrap; }
+  @media (width < 860px) {
+    #introStatic { top: 60px; right: 12px; left: 12px; width: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--popover); }
+  }
+  [data-boot='repo'] #introStatic { display: none; }
+</style>
 </head>
 <body>
-<div id="app"></div>
+<div id="app">
+  <section id="introStatic">
+    <h1>See every change your agents make.</h1>
+    <p>League of Agents is a map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.</p>
+    <code>npx leagueofagents-cli@latest</code>
+  </section>
+</div>
 <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
