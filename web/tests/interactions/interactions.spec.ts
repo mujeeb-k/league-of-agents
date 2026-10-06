@@ -181,6 +181,30 @@ test('below 700 px the top bar keeps every control on screen without overlaps, i
   }
 });
 
+test('on a phone, Try it on your code says to use it on a Mac and offers to send the setup line', async ({
+  browser,
+}) => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  try {
+    await page.goto('/');
+    expect(await page.evaluate(() => matchMedia('(hover: none) and (pointer: coarse)').matches)).toBe(true);
+    await page.locator('#connectBtn').click();
+    const dialog = page.locator('#connectDlg');
+    await expect(dialog.getByRole('heading')).toHaveText('Use it on your Mac');
+    await expect(dialog.locator('#setupPrompt')).toHaveText(
+      'Read leagueofagents.dev/setup.md and set up League of Agents in this repo.',
+    );
+    await expect(dialog.locator('#shareSetup, #copySetup')).toHaveCount(1);
+    await expect(dialog.locator('#runCommand')).toHaveText('npx leagueofagents-cli@latest');
+    await expect(dialog.locator('#connectInput, #connectGo')).toHaveCount(0);
+    await dialog.locator('#connectCancel').click();
+    await expect(dialog).toHaveCount(0);
+  } finally {
+    await ctx.close();
+  }
+});
+
 test('the mark and wordmark reload the page, by click and by keyboard', async ({ page }) => {
   await expect(page.locator('#brand img[alt="League of Agents"]:visible')).toHaveCount(1);
   for (const go of [() => page.locator('#brand').click(), () => page.locator('#brand').press('Enter')]) {
