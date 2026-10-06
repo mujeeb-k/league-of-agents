@@ -92,9 +92,58 @@ test('the first view is readable: the latest run, at a zoom where its names read
 test('demo boots with the latest run open', async ({ page }) => {
   await expect(page.locator('#repoName')).toHaveText('relay');
   await expect(page.locator('#runbar b')).toHaveText('Run 14');
-  await expect(page.locator('[data-mode="after"]')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('[data-mode="diff"]')).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('#conn')).toHaveText('Demo');
   await expect(page.locator('#insp .runscope .chip')).toHaveText(['server/delivery/']);
+});
+
+test('a long agent reply shows its first lines, cut between two lines; Show all opens it for that run', async ({
+  page,
+}) => {
+  // The clip inside the reply's bubble, which ends at a line's bottom.
+  const reply = page.locator('#insp .bubble.md > div');
+  // Every line of text is either wholly shown or wholly hidden: none is cut through.
+  const cutLines = () =>
+    reply.evaluate(el => {
+      const box = el.getBoundingClientRect();
+      const range = document.createRange();
+      const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let shown = 0,
+        cut = 0;
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        range.selectNodeContents(n);
+        for (const r of range.getClientRects()) {
+          if (!r.height || !n.textContent?.trim()) continue;
+          if (r.bottom <= box.bottom + 0.5) shown++;
+          else if (r.top < box.bottom - 0.5) cut++;
+        }
+      }
+      return { shown, cut };
+    });
+  await expect(page.locator('#replyMore')).toHaveText('Show all');
+  expect(await cutLines()).toMatchObject({ cut: 0 });
+  expect((await cutLines()).shown).toBeGreaterThan(0);
+  await page.locator('#replyMore').click();
+  await expect(page.locator('#replyMore')).toHaveCount(0);
+  await expect(reply).toContainText('Removed:');
+  // Another run, then back: still open.
+  await showSidebar(page);
+  await page.locator('[data-tab="runs"]').click();
+  await page.locator('#sideList [data-run="13"]').click();
+  await page.locator('#sideList [data-run="14"]').click();
+  await expect(page.locator('#runbar b')).toHaveText('Run 14');
+  await expect(page.locator('#replyMore')).toHaveCount(0);
+});
+
+test('with nothing selected, the composer says to select a file or lines, or run on the whole repository', async ({
+  page,
+}) => {
+  const hint = page.locator('#selectHint');
+  await expect(hint).toHaveText('Select a file or lines on the map, or describe a change for the whole repository.');
+  await page.locator('.fr[data-path="server/delivery/endpoint-health.ts"]').click();
+  await expect(hint).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(hint).toHaveCount(1);
 });
 
 test('the mark and wordmark reload the page, by click and by keyboard', async ({ page }) => {
@@ -829,8 +878,13 @@ test('a full session by keyboard only, checking focus at every step', async ({ p
   // The top bar, in order. The sidebar is out of the way at fit zoom, so it is not in the tab order.
   await tab();
   await expect.poll(focus).toBe('brand');
+  // The demo opens in Diff: the switch takes focus there, and arrows move between views.
   await tab();
+  await expect.poll(focus).toBe('diff');
+  await page.keyboard.press('ArrowLeft');
   await expect.poll(focus).toBe('after');
+  await page.keyboard.press('Space');
+  await expect(page.locator('[data-mode="after"]')).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('ArrowRight');
   await expect.poll(focus).toBe('diff');
   await page.keyboard.press('Space');

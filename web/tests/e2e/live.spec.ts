@@ -1965,17 +1965,23 @@ test('analytics: only on leagueofagents.dev, and never with the connect token', 
 // The bridge in the background. start returns at once and leaves it running in its own process
 // A connected repo with no runs yet says how to start, with an example prompt for the selected file. It goes
 // away after the first run.
-test('first run: a hint, then an example prompt for the selected file, gone after the first run', async ({ page }) => {
+test('first run: a hint to select, then an example prompt for the selected file, gone after the first run', async ({
+  page,
+}) => {
   const repo = makeRepo(),
     b = await startBridge(repo, undefined, {}, ['--no-hooks']);
   try {
     await page.goto(linkFor(b));
     await expect(page.locator('#conn')).toHaveText('Live');
-    await expect(page.locator('#firstRun')).toHaveText('Select a file, then describe a change.');
+    await expect(page.locator('#selectHint')).toHaveText(
+      'Select a file or lines on the map, or describe a change for the whole repository.',
+    );
+    await expect(page.locator('#firstRun')).toHaveCount(0);
     await page.keyboard.press('0');
     await page.locator('.fr[data-path="shared/log.ts"]').click();
     const example = page.locator('#firstRunExample');
     await expect(example).toHaveText('Add a short comment at the top of log.ts that says what the file is for.');
+    await expect(page.locator('#selectHint')).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath('first-run.png') });
     await example.click();
     await expect(page.locator('#prompt')).toHaveValue(
