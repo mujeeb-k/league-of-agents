@@ -12,7 +12,7 @@ import {
   Undo2,
   X,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { enableChecks, turnOffCheck } from '../api/live';
 import { flyFile } from '../lib/camera';
 import { agentOf } from '../lib/constants';
@@ -22,7 +22,7 @@ import { plural } from '../lib/util';
 import { S, dom, st } from '../state/app';
 import { panels } from '../state/panels';
 import { isOffline, propagate, runAction, selectRun, toggleReviewed, viewFile } from '../state/actions';
-import { renderSel, useRegion } from '../state/render';
+import { bump, renderSel, useRegion } from '../state/render';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { CopyCommand, SETUP_PROMPT, setConnectOpen } from './ConnectDialog';
@@ -35,6 +35,83 @@ import { IntroSection } from './Intro';
 const Section = ({ children, className }: { children: React.ReactNode; className?: string }) => (
   <section className={cn('border-b p-4', className)}>{children}</section>
 );
+
+/** Lines a long agent reply shows before "Show all"; a reply at most one line longer shows in full. */
+const REPLY_LINES = 5;
+
+/** Where each rendered line of text ends, from the top of `el`: parts of a line that overlap count as one. */
+function lineBottoms(el: HTMLElement): number[] {
+  const top = el.getBoundingClientRect().top;
+  const rects: DOMRect[] = [];
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    if (!n.textContent?.trim()) continue;
+    range.selectNodeContents(n);
+    rects.push(...[...range.getClientRects()].filter(r => r.height > 0));
+  }
+  rects.sort((a, b) => a.top - b.top);
+  const lines: { top: number; bottom: number }[] = [];
+  for (const r of rects) {
+    const last = lines[lines.length - 1];
+    if (last && r.top < last.bottom - 2) last.bottom = Math.max(last.bottom, r.bottom);
+    else lines.push({ top: r.top, bottom: r.bottom });
+  }
+  return lines.map(l => l.bottom - top);
+}
+
+/**
+ * The agent's reply. A long one shows its first lines, cut between two lines, and "Show all" opens it for the
+ * rest of this run's visit; a reply still being written shows in full.
+ */
+function Reply({ run, text, open }: { run: Run; text: string; open: boolean }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [cut, setCut] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el || open) return setCut(null);
+    const measure = () => {
+      el.style.maxHeight = '';
+      const lines = lineBottoms(el);
+      const at = lines.length > REPLY_LINES + 1 ? Math.ceil(lines[REPLY_LINES - 1]!) : null;
+      el.style.maxHeight = at === null ? '' : at + 'px';
+      setCut(at);
+    };
+    measure();
+    // Measured again whenever the lines wrap differently: the panel's width, a scrollbar, the fonts arriving.
+    const ro = new ResizeObserver(measure);
+    ro.observe(el.parentElement!);
+    for (const child of el.children) ro.observe(child);
+    document.fonts.addEventListener('loadingdone', measure);
+    return () => {
+      ro.disconnect();
+      document.fonts.removeEventListener('loadingdone', measure);
+    };
+  }, [open, text]);
+  return (
+    <>
+      <div className="bubble md rounded-lg border bg-card px-3 py-2 leading-relaxed text-pretty">
+        {/* The clip ends at a line's bottom; the bubble's padding stays outside it. */}
+        <div ref={box} className="overflow-hidden" style={cut === null ? undefined : { maxHeight: cut }}>
+          <Markdown text={text} />
+        </div>
+      </div>
+      {cut === null ? null : (
+        <button
+          type="button"
+          id="replyMore"
+          className="mt-1.5 rounded-sm text-xs text-ink2 underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none"
+          onClick={() => {
+            st.openReplies.add(run.id);
+            bump('inspector');
+          }}
+        >
+          Show all
+        </button>
+      )}
+    </>
+  );
+}
 
 /** A small, quiet uppercase label (DESIGN.md product rules). */
 export const Label = ({ children, className }: { children: React.ReactNode; className?: string }) => (
@@ -138,9 +215,7 @@ function RunView({ run }: { run: Run }) {
             {a.name}
             {running ? <Spinner /> : null}
           </div>
-          <div className="bubble md rounded-lg border bg-card px-3 py-2 leading-relaxed text-pretty">
-            <Markdown text={reply} />
-          </div>
+          <Reply run={run} text={reply} open={running || st.openReplies.has(run.id)} />
           {needsYou(run) ? (
             // What the agent needs before it can finish: a neutral card with an amber edge, like warnings.
             <div className="needs mt-3 flex gap-2 rounded-lg border border-l-2 border-l-mod bg-card px-3 py-2">

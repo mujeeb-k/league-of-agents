@@ -79,6 +79,8 @@ export const st = {
   updateDismissed: false,
   /** The demo's introduction card (under 860 px) was closed. */
   introClosed: false,
+  /** Runs whose agent reply was opened in full with "Show all". */
+  openReplies: new Set<number>(),
 };
 
 /** Persistent elements the controller touches directly, outside React. */
