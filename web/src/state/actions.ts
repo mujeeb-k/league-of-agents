@@ -294,7 +294,8 @@ export function loadDemo() {
   buildModel(SAMPLE_TREE, parseSample(SAMPLE_TEXT), SAMPLE_RUNS);
   st.run = S.RUNS[S.RUNS.length - 1] ?? null;
   st.sel.clear();
-  st.mode = 'after';
+  // The demo opens on its latest run's changes.
+  st.mode = 'diff';
   S.repoName = SAMPLE_REPO;
   S.repoRoot = '';
   S.TOTALS = new Map();

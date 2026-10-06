@@ -115,7 +115,7 @@ export const SAMPLE_RUNS: SampleRunDef[] = [
     scope: ['server/delivery/'],
     when: '2 min ago',
     dur: '2m 05s',
-    prompt: 'Failed deliveries retry right away and hammer the endpoint. Back off exponentially with jitter.',
+    prompt: 'Failed deliveries keep hammering the endpoint. Fix the retries without breaking the rest of delivery.',
     summary:
       '`scheduleRetry` now waits for an exponential backoff with jitter before each attempt.\n\n- **New:** `retry/backoff.ts` computes the delay.\n- **Moved:** the retry decision is now `shouldRetry` in `endpoint-health.ts`.\n- **Removed:** an unused import from `dead-letter.ts`.',
     ch: {
