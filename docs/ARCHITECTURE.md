@@ -113,7 +113,7 @@ Lines selected in the editor are held by their text and the lines around them, n
 - **Claude Code only, and only with the hooks.** The lock is Claude Code's `PreToolUse` hook on `Edit|Write|MultiEdit|NotebookEdit`, running `runHook('pre')`. It exists only when the user said yes to the hooks (or added the plugin, whose hook calls the same code); without them a map run's edits are flagged after the run, not blocked. Claude Code is told its edit tools are blocked only when the hooks are on (`scopePreamble()`).
 - **What it checks:** `.loa/scope.json`, written by `startAgent()` as `{ scope, ranges }`. A path outside every scope entry (`inScope()`) is refused with exit 2. For a line range, the hook applies the Edit, MultiEdit or Write to the file and checks `rangeKept()`: every line before and after the range must equal the file as the run found it, so the range may grow or shrink but nothing around it may change.
 - **New files:** allowed only inside a selected folder; a selected file or lines allow none.
-- **What it doesn't see:** under `--permission-mode acceptEdits`, Claude Code runs `mkdir`, `touch`, `rm`, `rmdir`, `mv`, `cp` and `sed` in the repo without asking, and the hook doesn't check those; such a change outside the scope is flagged after the run. The 0.1.3 proposal covers closing this.
+- **What it doesn't see:** under `--permission-mode acceptEdits`, Claude Code runs `mkdir`, `touch`, `rm`, `rmdir`, `mv`, `cp` and `sed` in the repo without asking, and the hook doesn't check those; such a change outside the scope is flagged after the run. Closing this gap is planned.
 - **After every run, for every agent,** `scopeViolations()` applies the same rules to the run's changes and lists what fell outside in `outOfScope`.
 
 ### Limits
