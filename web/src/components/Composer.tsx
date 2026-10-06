@@ -267,7 +267,14 @@ export function Composer() {
           {stale}
         </p>
       ) : null}
-      {S.LIVE && !blocked && !S.RUNS.length ? <FirstRun /> : null}
+      {/* With nothing selected, a prompt runs on the whole repository: say so, and how to narrow it. */}
+      {blocked ? null : !st.sel.size ? (
+        <p id="selectHint" className="px-1 pb-2 text-xs text-muted-foreground text-pretty">
+          Select a file or lines on the map, or describe a change for the whole repository.
+        </p>
+      ) : S.LIVE && !S.RUNS.length ? (
+        <FirstRun />
+      ) : null}
       <div className="flex items-end gap-2 rounded-lg bg-muted py-1 pr-1 pl-3 focus-within:ring-2 focus-within:ring-ring/40">
         <Textarea
           id="prompt"
