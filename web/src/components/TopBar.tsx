@@ -3,6 +3,7 @@
 import { Moon, PanelLeft, PanelRight, Sun, X } from 'lucide-react';
 import { connect, disconnect } from '../api/live';
 import { agentOf } from '../lib/constants';
+import { cn } from '../lib/utils';
 import { drawMini, readCss } from '../lib/minimap';
 import type { Mode } from '../lib/types';
 import { S, dom, st } from '../state/app';
@@ -50,7 +51,10 @@ function RunBar() {
     return !S.ROOT ? (
       <div id="runbar" className="flex-1" />
     ) : (
-      <div id="runbar" className="flex min-w-0 flex-1 items-center justify-center">
+      <div
+        id="runbar"
+        className="flex min-w-0 flex-1 items-center justify-center max-[700px]:order-last max-[700px]:basis-full"
+      >
         <span className="quiet truncate text-muted-foreground">
           Latest state. Open a run to compare before and after.
         </span>
@@ -61,8 +65,11 @@ function RunBar() {
     if (m) setMode(m as Mode);
   };
   return (
-    <div id="runbar" className="flex min-w-0 flex-1 items-center justify-center gap-3">
-      <div className="flex min-w-0 items-center gap-2">
+    <div
+      id="runbar"
+      className="flex min-w-0 flex-1 items-center justify-center gap-3 max-[700px]:order-last max-[700px]:basis-full"
+    >
+      <div className="flex min-w-0 items-center gap-2 max-[700px]:mr-auto">
         <Dot c={a.c} />
         <b className="font-semibold whitespace-nowrap">{`Run ${r.id}`}</b>
         <span className="truncate text-ink2 max-[860px]:hidden">{r.title}</span>
@@ -136,12 +143,17 @@ function ConnControls() {
     toggleTheme();
     retheme();
   };
+  const demo = !S.CONN && !connecting && !st.unreachable && !st.asking;
   return (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="flex shrink-0 items-center gap-2 max-[700px]:ml-auto">
       <Badge
         id="conn"
         variant="secondary"
-        className={S.LIVE ? 'gap-2 bg-add/12 font-normal text-add' : 'gap-2 bg-muted font-normal text-muted-foreground'}
+        className={cn(
+          S.LIVE ? 'gap-2 bg-add/12 font-normal text-add' : 'gap-2 bg-muted font-normal text-muted-foreground',
+          // Under 700 px the demo's badge steps aside: the intro and the button say what this is.
+          demo && 'max-[700px]:hidden',
+        )}
         title={offline ? 'The bridge stopped answering. The last state stays on screen.' : undefined}
       >
         {connecting ? (
@@ -226,7 +238,10 @@ function PanelButtons() {
 
 export function TopBar() {
   return (
-    <header id="top" className="col-span-full flex h-12 min-w-0 items-center gap-3 border-b bg-background px-3">
+    <header
+      id="top"
+      className="col-span-full flex h-12 min-w-0 items-center gap-3 border-b bg-background px-3 max-[700px]:h-auto max-[700px]:flex-wrap max-[700px]:gap-y-1.5 max-[700px]:py-1.5"
+    >
       {/* The mark and wordmark reload the page, as a site's logo does. */}
       <Tip label="Reload">
         <a
@@ -246,7 +261,7 @@ export function TopBar() {
             width={66}
             height={30}
             alt="League of Agents"
-            className="dark:hidden"
+            className="dark:hidden max-[700px]:hidden"
           />
           <img
             src="./brand/wordmark-60.png"
@@ -254,7 +269,7 @@ export function TopBar() {
             width={66}
             height={30}
             alt="League of Agents"
-            className="hidden dark:block"
+            className="hidden dark:block max-[700px]:dark:hidden"
           />
         </a>
       </Tip>

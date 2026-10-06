@@ -146,6 +146,41 @@ test('with nothing selected, the composer says to select a file or lines, or run
   await expect(hint).toHaveCount(1);
 });
 
+test('below 700 px the top bar keeps every control on screen without overlaps, in two rows', async ({ page }) => {
+  const parts = [
+    '#brand',
+    '#runbar b',
+    '[data-mode="before"]',
+    '[data-mode="after"]',
+    '[data-mode="diff"]',
+    '[data-act="closeRun"]',
+    '#connectBtn',
+    '#themeBtn',
+  ];
+  for (const width of [390, 520, 690, 700]) {
+    await page.setViewportSize({ width, height: 900 });
+    const boxes = await page.evaluate(
+      sel => sel.map(s => document.querySelector(s)?.getBoundingClientRect().toJSON() as DOMRect | undefined),
+      parts,
+    );
+    for (const [i, b] of boxes.entries()) {
+      expect(b?.width, `${parts[i]} at ${width} px`).toBeGreaterThan(0);
+      expect(b!.left).toBeGreaterThanOrEqual(0);
+      expect(b!.right).toBeLessThanOrEqual(width);
+      for (const [j, c] of boxes.entries())
+        if (j > i) {
+          const overlap =
+            b!.left < c!.right - 1 && c!.left < b!.right - 1 && b!.top < c!.bottom - 1 && c!.top < b!.bottom - 1;
+          expect(overlap, `${parts[i]} and ${parts[j]} at ${width} px`).toBe(false);
+        }
+    }
+    const header = (await page.locator('#top').boundingBox())!;
+    expect(header.height, `top bar height at ${width} px`).toBe(width < 700 ? 87 : 48);
+    // The demo's badge steps aside on narrow screens; the intro and the button say what this is.
+    await expect(page.locator('#conn')).toBeVisible({ visible: width >= 700 });
+  }
+});
+
 test('the mark and wordmark reload the page, by click and by keyboard', async ({ page }) => {
   await expect(page.locator('#brand img[alt="League of Agents"]:visible')).toHaveCount(1);
   for (const go of [() => page.locator('#brand').click(), () => page.locator('#brand').press('Enter')]) {

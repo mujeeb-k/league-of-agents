@@ -267,6 +267,20 @@ test('offline: when the bridge stops answering, the last state stays and nothing
   }
 });
 
+test('on a narrow screen, a repository keeps its connection badge in the top bar', async ({ page }) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo, undefined, {}, ['--no-hooks']);
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await expect(page.locator('#conn')).toBeVisible();
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test("a repository never shows the demo's introduction, not even before the app starts", async ({ page }) => {
   const repo = makeRepo(),
     b = await startBridge(repo, undefined, {}, ['--no-hooks']);

@@ -10,6 +10,12 @@
     grid-template-rows: 48px minmax(0, 1fr) auto;
   }
 }
+/* Under 700 px the top bar takes two rows (TopBar.tsx): the run and its views move to the second. */
+@media (width < 700px) {
+  #app {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
