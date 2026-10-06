@@ -65,7 +65,7 @@
   color: var(--ink2);
 }
 .frame.dim .flabel {
-  opacity: 0.55;
+  opacity: 0.75;
 }
 .flabel {
   position: absolute;
@@ -231,7 +231,7 @@
   text-decoration-thickness: 1px;
 }
 .fr.dim {
-  opacity: 0.42;
+  opacity: 0.7;
 }
 .fr:hover {
   box-shadow: 0 0 0 calc(1.5px / var(--s)) var(--sel);
@@ -299,7 +299,7 @@
   display: block;
 }
 .card.dim {
-  opacity: 0.42;
+  opacity: 0.7;
 }
 .card:hover {
   box-shadow:
