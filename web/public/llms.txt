@@ -1,0 +1,35 @@
+# League of Agents
+
+> See every change your agents make. A map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.
+
+## What it does
+
+- Shows your repository as a map: folders and code files, zoomed out for the shape and in to read the code.
+- Lets you select a file, a folder or exact lines and give your coding agent a task scoped to them.
+- Records every change as a run, by an agent or by you, with before, after and diff, your checks' results, and one-click undo.
+- Runs on your computer as a small local bridge; leagueofagents.dev talks to it from your browser.
+
+League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized.
+
+## Install
+
+In a git repository, on macOS with Node 20 or later:
+
+```
+npx leagueofagents-cli@latest
+```
+
+## Supported agents
+
+- Claude Code
+- Codex (beta)
+- Cursor (beta)
+
+Changes from any other editor show up as runs too.
+
+## Links
+
+- Source: https://github.com/mujeeb-k/league-of-agents
+- npm: https://www.npmjs.com/package/leagueofagents-cli
+- Setup guide for coding agents: https://leagueofagents.dev/setup.md
+- Privacy: https://leagueofagents.dev/privacy
