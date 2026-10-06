@@ -6,7 +6,7 @@
 
 - Shows your repository as a map: folders and code files, zoomed out for the shape and in to read the code.
 - Lets you select a file, a folder or exact lines and give your coding agent a task scoped to them.
-- Records every change as a run, by an agent or by you, with before, after and diff, your checks' results, and one-click undo.
+- Records changes as runs, by an agent or by you, with before, after and diff, your checks' results, and one-click undo.
 - Runs on your computer as a small local bridge; leagueofagents.dev talks to it from your browser.
 
 League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized.
