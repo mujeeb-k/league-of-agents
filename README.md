@@ -43,8 +43,8 @@ What happens next:
 
 ### Requirements
 
-- macOS. Linux may work but is untested; Windows isn't supported yet.
-- git. On a Mac, this comes with Apple's command line developer tools: `xcode-select --install`
+- macOS. Linux passes the full test suite, but hasn't been tried with a real agent yet. Windows isn't supported yet.
+- git. On a Mac, this comes with Apple's command line developer tools: `xcode-select --install`. On Linux, from your package manager.
 - Node 20 or later
 - A git repository
 - Claude Code installed and logged in, to run agents from the map. Without it, changes from any editor still show up.
@@ -141,7 +141,7 @@ Snapshots stay on your computer unless you send them: `git push`, `git push --al
 
 ## Limits
 
-- macOS. Linux may work but is untested. Windows isn't supported yet.
+- macOS. Linux passes the full test suite in CI, but hasn't been tried with a real agent yet; there, it opens the local app. Windows isn't supported yet.
 - Remote machines, SSH and dev containers aren't supported. League of Agents must run on the same computer as your browser.
 - The map shows up to 1,500 code files, and the first 400 lines of each. Files over 400 KB aren't on the map. Diffs keep a file's first 4,000 lines.
 - Non-code files, such as images, are in snapshots and undo, but not on the map.

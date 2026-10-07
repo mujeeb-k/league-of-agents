@@ -917,7 +917,7 @@ test('the demo invites you to try it on your code: command, copy, requirements',
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.keyboard.press('Escape');
   await expect(page.locator('#tryCommand')).toHaveText('npx leagueofagents-cli@latest');
-  await expect(page.locator('#insp')).toContainText("Linux is untested; Windows isn't supported yet.");
+  await expect(page.locator('#insp')).toContainText("Linux is in testing; Windows isn't supported yet.");
   await page.locator('#tryCopy').click();
   await expect(page.locator('#tryCopy')).toHaveAttribute('aria-label', 'Copied');
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('npx leagueofagents-cli@latest');

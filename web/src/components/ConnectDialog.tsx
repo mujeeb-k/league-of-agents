@@ -125,7 +125,7 @@ function OnYourMac() {
       <p className="mt-3 mb-2 text-xs text-muted-foreground">Or run this in your repo on the Mac:</p>
       <CopyCommand />
       <p className="mt-2 text-xs text-muted-foreground">
-        Requires macOS, Node 20 or later, and a git repo. Linux is untested; Windows isn't supported yet.
+        Requires macOS, Node 20 or later, and a git repo. Linux is in testing; Windows isn't supported yet.
       </p>
       <DialogFooter className="mt-6">
         <DialogClose asChild>
@@ -223,7 +223,7 @@ function ConnectForm({
             <p className="mt-3 mb-2 text-xs text-muted-foreground">Or run it yourself in your repo:</p>
             <CopyCommand />
             <p className="mt-2 text-xs text-muted-foreground">
-              Requires macOS, Node 20 or later, and a git repo. Linux is untested; Windows isn't supported yet.
+              Requires macOS, Node 20 or later, and a git repo. Linux is in testing; Windows isn't supported yet.
             </p>
           </Step>
           <Step n={2} title="It opens your repo in your browser. Or paste the link it prints">

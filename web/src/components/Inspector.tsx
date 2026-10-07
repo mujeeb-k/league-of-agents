@@ -658,7 +658,7 @@ function RepoView() {
           <p className="mt-3 mb-2 text-xs text-muted-foreground">Or run it yourself in the repo:</p>
           <CopyCommand ids={['tryCommand', 'tryCopy']} compact />
           <ul className="mt-3 flex list-disc flex-col gap-1 pl-4 text-xs text-muted-foreground">
-            <li>macOS, Node 20 or later, and a git repo. Linux is untested; Windows isn't supported yet.</li>
+            <li>macOS, Node 20 or later, and a git repo. Linux is in testing; Windows isn't supported yet.</li>
             <li>Claude Code or Cursor to run from the canvas. Changes made in any editor show up as runs.</li>
           </ul>
           <Button variant="outline" size="sm" className="mt-3" id="tryConnect" onClick={() => setConnectOpen(true)}>

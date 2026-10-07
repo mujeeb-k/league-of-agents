@@ -123,7 +123,7 @@ Lines selected in the editor are held by their text and the lines around them, n
 - `listFiles()`: tracked and untracked files git doesn't ignore, filtered to code (`CODE_EXT`) and off the skip list (`SKIP`: `node_modules`, `.git`, `.loa`, `dist`, `build`, `coverage`, `.next`, `.turbo`, lockfiles, `.env*`), sorted, **first 1,500** (`MAX_FILES`).
 - Each file's **first 400 lines** (`MAX_LINES`) and its total line count. Files over **400 KB** (400,000 bytes) and binary files are left out.
 - Non-code files are still in snapshots and reverts, just not on the map.
-- One run at a time. macOS is the supported system; Linux may work but is untested; Windows isn't supported.
+- One run at a time. macOS is the supported system; Linux passes the test suite in CI (`.github/workflows/linux.yml`) but hasn't been tried with a real agent; Windows isn't supported.
 
 ### Agents
 
