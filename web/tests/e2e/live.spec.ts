@@ -2460,11 +2460,11 @@ test('checks shared with the team: written to loa.config.json, and never recorde
 
 // The default browser decides the link start opens: the site, connected, in the Chrome family; the local app
 // in any other, or when it can't be told.
-test('start opens leagueofagents.dev in a Chrome-family default browser, and the local app otherwise', () => {
+test('start opens leagueofagents.dev in a Chrome-family default browser, the local app otherwise or with --local', async () => {
   const repo = makeRepo();
   const SITE = 'https://leagueofagents.dev';
-  const start = (browser: string) =>
-    execFileSync(process.execPath, [BRIDGE, 'start', '--no-open', '--no-hooks'], {
+  const start = (browser: string, more: string[] = []) =>
+    execFileSync(process.execPath, [BRIDGE, 'start', '--no-open', '--no-hooks', ...more], {
       cwd: repo,
       env: { ...process.env, HOME: homeOf(repo), LOA_WEB_URL: SITE, LOA_BROWSER: browser },
       encoding: 'utf8',
@@ -2505,6 +2505,17 @@ test('start opens leagueofagents.dev in a Chrome-family default browser, and the
       plist('com.apple.safari');
       expect(start('')).toContain(`Open    ${local}`);
     }
+    // --local: the local app even in Chrome, and the site is never printed. The running bridge, which lets the
+    // site in, is replaced.
+    const only = start('com.google.Chrome', ['--local']);
+    const lb = JSON.parse(fs.readFileSync(path.join(repo, '.loa/bridge.json'), 'utf8')) as Bridge;
+    expect(only).toContain(`Open    http://127.0.0.1:${lb.port}/#t=${lb.token}`);
+    expect(only).not.toContain(SITE);
+    // And the site can't reach it.
+    const fromSite = await fetch(`http://127.0.0.1:${lb.port}/api/state`, {
+      headers: { authorization: 'Bearer ' + lb.token, origin: SITE },
+    });
+    expect(fromSite.status).toBe(403);
   } finally {
     execFileSync(process.execPath, [BRIDGE, 'stop'], { cwd: repo, env: { ...process.env, HOME: homeOf(repo) } });
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });

@@ -27,7 +27,7 @@ Commands, from inside a git repo:
 - `hooks remove`: takes out the hooks it added.
 - `uninstall`: stops the bridge, then removes the hooks, every `refs/loa/` ref, the lines it added to `.git/info/exclude` (recorded in `.loa/excluded.json`; for older installs only `.loa/`), and `.loa/`. It lists what it removed.
 
-Options: `--port 43210`, `--web https://leagueofagents.dev` (the hosted link it also prints), `--hooks` / `--no-hooks`, `--app-path /` (where the app is served and linked; `/app/` once the site has a homepage).
+Options: `--port 43210`, `--web https://leagueofagents.dev` (the hosted link it also prints), `--local` (no website: the local app only, and no other origin may call the API; `start` replaces a running bridge whose website differs, recorded as `web` in `.loa/bridge.json`), `--hooks` / `--no-hooks`, `--app-path /` (where the app is served and linked; `/app/` once the site has a homepage).
 
 On start it:
 

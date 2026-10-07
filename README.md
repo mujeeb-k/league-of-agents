@@ -161,6 +161,7 @@ Snapshots stay on your computer unless you send them: `git push`, `git push --al
 |---|---|---|
 | `--port`, `LOA_PORT` | First free port from 43210 | Port League of Agents listens on |
 | `--web`, `LOA_WEB_URL` | `https://leagueofagents.dev` | Website to open in Chrome-family browsers |
+| `--local` | Off | Use only the local app, in every browser: the website is never opened, and can't connect |
 | `--hooks`, `--no-hooks` | Asks once | Add or skip the agent hooks without asking |
 | `LOA_CLAUDE_BIN` | `claude` | Claude Code command |
 | `LOA_CODEX_BIN` | `codex` | Codex command |

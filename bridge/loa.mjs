@@ -67,7 +67,9 @@ async function firstFreePort(from) {
 // second repo's bridge doesn't fail because the first holds the usual port.
 const ASKED_PORT = flag('port', process.env.LOA_PORT);
 const PORT = ASKED_PORT ? Number(ASKED_PORT) : argv[0] === 'serve' ? await firstFreePort(43210) : 43210;
-const WEB_URL = flag('web', process.env.LOA_WEB_URL || 'https://leagueofagents.dev').replace(/\/$/, '');
+const SITE = 'https://leagueofagents.dev';
+// --local: the local app only, in every browser. The website is never opened or printed, and can't connect.
+const WEB_URL = argv.includes('--local') ? '' : flag('web', process.env.LOA_WEB_URL || SITE).replace(/\/$/, '');
 // Where the app lives, on the bridge and on the hosted site: "/" today, "/app/" once the site has a homepage.
 // The bridge serves it there, and every link it prints or opens points there.
 const APP_PATH = `/${flag('app-path', process.env.LOA_APP_PATH || '/')}/`.replace(/\/+/g, '/');
@@ -484,8 +486,9 @@ async function startInBackground(hooks) {
     process.exit(0);
   };
   const already = await running();
-  // A locked bridge is replaced by a fresh one, with a new token.
-  if (already?.locked) await stopBridge(false);
+  // A locked bridge is replaced by a fresh one, with a new token; so is one that lets a different website in
+  // (`--local`, `--web`). Bridges before 0.2.0 don't record theirs: they let the site in.
+  if (already?.locked || (already && (already.web ?? SITE) !== WEB_URL)) await stopBridge(false);
   else if (already) open(already);
   const log = fs.openSync(path.join(LOA, 'bridge.log'), 'w');
   const pass = argv.filter(a => !['start', '--hooks', '--no-hooks', '--no-open'].includes(a));
@@ -620,7 +623,10 @@ if (argv[0] !== 'serve') await startInBackground(HOOKS);
     process.exit(0);
   }
 }
-fs.writeFileSync(bridgeFile, JSON.stringify({ port: PORT, token: TOKEN, hooks: HOOKS, pid: process.pid }, null, 2));
+fs.writeFileSync(
+  bridgeFile,
+  JSON.stringify({ port: PORT, token: TOKEN, hooks: HOOKS, pid: process.pid, web: WEB_URL }, null, 2),
+);
 // Hooks, ours and the Claude Code plugin's, run a copy of this file inside the repo, so they keep working when
 // the bridge was started from a temporary place (npx's cache) that may later be cleared. Built-ins only.
 fs.copyFileSync(SELF, hookFile);
