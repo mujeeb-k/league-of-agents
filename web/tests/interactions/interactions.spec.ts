@@ -1266,6 +1266,25 @@ test.describe('a page per language', () => {
       expect(after[1]!.y + after[1]!.height).toBeCloseTo(before[1]!.y + before[1]!.height, 0);
     });
 
+  test('a language page loads every file from the site root: nothing missing, every image drawn', async ({ page }) => {
+    const missing: string[] = [];
+    page.on('response', r => {
+      if (r.status() >= 400) missing.push(`${r.status()} ${r.url()}`);
+    });
+    await page.goto('/fr/');
+    await page.locator('#intro').waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    const broken = await page
+      .locator('img')
+      .evaluateAll(imgs =>
+        imgs
+          .filter(i => i.checkVisibility() && !(i as HTMLImageElement).naturalWidth)
+          .map(i => (i as HTMLImageElement).src),
+      );
+    expect(missing).toEqual([]);
+    expect(broken).toEqual([]);
+  });
+
   test("on /, a person who chose French doesn't see the English introduction first", async ({ page }) => {
     // Only the page's own script runs: the app's never starts.
     await page.route(/\/assets\/index-.*\.js$/, r => r.abort());

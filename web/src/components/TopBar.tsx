@@ -270,19 +270,19 @@ export function TopBar() {
           }}
           className="flex shrink-0 items-center gap-2 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
-          <img src="./brand/mark-80.png" width={26} height={26} alt="" className="rounded-[6px]" />
+          <img src="/brand/mark-80.png" width={26} height={26} alt="" className="rounded-[6px]" />
           {/* The wordmark in deeper purples on the light theme, where its own pale ones wash out. */}
           <img
-            src="./brand/wordmark-on-light-60.png"
-            srcSet="./brand/wordmark-on-light-60.png 2x, ./brand/wordmark-on-light-90.png 3x"
+            src="/brand/wordmark-on-light-60.png"
+            srcSet="/brand/wordmark-on-light-60.png 2x, /brand/wordmark-on-light-90.png 3x"
             width={66}
             height={30}
             alt="League of Agents"
             className="dark:hidden max-[700px]:hidden"
           />
           <img
-            src="./brand/wordmark-60.png"
-            srcSet="./brand/wordmark-60.png 2x, ./brand/wordmark-90.png 3x"
+            src="/brand/wordmark-60.png"
+            srcSet="/brand/wordmark-60.png 2x, /brand/wordmark-90.png 3x"
             width={66}
             height={30}
             alt="League of Agents"
