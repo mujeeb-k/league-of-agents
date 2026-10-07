@@ -692,10 +692,14 @@ async function runToEnd(b: Bridge, body: object) {
   return ((await api('/api/state')) as StateResponse).runs.find(r => r.id === run.id)!;
 }
 
-test('bridge keeps deny rules, records raw agent output, and keeps .env files out of snapshots', async () => {
+test('bridge keeps deny rules, records raw agent output, and keeps secret files out of snapshots', async () => {
   const repo = makeRepo();
-  fs.writeFileSync(path.join(repo, '.env'), 'SECRET=do-not-store\n');
-  fs.writeFileSync(path.join(repo, 'shared/.env.local'), 'SECRET=do-not-store\n');
+  // Untracked files whose names usually hold secrets, at the top and deeper down.
+  const secrets = ['.env', 'shared/.env.local', 'credentials.json', 'id_rsa', 'deploy/server.pem', 'infra/prod.tfvars'];
+  for (const f of secrets) {
+    fs.mkdirSync(path.dirname(path.join(repo, f)), { recursive: true });
+    fs.writeFileSync(path.join(repo, f), 'SECRET=do-not-store\n');
+  }
   // A committed template is ordinary repo content and stays in snapshots.
   fs.writeFileSync(path.join(repo, '.env.example'), 'SECRET=\n');
   git(repo, 'add', '.env.example');
@@ -723,6 +727,7 @@ test('bridge keeps deny rules, records raw agent output, and keeps .env files ou
     for (const which of ['before', 'after']) {
       const files = git(repo, 'ls-tree', '-r', '--name-only', `refs/loa/runs/1/${which}`);
       expect(files.split('\n').filter(f => /(^|\/)\.env/.test(f))).toEqual(['.env.example']);
+      for (const f of secrets) expect(files.split('\n')).not.toContain(f);
       expect(files).toContain('shared/allowlist.ts');
     }
     expect(fs.readFileSync(path.join(repo, '.env'), 'utf8')).toBe('SECRET=do-not-store\n');

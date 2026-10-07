@@ -624,6 +624,33 @@ function readTree() {
 
 // ---------------------------------------------------------------- snapshots (private index, never touches your branch or staging)
 const SNAP_INDEX = path.join(LOA, 'snapshot.index');
+/** Names of files that usually hold secrets, at any depth: untracked ones stay out of snapshots. The README lists them. */
+const SECRET_FILES = [
+  '.env',
+  '.env.*',
+  '*.pem',
+  '*.key',
+  '*.p12',
+  '*.pfx',
+  '*.jks',
+  '*.keystore',
+  '*.kdbx',
+  'id_rsa',
+  'id_dsa',
+  'id_ecdsa',
+  'id_ed25519',
+  '.npmrc',
+  '.pypirc',
+  '.netrc',
+  '.git-credentials',
+  '.htpasswd',
+  'credentials.json',
+  'secrets.json',
+  'secrets.yaml',
+  'secrets.yml',
+  'service-account*.json',
+  '*.tfvars',
+];
 /**
  * The working tree as a git tree, written through a private index. The index is kept between snapshots, so
  * git hashes only the files that changed since the last one. `fresh` starts it again from HEAD.
@@ -636,15 +663,22 @@ async function writeTree(fresh = false) {
     } catch {}
     await gitAsync((await headNow()).commit ? ['read-tree', 'HEAD'] : ['read-tree', '--empty'], { env });
   }
-  // Untracked .env files (not ignored, not committed) never enter a snapshot. Tracked ones, such as
-  // .env.example templates, are already in the repo's history and are snapshotted like any file.
-  const untrackedEnv = (
-    await gitAsync(['ls-files', '-z', '--others', '--exclude-standard', '--', ':(glob)**/.env', ':(glob)**/.env.*'])
+  // Untracked files that usually hold secrets (not ignored, not committed) never enter a snapshot. Tracked ones,
+  // such as .env.example templates, are already in the repo's history and are snapshotted like any file.
+  const untrackedSecrets = (
+    await gitAsync([
+      'ls-files',
+      '-z',
+      '--others',
+      '--exclude-standard',
+      '--',
+      ...SECRET_FILES.map(g => `:(glob)**/${g}`),
+    ])
   )
     .split('\0')
     .filter(Boolean);
   await gitAsync(['add', '-A'], { env });
-  if (untrackedEnv.length) await gitAsync(['rm', '--cached', '-q', '--', ...untrackedEnv], { env });
+  if (untrackedSecrets.length) await gitAsync(['rm', '--cached', '-q', '--', ...untrackedSecrets], { env });
   return (await gitAsync(['write-tree'], { env })).trim();
 }
 /** A commit of the tree on top of HEAD, reachable only from the refs it is pinned to. */

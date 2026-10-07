@@ -65,7 +65,7 @@ Edits made during an agent's run are counted in that run, including your own. On
 
 **From your terminal.** Use Claude Code, Codex or Cursor as usual. With the hooks on, each prompt you send becomes a run on the map, titled by the prompt.
 
-**From any editor.** Just work. When files you changed go quiet for a few seconds, League of Agents records them as one run, such as "Edited main.py". Files git ignores and new `.env` files are never recorded, and branch switches and pulls never make a run.
+**From any editor.** Just work. When files you changed go quiet for a few seconds, League of Agents records them as one run, such as "Edited main.py". Files git ignores and new files that usually hold secrets ([listed below](#privacy-and-security)) are never recorded, and branch switches and pulls never make a run.
 
 A rename is recorded as the old file deleted and a new file created, so the file gets a new place on the map.
 
@@ -129,13 +129,15 @@ A follow-up adds `--resume <session>` for Claude Code and Cursor, and `resume <s
 
 League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized. What it sends, and to where, is [above](#what-it-sends). Who can reach League of Agents on your computer, and how it's protected, is in [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md). Report security issues privately, as [SECURITY.md](SECURITY.md) explains.
 
+Snapshots leave out files git ignores, and any file not yet committed with one of these names, in any folder: `.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.kdbx`, `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `.npmrc`, `.pypirc`, `.netrc`, `.git-credentials`, `.htpasswd`, `credentials.json`, `secrets.json`, `secrets.yaml`, `secrets.yml`, `service-account*.json`, `*.tfvars`. A secret with another name is snapshotted like any file, so keep secrets in files git ignores. A file already committed is in your repo's history, and snapshots include it.
+
 ## Limits
 
 - macOS. Linux may work but is untested. Windows isn't supported yet.
 - Remote machines, SSH and dev containers aren't supported. League of Agents must run on the same computer as your browser.
 - The map shows up to 1,500 code files, and the first 400 lines of each. Files over 400 KB aren't on the map. Diffs keep a file's first 4,000 lines.
 - Non-code files, such as images, are in snapshots and undo, but not on the map.
-- Files git ignores and new `.env` files are never recorded.
+- Files git ignores and new files that usually hold secrets are never recorded.
 - One run at a time in a repo.
 - The website needs Chrome, Edge, Brave or Arc. Safari and Firefox use the local app instead.
 
