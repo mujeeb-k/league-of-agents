@@ -748,6 +748,9 @@ test('the app on a 0.1.2 bridge: a finished run reaches the canvas through the w
     await expect(page.locator('[data-mode="diff"]')).toHaveAttribute('aria-checked', 'true');
     await expect(page.locator('.card.k-mod[data-path="shared/allowlist.ts"]')).toHaveCount(1);
     expect(fetches() - before).toBeGreaterThan(1);
+    // A 0.1.2 bridge reads no model: the run names its agent alone, and the run list has no model tooltip.
+    await expect(page.locator('#runAgent')).toHaveText('Claude Code');
+    await expect(page.locator('#sideList .run .m span[title]')).toHaveCount(0);
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
