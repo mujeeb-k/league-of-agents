@@ -13,6 +13,7 @@ import type {
   StartRunBody,
   StateResponse,
 } from './types';
+import type { AuthorRange } from '../lib/attribution';
 import type { SavedLayout } from '../lib/layout';
 
 export class BridgeError extends Error {
@@ -58,6 +59,11 @@ async function request<T>(
 
 export const bridge = {
   state: (c: Conn) => request<StateResponse>(c, '/api/state'),
+  exportAttribution: (c: Conn, format: string, files: Record<string, AuthorRange[]>) =>
+    request<{ ref: string; commit: string; files: number }>(c, '/api/attribution/export', {
+      method: 'POST',
+      body: { format, files },
+    }),
   authors: (c: Conn, path: string) =>
     request<{ lines: RecordedLine[] }>(c, `/api/authors?path=${encodeURIComponent(path)}`),
   /** Bridges before 0.2.0 answer 404: the app keeps the layout in the browser instead. */

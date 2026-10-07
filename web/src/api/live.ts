@@ -1,11 +1,12 @@
 // Live connection to the local bridge.
 import { applyView, flyRun, openingView } from '../lib/camera';
 import { buildModel, specFromPaths } from '../lib/model';
+import { authorsOf, rangesOf } from '../lib/attribution';
 import { carryRenames, type SavedLayout } from '../lib/layout';
 import { renamesOf } from '../lib/renames';
 import { changedBlock } from '../lib/textdiff';
 import type { Run } from '../lib/types';
-import { fmtDur, relTime } from '../lib/util';
+import { fmtDur, plural, relTime } from '../lib/util';
 import { S, st } from '../state/app';
 import { loadDemo } from '../state/actions';
 import { refreshEditor } from '../state/editing';
@@ -110,6 +111,20 @@ export function saveLayoutSoon() {
       }
     } else void bridge.saveLayout(c, layout).catch(() => (savedLayout = ''));
   }, 1000);
+}
+
+/** Writes who wrote each line to a git note on the last commit, once the person has said yes (ExportDialog). */
+export async function exportAttribution(format: 'agent-trace' | 'git-ai') {
+  const c = S.CONN;
+  if (!c) return;
+  const now = new Map([...S.FILES.values()].filter(f => !f.gone).map(f => [f.path, f.base]));
+  const files = Object.fromEntries([...authorsOf(S.RUNS, now, S.RECORDED)].map(([p, o]) => [p, rangesOf(o)]));
+  try {
+    const r = await bridge.exportAttribution(c, format, files);
+    toast(`Wrote attribution for ${plural(r.files, 'file')} to ${r.ref} on ${r.commit.slice(0, 8)}`);
+  } catch (e) {
+    toast(explain(e));
+  }
 }
 
 /** The last state applied, which run deltas are applied to. */

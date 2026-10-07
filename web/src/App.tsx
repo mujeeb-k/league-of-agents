@@ -1,5 +1,6 @@
 import { useLayoutEffect } from 'react';
 import { ConflictDialog } from './components/ConflictDialog';
+import { ExportDialog } from './components/ExportDialog';
 import { ConnectDialog } from './components/ConnectDialog';
 import { IconSprite } from './components/FileIcon';
 import { Inspector } from './components/Inspector';
@@ -27,6 +28,7 @@ export function App() {
       <IconSprite />
       <ConnectDialog />
       <ConflictDialog />
+      <ExportDialog />
       <Palette />
       <Toasts />
     </TooltipProvider>

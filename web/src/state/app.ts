@@ -55,6 +55,8 @@ export const st = {
   run: null as Run | null,
   /** The map coloured by who wrote each line (lib/attribution.ts), on the latest state. */
   byAuthor: false,
+  /** Attribution about to be written to a git note, while the export dialog asks (ExportDialog). */
+  exportFormat: null as 'agent-trace' | 'git-ai' | null,
   /** The line whose authorship the inspector shows, clicked while coloured by author. */
   authorLine: null as { path: string; line: number } | null,
   mode: 'after' as Mode,

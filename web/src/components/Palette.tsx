@@ -5,6 +5,7 @@ import {
   FileSearch,
   Focus,
   FolderOpen,
+  GitCommitHorizontal,
   LayoutGrid,
   Users,
   Maximize,
@@ -29,6 +30,7 @@ import { fileKind } from '../lib/fileKind';
 import { searchFiles } from '../lib/fileSearch';
 import { existsNow } from '../lib/model';
 import { S, dom, st } from '../state/app';
+import { showExport } from './ExportDialog';
 import { runAction, selectRun, setMode, tidyLayout, toggleByAuthor } from '../state/actions';
 import { panels, setPinned, toggleInsp, toggleSide } from '../state/panels';
 import { bump, renderSel, useRegion } from '../state/render';
@@ -161,6 +163,20 @@ function Commands() {
               </>
             ) : null}
             <Item label="Close run" icon={<X />} keys="Esc" onSelect={() => selectRun(null)} />
+          </CommandGroup>
+        ) : null}
+        {S.CONN ? (
+          <CommandGroup heading="Attribution">
+            <Item
+              label="Write attribution for the last commit as Agent Trace"
+              icon={<GitCommitHorizontal />}
+              onSelect={() => showExport('agent-trace')}
+            />
+            <Item
+              label="Write attribution for the last commit as a Git AI note"
+              icon={<GitCommitHorizontal />}
+              onSelect={() => showExport('git-ai')}
+            />
           </CommandGroup>
         ) : null}
         {S.RUNS.length ? (

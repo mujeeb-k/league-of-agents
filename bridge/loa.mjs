@@ -901,6 +901,108 @@ async function recordedAuthors(rel) {
   });
 }
 
+/**
+ * Writes who wrote each line, as the app worked it out, to a git note on HEAD: an Agent Trace record (spec 0.1.0,
+ * agent-trace.dev; it sets no place to keep records, so this is our choice, refs/notes/agent-trace) or a Git AI
+ * authorship log (refs/notes/ai, agent lines only, never over a log already there). Only files whose working copy
+ * is HEAD's, so the line numbers are HEAD's. `files`: path to { start, end, author, run } ranges, 1-based. No
+ * prompts go in: notes can be pushed.
+ */
+async function exportAttribution(format, files) {
+  const head = (await headNow()).commit;
+  if (!head) return { error: 'There is no commit yet.' };
+  const asHead = [];
+  for (const [p, ranges] of Object.entries(files || {})) {
+    if (!repoFile(p) || !Array.isArray(ranges)) continue;
+    const same = await gitAsync(['diff', '--quiet', 'HEAD', '--', p]).then(
+      () => true,
+      () => false,
+    );
+    if (same) asHead.push([p, ranges.filter(r => r.run && runs.has(r.run))]);
+  }
+  const named = asHead.filter(([, r]) => r.length);
+  if (!named.length) return { error: 'No file as the last commit has it has lines from a kept run.' };
+  const ref = format === 'git-ai' ? 'refs/notes/ai' : 'refs/notes/agent-trace';
+  let note;
+  if (format === 'git-ai') {
+    const exists = await gitAsync(['notes', '--ref=ai', 'show', head]).then(
+      () => true,
+      () => false,
+    );
+    if (exists) return { error: 'This commit already has a Git AI note; League of Agents never writes over it.' };
+    const sessions = {};
+    const attest = [];
+    for (const [p, ranges] of named) {
+      const keys = new Map();
+      for (const r of ranges.filter(r => r.author === 'agent')) {
+        const run = runs.get(r.run);
+        const tool = run.agent.replace(/-terminal$|-editor$/, '');
+        const sid =
+          's_' +
+          crypto
+            .createHash('sha256')
+            .update(`${tool}:${run.sessionId ?? run.id}`)
+            .digest('hex')
+            .slice(0, 14);
+        sessions[sid] = {
+          agent_id: { tool, id: String(run.sessionId ?? run.id), ...(run.model ? { model: run.model } : {}) },
+        };
+        const key = `${sid}::t_${crypto.createHash('sha256').update(`${run.id}`).digest('hex').slice(0, 14)}`;
+        keys.set(key, [...(keys.get(key) || []), r.start === r.end ? `${r.start}` : `${r.start}-${r.end}`]);
+      }
+      if (keys.size) attest.push(/[\s"]/.test(p) ? `"${p}"` : p, ...[...keys].map(([k, l]) => `  ${k} ${l.join(',')}`));
+    }
+    if (!attest.length) return { error: 'No line from a kept run was written by an agent.' };
+    note = `${attest.join('\n')}\n---\n${JSON.stringify({ schema_version: 'authorship/3.0.0', base_commit_sha: head, prompts: {}, sessions })}`;
+  } else {
+    const type = { agent: 'ai', human: 'human', mixed: 'mixed' };
+    const record = {
+      version: '0.1.0',
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      vcs: { type: 'git', revision: head },
+      tool: { name: 'league-of-agents', version: VERSION },
+      files: named.map(([p, ranges]) => {
+        const byRun = new Map();
+        for (const r of ranges.filter(r => type[r.author])) {
+          const k = `${r.run}:${r.author}`;
+          if (!byRun.has(k)) byRun.set(k, { run: runs.get(r.run), author: r.author, ranges: [] });
+          byRun.get(k).ranges.push({ start_line: r.start, end_line: r.end });
+        }
+        return {
+          path: p,
+          conversations: [...byRun.values()].map(({ run, author, ranges }) => ({
+            contributor: {
+              type: type[author],
+              ...(author !== 'human' && run.model && /^claude/.test(run.agent)
+                ? { model_id: `anthropic/${run.model}` }
+                : {}),
+            },
+            ranges,
+          })),
+        };
+      }),
+    };
+    note = JSON.stringify(record, null, 2);
+  }
+  // The note is the person's: their git identity, or League of Agents' own where they have none set.
+  const hasIdentity = await gitAsync(['var', 'GIT_AUTHOR_IDENT']).then(
+    () => true,
+    () => false,
+  );
+  const who = {
+    GIT_AUTHOR_NAME: 'loa',
+    GIT_AUTHOR_EMAIL: 'loa@localhost',
+    GIT_COMMITTER_NAME: 'loa',
+    GIT_COMMITTER_EMAIL: 'loa@localhost',
+  };
+  await gitAsync(['notes', `--ref=${ref.slice('refs/notes/'.length)}`, 'add', '-f', '-F', '-', head], {
+    input: note,
+    ...(hasIdentity ? {} : { env: { ...process.env, ...who } }),
+  });
+  return { ref, commit: head, files: named.length };
+}
+
 function repoFile(rel) {
   if (typeof rel !== 'string' || !listFiles().includes(rel)) return null;
   const abs = path.join(ROOT, rel);
@@ -1861,6 +1963,12 @@ const server = http.createServer(async (req, res) => {
       }
     }
     // The map's layout, kept per repo so a reload, another window size or the other app opens it as it was.
+    // Writes attribution to a git note on HEAD, only when the person asks (exportAttribution).
+    if (req.method === 'POST' && p === '/api/attribution/export') {
+      const b = await readBody(req);
+      const r = await exportAttribution(b.format === 'git-ai' ? 'git-ai' : 'agent-trace', b.files);
+      return send(res, r.error ? 409 : 200, r, cors);
+    }
     // Authorship git records for a file at HEAD: Git AI notes and co-author trailers (recordedAuthors).
     if (req.method === 'GET' && p === '/api/authors') {
       const rel = url.searchParams.get('path');
