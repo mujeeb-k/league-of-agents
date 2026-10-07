@@ -88,6 +88,11 @@ test('live run, review and revert', async ({ page }) => {
     // Finished run: diff mode, the agent's reply, checks.
     await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
     await expect(page.locator('#runbar b')).toHaveText('Run 1');
+    await expect(page.locator('#runAgent')).toHaveText('Claude Code · claude-sonnet-5-5');
+    await expect(page.locator('#sideList .run .m span[title]').first()).toHaveAttribute(
+      'title',
+      'Claude Code · claude-sonnet-5-5',
+    );
     await expect(page.locator('#insp .runscope .chip')).toHaveText(['shared/']);
     await expect(page.locator('[data-mode="diff"]')).toHaveAttribute('aria-checked', 'true');
     await expect(page.locator('.check .ok')).toHaveCount(1, { timeout: 15_000 });
@@ -816,6 +821,8 @@ test('bridge runs Codex with a workspace-write sandbox and resumes by thread id'
   try {
     const first = await runToEnd(b, { agent: 'codex', prompt: 'Change the log prefix', scope: [], resumeFrom: null });
     expect(first.sessionId).toBe('thr-fake-1');
+    // Codex's output names no model.
+    expect(first.model).toBeNull();
     expect(first.summary).toBe('Changed the log prefix.');
     expect(first.changes.map(c => c.path)).toEqual(['shared/log.ts']);
     await runToEnd(b, { agent: 'codex', prompt: 'Again', scope: [], resumeFrom: first.id });
@@ -937,9 +944,12 @@ test('terminal Claude Code: hooks record the turn, with its reply and tool calls
     const transcript = path.join(path.dirname(repo), 'transcript.jsonl');
     const entries = [
       { type: 'user', message: { role: 'user', content: 'Tag log lines with the app name' } },
+      // Claude Code's own made-up messages carry no real model.
+      { type: 'assistant', message: { model: '<synthetic>', content: [] } },
       {
         type: 'assistant',
         message: {
+          model: 'claude-sonnet-5-5',
           content: [{ type: 'tool_use', name: 'Read', input: { file_path: path.join(repo, 'shared/log.ts') } }],
         },
       },
@@ -958,6 +968,7 @@ test('terminal Claude Code: hooks record the turn, with its reply and tool calls
     const run = JSON.parse(fs.readFileSync(path.join(repo, '.loa/runs/1.json'), 'utf8')) as RunDTO;
     expect(run.agent).toBe('claude-terminal');
     expect(run.status).toBe('done');
+    expect(run.model).toBe('claude-sonnet-5-5');
     expect(run.sessionId).toBe('sess-term');
     expect(run.summary).toBe('Log lines now start with `[app]`.');
     expect(run.stream.filter(e => e.t === 'tool').map(e => e.text)).toEqual([

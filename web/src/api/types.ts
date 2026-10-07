@@ -52,6 +52,8 @@ export interface RunDTO {
   scope: string[];
   resumeFrom: number | null;
   sessionId: string | null;
+  /** The model the agent reported (bridges before 0.2.0 don't send it). */
+  model?: string | null;
   status: RunStatus;
   startedAt: number;
   endedAt: number | null;

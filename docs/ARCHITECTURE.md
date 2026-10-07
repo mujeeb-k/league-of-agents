@@ -80,7 +80,7 @@ Every change becomes a run: an agent's, a save in the map's editor (`you`), or e
 - `commitTree(tree, label, head)` makes a commit of that tree whose parent is HEAD, reachable only from the refs it is pinned to.
 - `pin(id, which, commit)` writes `refs/loa/runs/<id>/before` or `/after`.
 - `computeChanges(before, after)` runs `git diff --no-renames -U0` between the two and parses it into `{ path, created, deleted, pre[], hunks[{ at, del, add[] }] }`. `pre` is the file at `before`, up to its first 4,000 lines; `at` is a 0-based index into it. With `--no-renames`, a renamed file is a deleted file and a created one.
-- `saveRun(run)` writes `.loa/runs/<id>.json`: agent, prompt, scope, sessionId, status, timestamps, summary, stream (last 400 entries), cost, checks, kept, reverted, outOfScope. Raw agent output is kept as-is in `.loa/runs/<id>.stream.jsonl` and `<id>.stderr.log`.
+- `saveRun(run)` writes `.loa/runs/<id>.json`: agent, prompt, scope, sessionId, model (as the agent reports it: Claude Code's and Cursor's first `system`/`init` event or Claude Code's replies, read in `onAgentLine()`; Codex reports none), status, timestamps, summary, stream (last 400 entries), cost, checks, kept, reverted, outOfScope. Raw agent output is kept as-is in `.loa/runs/<id>.stream.jsonl` and `<id>.stderr.log`.
 
 **Lifecycle:**
 - `beginRun(opts)` first calls `settle()`, so changes made before the run are recorded as a run of their own and never count as the agent's. The result is the run's `before`, pinned at once. A second run while one is active gets 409.

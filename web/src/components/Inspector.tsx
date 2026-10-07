@@ -15,7 +15,7 @@ import {
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { enableChecks, turnOffCheck } from '../api/live';
 import { flyFile } from '../lib/camera';
-import { agentOf } from '../lib/constants';
+import { agentOf, modelOf } from '../lib/constants';
 import { existsNow, fileStat, linesAt, needsYou, runStats, viewOf } from '../lib/model';
 import type { Run } from '../lib/types';
 import { plural } from '../lib/util';
@@ -145,6 +145,7 @@ function ActButton({ run, act, children, ...props }: React.ComponentProps<typeof
 function RunView({ run }: { run: Run }) {
   const s = runStats(run),
     a = agentOf(run.agent),
+    model = modelOf(run.agent, run.model),
     files = [...run.changes.keys()];
   const done = files.filter(p => run.reviewed.has(p)).length,
     running = run.status === 'running';
@@ -170,7 +171,7 @@ function RunView({ run }: { run: Run }) {
         </h2>
         <div className="meta mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-ink2">
           <Dot c={a.c} />
-          {a.name}
+          <span id="runAgent">{model ? `${a.name} · ${model}` : a.name}</span>
           {a.beta ? <BetaTag /> : null}
           <span className="quiet text-muted-foreground tabular-nums">{meta}</span>
         </div>

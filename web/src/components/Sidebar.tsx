@@ -177,7 +177,10 @@ function RunRow({ r }: { r: Run }) {
         <div className="t leading-snug font-medium text-pretty [overflow-wrap:anywhere]">{r.title}</div>
         <div className="m mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
           <Dot c={a.c} className={cn('size-1.5', running && 'animate-pulse')} />
-          <span className="truncate">{running ? `${a.name} is working` : `${a.name} · ${r.when}`}</span>
+          {/* The model is in the inspector; here, in the row's tooltip, so the time stays readable. */}
+          <span className="truncate" title={r.model ? `${a.name} · ${r.model}` : undefined}>
+            {running ? `${a.name} is working` : `${a.name} · ${r.when}`}
+          </span>
           {a.beta ? <BetaTag /> : null}
         </div>
         {running ? null : (

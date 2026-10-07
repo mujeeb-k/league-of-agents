@@ -45,3 +45,6 @@ export const AGENTS: Record<string, AgentStyle> = {
   'cursor-editor': { name: 'Cursor (editor)', c: 'var(--a-cursor)', beta: true },
 };
 export const agentOf = (k: string): AgentStyle => AGENTS[k] || { name: k, c: 'var(--ink3)' };
+/** The model a run's agent reported; Codex reports none, so its runs say so rather than show nothing. */
+export const modelOf = (agent: string, model?: string | null): string | null =>
+  model || (agent === 'codex' || agent === 'codex-terminal' ? 'model not reported' : null);

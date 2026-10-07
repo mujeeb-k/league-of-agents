@@ -83,6 +83,7 @@ export function buildModel(spec: TreeSpec, code: Record<string, string>, runDefs
       id: r.id,
       agent: r.agent,
       title: r.title,
+      model: r.model ?? null,
       when: r.when,
       dur: r.dur,
       prompt: r.prompt,

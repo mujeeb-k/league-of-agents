@@ -22,6 +22,8 @@ export interface Hunk {
 export interface SampleRunDef {
   id: number;
   agent: string;
+  /** The model the agent reported, as a live run shows it. */
+  model?: string;
   title: string;
   when: string;
   dur: string;
@@ -90,6 +92,8 @@ export interface Run {
   checksRunning?: boolean;
   cost?: number | null;
   sessionId?: string | null;
+  /** The model the agent reported, if it did. */
+  model?: string | null;
   outOfScope?: string[];
   /** Files and folders (ending in /) the run was limited to. Empty means the whole repository. */
   scope?: string[];

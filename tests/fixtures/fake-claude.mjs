@@ -10,7 +10,8 @@ if (args[0] === 'auth') {
 }
 const prompt = args[args.indexOf('-p') + 1];
 const out = o => console.log(JSON.stringify(o));
-out({ type: 'system', subtype: 'init', session_id: 'sess-123' });
+// Claude Code's first event names the model, as in tests/fixtures/agents/claude/claude-canvas-follow-up.jsonl.
+out({ type: 'system', subtype: 'init', session_id: 'sess-123', model: 'claude-sonnet-5-5' });
 if (loggedOut) {
   const text = 'Not logged in · Please run /login';
   out({ type: 'assistant', error: 'authentication_failed', message: { content: [{ type: 'text', text }] } });

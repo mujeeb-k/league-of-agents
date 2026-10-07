@@ -918,6 +918,8 @@ function newRun({ agent, prompt, scope = [], resumeFrom = null, sessionId = null
     summary: '',
     stream: [],
     cost: null,
+    /** The model the agent reported; null until it does, and for agents that don't (Codex). */
+    model: null,
     kept: false,
     reverted: false,
   };
@@ -1102,6 +1104,11 @@ function onAgentLine(run, line) {
   if (m.session_id && !run.sessionId) run.sessionId = m.session_id;
   if (m.sessionId && !run.sessionId) run.sessionId = m.sessionId;
   if (m.type === 'thread.started' && m.thread_id && !run.sessionId) run.sessionId = m.thread_id;
+  // The model, as the agent names it: Claude Code's and Cursor's first event, and each of Claude Code's replies.
+  // Codex doesn't say. Claude Code marks its own made-up messages "<synthetic>".
+  const model =
+    m.type === 'system' && m.subtype === 'init' ? m.model : m.type === 'assistant' ? m.message?.model : null;
+  if (typeof model === 'string' && model && !model.startsWith('<') && !run.model) run.model = model;
   // Logged out mid-session: Claude Code answers every prompt with "Not logged in".
   if (run.agent === 'claude' && m.type === 'assistant' && m.error === 'authentication_failed') {
     AGENTS.claude.problem = 'loggedOut';
@@ -2056,7 +2063,7 @@ function lastTurn(transcriptPath) {
   const events = turn
     .map(m =>
       m.type === 'assistant'
-        ? { type: 'assistant', message: { content: m.message.content } }
+        ? { type: 'assistant', message: { content: m.message.content, model: m.message.model } }
         : {
             type: 'user',
             message: {
