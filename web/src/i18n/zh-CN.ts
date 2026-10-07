@@ -404,5 +404,15 @@ const catalogue: Catalogue = {
   'on-call runbooks': '值班手册',
   'CI workflows': 'CI 工作流',
   'v1 queue implementation': 'v1 队列实现',
+  "{agent} isn't logged in. Run claude auth login, then try again.":
+    '{agent} 未登录。请运行 claude auth login，然后重试。',
+  'Wait for the run to finish': '请等待运行结束',
+  'A run is in progress. Remove the hooks once it finishes.': '有运行正在进行。等它结束后再移除 hooks。',
+  'There is no commit yet.': '还没有任何提交。',
+  'No file as the last commit has it has lines from a kept run.':
+    '按上次提交中的版本，没有任何文件含有已保留运行写的行。',
+  'This commit already has a Git AI note; League of Agents never writes over it.':
+    '此提交已有 Git AI note；League of Agents 从不覆盖它。',
+  'No line from a kept run was written by an agent.': '已保留运行中的行没有一行是代理写的。',
 };
 export default catalogue;

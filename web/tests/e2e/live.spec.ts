@@ -646,6 +646,11 @@ test('cancel a running agent', async ({ page }) => {
     await page.locator('#prompt').fill('Another');
     await page.locator('#prompt').press('Enter');
     await expect(page.locator(TOAST)).toHaveText('Run 1 is still active');
+    // The bridge refuses one too, with a code the app words in the person's language (api/errors.ts).
+    expect(await call(b, '/api/runs', { agent: 'claude', prompt: 'Another', scope: [] })).toEqual({
+      status: 409,
+      body: { error: 'Run 1 is still active', code: 'run-active', args: { id: 1 } },
+    });
     await page.locator('[data-act="cancel"]').click();
     await expect(page.locator('#sideList .run .m').last()).toContainText('Cancelled', { timeout: 10_000 });
     expect(git(repo, 'status', '--porcelain')).toBe('');

@@ -910,7 +910,7 @@ async function recordedAuthors(rel) {
  */
 async function exportAttribution(format, files) {
   const head = (await headNow()).commit;
-  if (!head) return { error: 'There is no commit yet.' };
+  if (!head) return { error: 'There is no commit yet.', code: 'no-commit' };
   const asHead = [];
   for (const [p, ranges] of Object.entries(files || {})) {
     if (!repoFile(p) || !Array.isArray(ranges)) continue;
@@ -921,7 +921,8 @@ async function exportAttribution(format, files) {
     if (same) asHead.push([p, ranges.filter(r => r.run && runs.has(r.run))]);
   }
   const named = asHead.filter(([, r]) => r.length);
-  if (!named.length) return { error: 'No file as the last commit has it has lines from a kept run.' };
+  if (!named.length)
+    return { error: 'No file as the last commit has it has lines from a kept run.', code: 'no-kept-lines' };
   const ref = format === 'git-ai' ? 'refs/notes/ai' : 'refs/notes/agent-trace';
   let note;
   if (format === 'git-ai') {
@@ -929,7 +930,11 @@ async function exportAttribution(format, files) {
       () => true,
       () => false,
     );
-    if (exists) return { error: 'This commit already has a Git AI note; League of Agents never writes over it.' };
+    if (exists)
+      return {
+        error: 'This commit already has a Git AI note; League of Agents never writes over it.',
+        code: 'note-exists',
+      };
     const sessions = {};
     const attest = [];
     for (const [p, ranges] of named) {
@@ -952,7 +957,7 @@ async function exportAttribution(format, files) {
       }
       if (keys.size) attest.push(/[\s"]/.test(p) ? `"${p}"` : p, ...[...keys].map(([k, l]) => `  ${k} ${l.join(',')}`));
     }
-    if (!attest.length) return { error: 'No line from a kept run was written by an agent.' };
+    if (!attest.length) return { error: 'No line from a kept run was written by an agent.', code: 'no-agent-lines' };
     note = `${attest.join('\n')}\n---\n${JSON.stringify({ schema_version: 'authorship/3.0.0', base_commit_sha: head, prompts: {}, sessions })}`;
   } else {
     const type = { agent: 'ai', human: 'human', mixed: 'mixed' };
@@ -1143,7 +1148,12 @@ function newRun({ agent, prompt, scope = [], resumeFrom = null, sessionId = null
 }
 function beginRun(opts) {
   return serial(async () => {
-    if (active) throw Object.assign(new Error(`Run ${active.run.id} is still active`), { code: 409 });
+    if (active)
+      throw Object.assign(new Error(`Run ${active.run.id} is still active`), {
+        code: 409,
+        reason: 'run-active',
+        args: { id: active.run.id },
+      });
     // Changes made before the run started are recorded on their own, so they never count as the agent's.
     const before = await settle();
     const run = newRun(opts);
@@ -1749,6 +1759,8 @@ function emit(type, run, delta) {
 }
 
 // ---------------------------------------------------------------- http
+// An error the app shows carries a `code`, and the values for its sentence in `args`: the app words it in the
+// person's language by that code (web/src/api/errors.ts). `error` is the same sentence in English, for older apps.
 function send(res, code, body, headers = {}) {
   const isStr = typeof body === 'string';
   res.writeHead(code, {
@@ -1883,9 +1895,23 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       if (b.agent === 'claude') await new Promise(r => checkClaude(r));
       if (AGENTS[b.agent]?.problem === 'loggedOut')
-        return send(res, 400, { error: `${AGENTS[b.agent].name} is not logged in. Run: claude auth login` }, cors);
+        return send(
+          res,
+          400,
+          {
+            error: `${AGENTS[b.agent].name} is not logged in. Run: claude auth login`,
+            code: 'not-logged-in',
+            args: { agent: b.agent },
+          },
+          cors,
+        );
       if (!AGENTS[b.agent]?.available)
-        return send(res, 400, { error: `${b.agent} is not installed on this machine` }, cors);
+        return send(
+          res,
+          400,
+          { error: `${b.agent} is not installed on this machine`, code: 'not-installed', args: { agent: b.agent } },
+          cors,
+        );
       // Lines selected in the app come with their text and the lines around them. Each range is found by them in the
       // file as it is now, from one read that the scope lock then holds: moved if its lines moved, refused if they
       // changed or can't be told apart from a copy.
@@ -1919,6 +1945,8 @@ const server = http.createServer(async (req, res) => {
               409,
               {
                 error: `The lines you selected in ${path.basename(e.path)} changed. Select them again.`,
+                code: 'lines-changed',
+                args: { name: path.basename(e.path) },
                 stale: e.path,
               },
               cors,
@@ -2011,7 +2039,7 @@ const server = http.createServer(async (req, res) => {
       const chosen = detectChecks().filter(c => names.has(c.name));
       if (!chosen.length || CONF.checks?.length) return send(res, 400, { error: 'No such checks to turn on' }, cors);
       if (b.share) {
-        if (active) return send(res, 409, { error: 'Wait for the run to finish' }, cors);
+        if (active) return send(res, 409, { error: 'Wait for the run to finish', code: 'wait-for-run' }, cors);
         await writeConfig({ ...readJson(CONFIG_FILE, {}), checks: chosen });
         saveAllowed({ approved: chosen });
         checksShared = true;
@@ -2026,7 +2054,8 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       const gone = (CONF.checks || []).find(c => c.name === b.name);
       if (!gone) return send(res, 404, { error: 'No such check' }, cors);
-      if (checksShared && active) return send(res, 409, { error: 'Wait for the run to finish' }, cors);
+      if (checksShared && active)
+        return send(res, 409, { error: 'Wait for the run to finish', code: 'wait-for-run' }, cors);
       CONF.checks = CONF.checks.filter(c => c !== gone);
       if (checksShared) {
         const file = readJson(CONFIG_FILE, {});
@@ -2041,7 +2070,13 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true }, cors);
     }
     if (req.method === 'POST' && p === '/api/hooks/remove') {
-      if (active) return send(res, 409, { error: 'A run is in progress. Remove the hooks once it finishes.' }, cors);
+      if (active)
+        return send(
+          res,
+          409,
+          { error: 'A run is in progress. Remove the hooks once it finishes.', code: 'hooks-run-active' },
+          cors,
+        );
       return send(res, 200, { removed: await ownWrite(removeHooks) }, cors);
     }
     if (req.method === 'POST' && p === '/api/save') {
@@ -2092,7 +2127,7 @@ const server = http.createServer(async (req, res) => {
     }
     return send(res, 404, { error: 'Unknown endpoint' }, cors);
   } catch (e) {
-    return send(res, e.code === 409 ? 409 : 500, { error: e.message }, cors);
+    return send(res, e.code === 409 ? 409 : 500, { error: e.message, code: e.reason, args: e.args }, cors);
   }
 });
 const MIME = {

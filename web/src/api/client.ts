@@ -32,6 +32,11 @@ function errorBody(v: unknown): ErrorBody {
   if (!isRecord(v)) return {};
   const out: ErrorBody = {};
   if (typeof v.error === 'string') out.error = v.error;
+  if (typeof v.code === 'string') out.code = v.code;
+  if (isRecord(v.args))
+    out.args = Object.fromEntries(
+      Object.entries(v.args).filter((e): e is [string, string | number] => ['string', 'number'].includes(typeof e[1])),
+    );
   if (Array.isArray(v.conflict)) out.conflict = v.conflict.filter((p): p is string => typeof p === 'string');
   if (typeof v.text === 'string') out.text = v.text;
   if (typeof v.hash === 'string') out.hash = v.hash;

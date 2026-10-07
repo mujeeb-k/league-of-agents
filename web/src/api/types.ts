@@ -179,6 +179,9 @@ export interface OkResponse {
 }
 export interface ErrorBody {
   error?: string;
+  /** Which error, for the app to word it (bridge 0.2.0 and later); `args` fills its sentence. */
+  code?: string;
+  args?: Record<string, string | number>;
   conflict?: string[];
   /** POST /api/save, 409: the file as it is on disk now. */
   text?: string;

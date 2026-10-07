@@ -6,13 +6,14 @@ import ts from 'typescript';
 import { ABOUT, PRIVACY, TAGLINE } from '../../src/lib/intro';
 import { SAMPLE_RUNS, SAMPLE_TREE } from '../../src/demo/sample';
 import type { TreeSpec } from '../../src/lib/types';
-import { UNREACHABLE } from '../../src/api/errors';
+import { BY_CODE, UNREACHABLE } from '../../src/api/errors';
 
 const SRC = path.join(__dirname, '../../src');
 
 /** Keys t() is called with through a variable: the English it names, kept here so every catalogue has them. */
 export const VARIABLE_KEYS = [
   UNREACHABLE,
+  ...Object.values(BY_CODE),
   'The bridge is offline. Reconnect first.',
   ABOUT,
   'Before',

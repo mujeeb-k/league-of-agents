@@ -385,7 +385,12 @@ test('the bridge finds selected lines by their text and the lines around them: m
     // Changed: refused, with the reason, and no run.
     const refused = {
       status: 409,
-      body: { error: 'The lines you selected in allowlist.ts changed. Select them again.', stale: FILE },
+      body: {
+        error: 'The lines you selected in allowlist.ts changed. Select them again.',
+        code: 'lines-changed',
+        args: { name: 'allowlist.ts' },
+        stale: FILE,
+      },
     };
     write(SEED[FILE]!.replace('loadPolicy()', 'loadPolicy(env)'));
     expect(await start([`${FILE}:3-5`])).toEqual(refused);

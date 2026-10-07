@@ -429,5 +429,17 @@ const catalogue: Catalogue = {
   'on-call runbooks': 'runbooks de plantão',
   'CI workflows': 'workflows de CI',
   'v1 queue implementation': 'implementação da fila v1',
+  "{agent} isn't logged in. Run claude auth login, then try again.":
+    '{agent} está sem login. Rode claude auth login e tente de novo.',
+  'Wait for the run to finish': 'Espere a execução terminar',
+  'A run is in progress. Remove the hooks once it finishes.':
+    'Uma execução está em andamento. Remova os hooks quando ela terminar.',
+  'There is no commit yet.': 'Ainda não há nenhum commit.',
+  'No file as the last commit has it has lines from a kept run.':
+    'Nenhum arquivo, como está no último commit, tem linhas de uma execução mantida.',
+  'This commit already has a Git AI note; League of Agents never writes over it.':
+    'Este commit já tem uma nota do Git AI; o League of Agents nunca a sobrescreve.',
+  'No line from a kept run was written by an agent.':
+    'Nenhuma linha de uma execução mantida foi escrita por um agente.',
 };
 export default catalogue;
