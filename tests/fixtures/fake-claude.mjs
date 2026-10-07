@@ -23,7 +23,17 @@ out({
   message: {
     content: [
       { type: 'text', text: 'Adding a stale-policy guard.' },
-      { type: 'tool_use', name: 'Edit', input: { file_path: process.cwd() + '/shared/allowlist.ts' } },
+      // The edit it reports, as Claude Code's Edit tool does. The lines it appends below, and the file it creates,
+      // it writes without an edit tool, as a shell command would: no Edit or Write input names them.
+      {
+        type: 'tool_use',
+        name: 'Edit',
+        input: {
+          file_path: process.cwd() + '/shared/allowlist.ts',
+          old_string: "    throw new Error('ALLOWLIST_VIOLATION');",
+          new_string: '    throw new Error(`ALLOWLIST_VIOLATION: ${action} on ${origin}`);',
+        },
+      },
     ],
   },
 });

@@ -921,6 +921,30 @@ test('bridge keeps deny rules, records raw agent output, and keeps secret files 
   }
 });
 
+// Attribution: which added lines Claude Code wrote through its edit tools. Lines it wrote another way (here, the
+// stand-in appends a function and creates a file without an edit tool, as a shell command would) aren't its.
+test('bridge records the lines Claude Code wrote with its edit tools, and only those', async () => {
+  const repo = makeRepo();
+  const b = await startBridge(repo, FAKE_CLAUDE, {}, ['--no-hooks']);
+  try {
+    const run = await runToEnd(b, {
+      agent: 'claude',
+      prompt: 'Name the action and origin',
+      scope: [],
+      resumeFrom: null,
+    });
+    const after = fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8').split('\n');
+    const line = after.findIndex(l => l.includes('ALLOWLIST_VIOLATION: ${action}'));
+    expect(line).toBeGreaterThan(0);
+    expect(run.agentLines).toEqual({ 'shared/allowlist.ts': [[line, line]] });
+    // Not the appended isEmpty, not the new file: added in the run, but by no edit tool.
+    expect(run.changes.map(c => c.path).sort()).toEqual(['shared/allowlist.ts', 'shared/policy-cache.ts']);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('bridge runs Codex with a workspace-write sandbox and resumes by thread id', async () => {
   const repo = makeRepo(),
     argsFile = path.join(path.dirname(repo), 'codex-args.jsonl');
@@ -1064,7 +1088,17 @@ test('terminal Claude Code: hooks record the turn, with its reply and tool calls
       {
         type: 'assistant',
         message: {
-          content: [{ type: 'tool_use', name: 'Edit', input: { file_path: path.join(repo, 'shared/log.ts') } }],
+          content: [
+            {
+              type: 'tool_use',
+              name: 'Edit',
+              input: {
+                file_path: path.join(repo, 'shared/log.ts'),
+                old_string: 'export const log = (msg: string) => console.log(`[console] ${msg}`);',
+                new_string: 'export const log = (msg: string) => console.log(`[app] ${msg}`);',
+              },
+            },
+          ],
         },
       },
       { type: 'user', message: { content: [{ type: 'tool_result', content: 'ok' }] } },
@@ -1076,6 +1110,8 @@ test('terminal Claude Code: hooks record the turn, with its reply and tool calls
     expect(run.agent).toBe('claude-terminal');
     expect(run.status).toBe('done');
     expect(run.model).toBe('claude-sonnet-5-5');
+    // The line it wrote with its Edit tool, read from the transcript.
+    expect(run.agentLines).toEqual({ 'shared/log.ts': [[0, 0]] });
     expect(run.sessionId).toBe('sess-term');
     expect(run.summary).toBe('Log lines now start with `[app]`.');
     expect(run.stream.filter(e => e.t === 'tool').map(e => e.text)).toEqual([

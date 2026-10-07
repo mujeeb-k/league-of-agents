@@ -52,6 +52,11 @@ export interface RunDTO {
   scope: string[];
   resumeFrom: number | null;
   sessionId: string | null;
+  /**
+   * The added lines the agent wrote through its edit tools, per file: [from, to] line indexes in the file after the
+   * run. Claude Code only; bridges before 0.2.0 don't send it.
+   */
+  agentLines?: Record<string, [number, number][]>;
   /** The model the agent reported (bridges before 0.2.0 don't send it). */
   model?: string | null;
   status: RunStatus;

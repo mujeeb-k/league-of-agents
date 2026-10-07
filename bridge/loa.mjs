@@ -985,6 +985,7 @@ async function finishRun(run, status = 'done') {
     });
   await pin(run.id, 'after', run.after);
   run.changes = await computeChanges(run.before, run.after);
+  run.agentLines = agentLinesOf(run);
   if (run.agent === 'detected' || run.agent === 'you') run.title = editedTitle(run.changes);
   const out = await scopeViolations(run);
   if (out.length) run.stream.push({ t: 'warn', text: `Changed outside scope: ${out.join(', ')}` });
@@ -1129,6 +1130,60 @@ function startAgent(run, read = {}) {
     finishRun(run, ended).catch(logError);
   });
 }
+/**
+ * The lines Claude Code wrote itself, per file, from its edit tools' input: what Edit, MultiEdit and Write put
+ * in. Kept for the run's attribution; lines it changed any other way (shell commands, scripts) aren't here.
+ */
+const writes = new Map();
+function noteWrites(run, name, input) {
+  if (!/^claude/.test(run.agent) || !input?.file_path) return;
+  const texts =
+    name === 'Write'
+      ? [input.content]
+      : name === 'Edit'
+        ? [input.new_string]
+        : name === 'MultiEdit'
+          ? (input.edits || []).map(e => e.new_string)
+          : [];
+  // Agents name files by the path they were given, which may run through a symlink (macOS's /var is /private/var).
+  let abs = path.resolve(ROOT, input.file_path);
+  try {
+    abs = path.join(fs.realpathSync(path.dirname(abs)), path.basename(abs));
+  } catch {}
+  const rel = path.relative(ROOT, abs).split(path.sep).join('/');
+  if (!writes.has(run.id)) writes.set(run.id, new Map());
+  const files = writes.get(run.id);
+  for (const t of texts) if (typeof t === 'string') files.set(rel, [...(files.get(rel) || []), ...t.split('\n')]);
+}
+/**
+ * The run's added lines its agent wrote through its edit tools, per file, as [from, to] ranges of line indexes
+ * in the file after the run; absent for agents that don't report their edits.
+ */
+function agentLinesOf(run) {
+  const files = writes.get(run.id);
+  writes.delete(run.id);
+  if (!files) return undefined;
+  const out = {};
+  for (const c of run.changes) {
+    const wrote = new Map();
+    for (const l of files.get(c.path) || []) wrote.set(l, (wrote.get(l) || 0) + 1);
+    const ranges = [];
+    let shift = 0;
+    for (const h of c.hunks) {
+      h.add.forEach((l, i) => {
+        if (!wrote.get(l)) return;
+        wrote.set(l, wrote.get(l) - 1);
+        const at = h.at + shift + i,
+          last = ranges.at(-1);
+        if (last && last[1] === at - 1) last[1] = at;
+        else ranges.push([at, at]);
+      });
+      shift += h.add.length - h.del;
+    }
+    if (ranges.length) out[c.path] = ranges;
+  }
+  return out;
+}
 function onAgentLine(run, line) {
   let m;
   try {
@@ -1155,7 +1210,10 @@ function onAgentLine(run, line) {
   if (m.type === 'assistant' && m.message?.content) {
     for (const c of m.message.content) {
       if (c.type === 'text' && c.text?.trim()) push(run, { t: 'text', text: c.text.trim() });
-      if (c.type === 'tool_use') push(run, { t: 'tool', text: toolLabel(c.name, c.input) });
+      if (c.type === 'tool_use') {
+        push(run, { t: 'tool', text: toolLabel(c.name, c.input) });
+        noteWrites(run, c.name, c.input);
+      }
     }
   } else if (m.type === 'user' && Array.isArray(m.message?.content)) {
     for (const c of m.message.content) if (c.type === 'tool_result' && c.is_error) push(run, toolError(c.content));
@@ -2127,7 +2185,12 @@ function lastTurn(transcriptPath) {
             },
           },
     )
-    .slice(-200);
+    // The last 200 for the stream; every edit-tool call, which attribution reads, however long the turn.
+    .filter(
+      (e, i, all) =>
+        i >= all.length - 200 ||
+        (e.type === 'assistant' && e.message.content.some?.(c => /^(Edit|Write|MultiEdit)$/.test(c.name))),
+    );
   const last = [...turn]
     .reverse()
     .find(m => m.type === 'assistant' && m.message.content.some?.(c => c.type === 'text'));
