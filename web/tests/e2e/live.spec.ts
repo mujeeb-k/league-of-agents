@@ -757,6 +757,82 @@ test('the app on a 0.1.2 bridge: a finished run reaches the canvas through the w
   }
 });
 
+/** A repo with enough folders that a fresh layout depends on the window's shape. */
+function repoWithFolders() {
+  const repo = makeRepo();
+  for (let i = 0; i < 40; i++) {
+    const p = path.join(repo, `src/area${i % 5}/part${i % 3}/file${i}.ts`);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, `export const v${i} = ${i};\n`);
+  }
+  git(repo, 'add', '-A');
+  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'folders');
+  return repo;
+}
+/** Every folder's and file's place on the map. */
+const placesOf = (page: Page) =>
+  page.evaluate(() =>
+    Object.fromEntries(
+      [...document.querySelectorAll<HTMLElement>('.frame[data-dir], .card[data-path]')].map(e => [
+        e.dataset.dir ?? e.dataset.path,
+        `${e.style.left},${e.style.top}`,
+      ]),
+    ),
+  );
+
+test('the layout is kept: another window, another size, every folder and file where it was', async ({ browser }) => {
+  const repo = repoWithFolders(),
+    b = await startBridge(repo, FAKE_CLAUDE, {}, ['--no-hooks']);
+  try {
+    const open = async (viewport: { width: number; height: number }) => {
+      const ctx = await browser.newContext({ viewport });
+      const page = await ctx.newPage();
+      await page.goto(linkFor(b));
+      await expect(page.locator('#conn')).toHaveText('Live');
+      return { ctx, places: await placesOf(page) };
+    };
+    const first = await open({ width: 1440, height: 900 });
+    // Saved once it has held for a second, in .loa/, by the bridge.
+    await expect.poll(() => fs.existsSync(path.join(repo, '.loa/layout.json')), { timeout: 5000 }).toBe(true);
+    await first.ctx.close();
+    const second = await open({ width: 900, height: 1100 });
+    expect(Object.keys(second.places).length).toBeGreaterThan(20);
+    expect(second.places).toEqual(first.places);
+    await second.ctx.close();
+    // Without the saved layout, that window lays the repo out differently: what the test above guards.
+    fs.rmSync(path.join(repo, '.loa/layout.json'));
+    const fresh = await open({ width: 900, height: 1100 });
+    expect(fresh.places).not.toEqual(first.places);
+    await fresh.ctx.close();
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test('the layout is kept on a 0.1.2 bridge, in the browser', async ({ page }) => {
+  const repo = repoWithFolders(),
+    b = await startBridge(repo, FAKE_CLAUDE, {}, [], publishedBridge('0.1.2'));
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${APP}/#bridge=${b.port}&t=${b.token}`);
+    await expect(page.locator('#conn')).toHaveText('Live');
+    const before = await placesOf(page);
+    await expect
+      .poll(() => page.evaluate(() => Object.keys(localStorage).some(k => k.startsWith('loa.layout:'))), {
+        timeout: 5000,
+      })
+      .toBe(true);
+    await page.setViewportSize({ width: 900, height: 1100 });
+    await page.reload();
+    await expect(page.locator('#conn')).toHaveText('Live');
+    expect(await placesOf(page)).toEqual(before);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 async function runToEnd(b: Bridge, body: object) {
   const api = (p: string, init: RequestInit = {}) =>
     fetch(`http://127.0.0.1:${b.port}${p}`, {

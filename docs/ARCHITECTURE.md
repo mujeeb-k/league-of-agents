@@ -62,6 +62,7 @@ CORS echoes only allowed origins and sends `Access-Control-Allow-Private-Network
 | `GET /api/state` | Repo name, branch and absolute root (for opening files in another editor), agents, file tree with first 400 lines per file, all runs, active run id, event seq, the bridge version (`package.json`; the app shows an update banner below `MIN_BRIDGE`) |
 | `GET /api/events?since=N[&delta=1]` | Long poll, up to 25s. Events: `state` (refetch), `progress` (run stream, status, checks). With `delta=1`, a `state` event for a finished or checked run carries `delta`: the run and its files as the map shows them (`emitRun()`), and the app applies it without refetching; other apps get the plain event |
 | `POST /api/runs` | `{ agent, prompt, scope[], resumeFrom, lines?, context? }`. Starts an agent run. A scope entry is a folder (`src/`), a file, or lines of a file (`src/main.py:12-18`). For lines, `lines` holds their text and `context` the lines around them; the bridge finds them again (Selections, below) or answers 409 with `{ error, stale }` |
+| `GET /api/layout`, `POST /api/layout` | The map's layout, kept in `.loa/layout.json` (`LAYOUT_FILE`); the app keeps it in the browser with bridges that answer 404 |
 | `GET /api/file?path=` | A file's full text and its hash, for the editor |
 | `POST /api/save` | `{ path, text, base }`. Writes the file as a run by `you`. 409 with the current `text` and `hash` if the file changed on disk since `base` |
 | `POST /api/runs/:id/cancel` | Kills the agent |
@@ -145,7 +146,7 @@ Note: `acceptEdits` lets Claude Code edit files and run `mkdir`, `touch`, `rm`, 
 - Vite, React, strict TypeScript. shadcn/ui and Tailwind for the chrome, plain CSS for the canvas.
 - State lives in typed modules (`src/state`, `src/lib`). Each screen region (scene, sidebar and so on) re-renders when its render function runs. The camera writes the canvas transform directly, outside React.
 - `src/api` holds typed wire types and a client for every bridge route, plus the long-poll loop.
-- Model: `FILES`, `DIRMAP`, `RUNS`. `layout()` places folders as columns by depth (wider than tall), files as a grid of 420×300 boxes inside each folder frame, and persists nothing yet.
+- Model: `FILES`, `DIRMAP`, `RUNS`. `layout()` places folders as columns by depth (wider than tall), files as a grid of 420×300 boxes inside each folder frame. The layout in use (`S.LAYOUT`) is kept: known folders and files keep their places, new ones take free space. It is saved per repo (`saveLayoutSoon()` in `api/live.ts`) and loaded on connect, so a reload or another window size opens it as it was; "Tidy layout" lays it out afresh.
 - `viewOf(file)` returns rows for the current mode (before, after, diff) using the run's `pre` and `hunks`.
 - Semantic zoom: below 34% the canvas shows the tree with a tile per file, its name and change ticks, and no line texture: painting a texture per tile made panning drop frames on large repos. Above it, code boxes with import lines.
 - Demo mode uses a neutral sample repo (`src/demo`, a fictional webhook service). Live mode loads `/api/state` and polls events.
@@ -158,7 +159,7 @@ Not yet verified with real runs: Cursor and Codex output (tested against stand-i
 
 ## Known gaps
 
-- Layout reflows when files are added or removed, and a rename moves a file to a new place on the map. Positions aren't kept across reloads.
+- A rename moves a file to a new place on the map.
 - File contents (first 400 lines each) are sent in full with `/api/state`. Fine for hundreds of files, not tens of thousands.
 - The scope lock needs the hooks and doesn't see shell commands (above).
 - Cursor and Codex stream parsing is approximate.

@@ -22,12 +22,10 @@ export const S = {
   DIRMAP: new Map<string, DirNode>(),
   RUNS: [] as Run[],
   WB: { x: 0, y: 0, w: 1, h: 1 } as Box,
-  /** The layout in use, saved between changes and, live, in .loa/layout.json (lib/layout.ts). */
+  /** The layout in use, kept between changes and, live, saved per repo (api/live.ts saveLayoutSoon). */
   LAYOUT: null as SavedLayout | null,
   /** Bumped whenever the layout changes, so routed lines are found again. */
   LAYOUT_REV: 0,
-  /** True when a folder had to grow over something; "Tidy layout" fixes it. */
-  CROWDED: false,
   GRAPH: { out: new Map(), in: new Map() } as Graph,
   /** Each file's full length when live; the bridge sends only the first 400 lines of each. */
   TOTALS: new Map<string, number>(),

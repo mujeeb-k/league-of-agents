@@ -162,6 +162,8 @@ function detectChecks() {
 }
 const IGNORE = (CONF.ignore || []).map(g => g.replace(/\*\*?.*$/, ''));
 const bridgeFile = path.join(LOA, 'bridge.json');
+/** Where the map's folders and files are placed (web/src/lib/layout.ts SavedLayout). */
+const LAYOUT_FILE = path.join(LOA, 'layout.json');
 const prev = readJson(bridgeFile, {});
 // A fresh token on every start: a link from an earlier run stops working.
 const TOKEN = crypto.randomBytes(18).toString('base64url');
@@ -1676,6 +1678,17 @@ const server = http.createServer(async (req, res) => {
         const r = await revertRun(run, !!b.force);
         return send(res, r.conflict ? 409 : 200, r, cors);
       }
+    }
+    // The map's layout, kept per repo so a reload, another window size or the other app opens it as it was.
+    if (req.method === 'GET' && p === '/api/layout')
+      return send(res, 200, { layout: readJson(LAYOUT_FILE, null) }, cors);
+    if (req.method === 'POST' && p === '/api/layout') {
+      const { layout } = await readBody(req);
+      const ok =
+        layout?.v === 1 && [layout.dirs, layout.files].every(o => o && typeof o === 'object' && !Array.isArray(o));
+      if (!ok) return send(res, 400, { error: 'Not a layout' }, cors);
+      fs.writeFileSync(LAYOUT_FILE, JSON.stringify(layout));
+      return send(res, 200, { ok: true }, cors);
     }
     if (req.method === 'GET' && p === '/api/file') {
       const abs = repoFile(url.searchParams.get('path'));

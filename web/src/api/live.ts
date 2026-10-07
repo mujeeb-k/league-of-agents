@@ -1,6 +1,7 @@
 // Live connection to the local bridge.
 import { applyView, flyRun, openingView } from '../lib/camera';
 import { buildModel, specFromPaths } from '../lib/model';
+import type { SavedLayout } from '../lib/layout';
 import type { Run } from '../lib/types';
 import { fmtDur, relTime } from '../lib/util';
 import { S, st } from '../state/app';
@@ -8,7 +9,7 @@ import { loadDemo } from '../state/actions';
 import { refreshEditor } from '../state/editing';
 import { renderAll, renderCrumb, renderInspector, renderSide, setConnUI } from '../state/render';
 import { toast } from '../ui/toast';
-import { bridge } from './client';
+import { BridgeError, bridge } from './client';
 import { explain } from './errors';
 import { showConflict } from '../components/ConflictDialog';
 import { clearConn, saveConn } from './conn';
@@ -43,6 +44,52 @@ function liveRun(r: RunDTO): Run {
     changes,
     reviewed: S.REVIEWED.get(r.id)!,
   };
+}
+
+// The layout is kept per repo: by the bridge in .loa/layout.json, or in this browser when the bridge is older
+// than 0.2.0 and has no layout route.
+const layoutKey = (root: string) => 'loa.layout:' + root;
+const isLayout = (v: unknown): v is SavedLayout =>
+  !!v && typeof v === 'object' && (v as { v?: unknown }).v === 1 && 'dirs' in v && 'files' in v;
+let layoutInBrowser = false,
+  savedLayout = '',
+  layoutTimer = 0;
+
+async function loadLayout(c: Conn, root: string): Promise<SavedLayout | null> {
+  layoutInBrowser = false;
+  try {
+    const { layout } = await bridge.layout(c);
+    savedLayout = JSON.stringify(layout);
+    return isLayout(layout) ? layout : null;
+  } catch (e) {
+    if (!(e instanceof BridgeError && e.status === 404)) return null;
+    layoutInBrowser = true;
+    try {
+      const v: unknown = JSON.parse(localStorage.getItem(layoutKey(root)) ?? 'null');
+      savedLayout = JSON.stringify(v);
+      return isLayout(v) ? v : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** Saves the layout once it has stayed the same for a second, and only when it changed. */
+export function saveLayoutSoon() {
+  clearTimeout(layoutTimer);
+  layoutTimer = window.setTimeout(() => {
+    const c = S.CONN,
+      layout = S.LAYOUT;
+    if (!c || !layout || JSON.stringify(layout) === savedLayout) return;
+    savedLayout = JSON.stringify(layout);
+    if (layoutInBrowser) {
+      try {
+        localStorage.setItem(layoutKey(S.repoRoot), savedLayout);
+      } catch {
+        // Storage full or blocked: the layout still holds until the page closes.
+      }
+    } else void bridge.saveLayout(c, layout).catch(() => (savedLayout = ''));
+  }, 1000);
 }
 
 /** The last state applied, which run deltas are applied to. */
@@ -102,6 +149,7 @@ function applyState(s: StateResponse, first: boolean) {
   S.branch = s.repo.branch || '';
   renderCrumb();
   renderAll();
+  saveLayoutSoon();
   void refreshEditor();
   if (first) {
     st.v = openingView();
@@ -213,7 +261,8 @@ export async function connect(c: Conn, quiet = false): Promise<string | null> {
     st.sel.clear();
     st.mode = 'after';
     st.tab = 'runs';
-    S.LAYOUT = null; // a new repository is laid out afresh; later state events keep this layout
+    // A repository is laid out as it was last time, or afresh; later state events keep this layout.
+    S.LAYOUT = await loadLayout(c, s.repo.root);
     applyState(s, true);
     toast(`Connected to ${s.repo.name}`);
     void poll();

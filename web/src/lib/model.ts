@@ -243,7 +243,6 @@ export function layout(tidy = false) {
     : { w: 16, h: 10 };
   const r = layoutTree(S.ROOT!, tidy ? null : S.LAYOUT, target, tidy);
   S.LAYOUT = r.saved;
-  S.CROWDED = r.crowded;
   S.LAYOUT_REV++;
   const b = bounds(S.ROOT!);
   S.WB = { x: b.x - 40, y: b.y - 40, w: b.w + 80, h: b.h + 80 };

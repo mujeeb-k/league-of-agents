@@ -77,7 +77,7 @@ If your repo has none set up, League of Agents looks for test and typecheck scri
 
 In your repo:
 
-- `.loa/`: run records, the bridge's port and token, a private snapshot index, a copy of the bridge the hooks run, and a log. It's kept out of git through `.git/info/exclude`, and the bridge won't start in a repo that commits it.
+- `.loa/`: run records, the bridge's port and token, a private snapshot index, a copy of the bridge the hooks run, the map's layout, and a log. It's kept out of git through `.git/info/exclude`, and the bridge won't start in a repo that commits it.
 - Snapshots: git commits under private `refs/loa/` refs, stored in `.git/objects`. They never touch your branch or staging area.
 - `loa.config.json`, only if you choose to share your checks with your team.
 

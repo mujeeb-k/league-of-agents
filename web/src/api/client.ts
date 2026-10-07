@@ -12,6 +12,7 @@ import type {
   StartRunBody,
   StateResponse,
 } from './types';
+import type { SavedLayout } from '../lib/layout';
 
 export class BridgeError extends Error {
   readonly status: number;
@@ -56,6 +57,10 @@ async function request<T>(
 
 export const bridge = {
   state: (c: Conn) => request<StateResponse>(c, '/api/state'),
+  /** Bridges before 0.2.0 answer 404: the app keeps the layout in the browser instead. */
+  layout: (c: Conn) => request<{ layout: SavedLayout | null }>(c, '/api/layout'),
+  saveLayout: (c: Conn, layout: SavedLayout) =>
+    request<OkResponse>(c, '/api/layout', { method: 'POST', body: { layout } }),
   events: (c: Conn, since: number) => request<EventsResponse>(c, `/api/events?since=${since}&delta=1`),
   startRun: (c: Conn, body: StartRunBody) => request<RunDTO>(c, '/api/runs', { method: 'POST', body }),
   cancel: (c: Conn, id: number) => request<OkResponse>(c, `/api/runs/${id}/cancel`, { method: 'POST' }),

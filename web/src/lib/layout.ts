@@ -2,8 +2,9 @@
 // and a folder's subfolders sit just to its right, stacked, so children stay next to their parent. The root's
 // subtrees are packed into columns so the whole map matches the canvas's shape.
 //
-// A layout is saved (.loa/layout.json in live mode) and kept: later opens place every known folder and file
-// where it was. New files take a free slot; a full folder grows down, then right, only where it collides with
+// A layout is kept, and saved per repo in live mode (.loa/layout.json through the bridge, or the browser with
+// bridges before 0.2.0; api/live.ts): later opens place every known folder and file where it was, whatever the
+// window's shape. New files take a free slot; a full folder grows down, then right, only where it collides with
 // nothing; a new folder goes at the end of its parent's stack, at the first free height. Existing files never
 // move. "Tidy layout" lays everything out afresh.
 import { CH, COLGAP, CW, GAP, PAD, SIB } from './constants';
@@ -24,8 +25,6 @@ export interface SavedLayout {
 
 export interface LayoutResult {
   saved: SavedLayout;
-  /** True when a folder had to grow over something else; "Tidy layout" fixes it. */
-  crowded: boolean;
 }
 
 type Rect = { x: number; y: number; w: number; h: number };
@@ -165,7 +164,6 @@ export function layoutTree(
 ): LayoutResult {
   const dirs = all(root);
   const slots = new Map<string, number>();
-  let crowded = false;
   if (!saved || tidy) {
     fresh(root, target);
     for (const d of dirs) d.files.forEach((f, i) => slots.set(f.path, i));
@@ -213,7 +211,6 @@ export function layoutTree(
             return free(d, r) ? { cols, rows } : null;
           };
           const g = d.cols ? (grow(d.cols, d.rows + 1) ?? grow(d.cols + 1, d.rows)) : (grow(2, 1) ?? grow(1, 1));
-          if (!g) crowded = true;
           const next = g ?? (d.cols ? { cols: d.cols, rows: d.rows + 1 } : { cols: 2, rows: 1 });
           // Growing a column renumbers slots row by row; keep every file where it was by remapping.
           if (next.cols !== d.cols && d.cols)
@@ -235,7 +232,7 @@ export function layoutTree(
   const out: SavedLayout = { v: 1, dirs: {}, files: {} };
   for (const d of dirs) out.dirs[d.path] = { x: d.x, y: d.y, cols: d.cols, rows: d.rows };
   for (const [p, s] of slots) out.files[p] = s;
-  return { saved: out, crowded };
+  return { saved: out };
 }
 
 /** The bounding box of everything laid out, with room for labels. */

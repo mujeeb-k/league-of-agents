@@ -112,10 +112,9 @@ describe('layout', () => {
     const { saved } = layoutTree(root, null, canvases[0]!);
     const before = positions();
     root = build([...paths, 'src/area1/brand-new/deeper/x.ts', 'docs/new-guide.md']);
-    const r = layoutTree(root, saved, canvases[0]!);
+    layoutTree(root, saved, canvases[0]!);
     const now = positions();
     for (const [p, xy] of before) expect(now.get(p)).toBe(xy);
-    expect(r.crowded).toBe(false);
     for (const p of ['src/area1/brand-new/deeper/x.ts', 'docs/new-guide.md']) expect(now.get(p)).toBeDefined();
   });
 

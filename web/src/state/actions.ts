@@ -2,7 +2,7 @@
 import { bridge } from '../api/client';
 import { explain } from '../api/errors';
 import { showConflict } from '../components/ConflictDialog';
-import { live, liveAction } from '../api/live';
+import { live, liveAction, saveLayoutSoon } from '../api/live';
 import { applyView, flyAll, flyFile, flyRun, openingView } from '../lib/camera';
 import { agentOf } from '../lib/constants';
 import { buildModel, diffRows, existsNow, filesUnder, layout, linesAt, parseSample } from '../lib/model';
@@ -322,6 +322,7 @@ export function setMode(m: Mode) {
 export function tidyLayout() {
   layout(true);
   renderAll();
+  saveLayoutSoon();
   flyAll();
   toast('Layout tidied');
 }
