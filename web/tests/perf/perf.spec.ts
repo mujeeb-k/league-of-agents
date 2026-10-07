@@ -462,7 +462,13 @@ interface Measured {
 }
 
 /** One fresh page load on react-router: map visible, pan and zoom, a click, and an edit made outside the app. */
-async function measureReactRouter(page: Page, base: string, repo: string, file: string): Promise<Measured> {
+async function measureReactRouter(
+  page: Page,
+  base: string,
+  repo: string,
+  file: string,
+  byAuthor: boolean,
+): Promise<Measured> {
   await page.addInitScript(() => {
     const w = window as unknown as { mapVisible: number | null; stateEvents: number[] };
     w.mapVisible = null;
@@ -491,6 +497,10 @@ async function measureReactRouter(page: Page, base: string, repo: string, file: 
   await page.waitForFunction(() => (window as unknown as { mapVisible: number | null }).mapVisible !== null);
   const mapVisible = await page.evaluate(() => (window as unknown as { mapVisible: number }).mapVisible);
   await page.waitForTimeout(1500);
+  if (byAuthor) {
+    await page.keyboard.press('c');
+    await page.locator('#byAuthor[aria-pressed="true"]').waitFor();
+  }
   await page.keyboard.press('0');
   await page.waitForTimeout(400);
   const dropped = (times: number[]) => (100 * stats('', times).dropped) / times.length;
@@ -550,35 +560,47 @@ async function measureReactRouter(page: Page, base: string, repo: string, file: 
   return { mapVisible, panDropped, zoomDropped, selection, stateEvent: shown - event };
 }
 
-test.describe('react-router at 246ddbe (1,139 files)', () => {
-  const runs: Measured[] = [];
-  test.beforeAll(async ({ browser }) => {
-    test.setTimeout(600_000);
-    const repo = reactRouter();
-    const file = 'packages/react-router/index.ts';
-    const b = await startBridge(repo, undefined, { LOA_QUIET_MS: '300' }, ['--no-hooks']);
-    try {
-      for (let i = 0; i < 3; i++) {
-        const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-        runs.push(
-          await measureReactRouter(await ctx.newPage(), `http://127.0.0.1:${b.port}/#t=${b.token}`, repo, file),
-        );
-        await ctx.close();
+// Measured as it opens, and colored by author (spec 017): every line of every file labelled, on each state.
+for (const byAuthor of [false, true])
+  test.describe(`react-router at 246ddbe (1,139 files)${byAuthor ? ', colored by author' : ''}`, () => {
+    const runs: Measured[] = [];
+    test.beforeAll(async ({ browser }) => {
+      test.setTimeout(600_000);
+      const repo = reactRouter();
+      const file = 'packages/react-router/index.ts';
+      const b = await startBridge(repo, undefined, { LOA_QUIET_MS: '300' }, ['--no-hooks']);
+      try {
+        for (let i = 0; i < 3; i++) {
+          const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+          runs.push(
+            await measureReactRouter(
+              await ctx.newPage(),
+              `http://127.0.0.1:${b.port}/#t=${b.token}`,
+              repo,
+              file,
+              byAuthor,
+            ),
+          );
+          await ctx.close();
+        }
+      } finally {
+        b.stop();
+        git(repo, 'checkout', '-q', '--', '.');
       }
-    } finally {
-      b.stop();
-      git(repo, 'checkout', '-q', '--', '.');
-    }
-    fs.writeFileSync(path.join(OUT, 'react-router.json'), JSON.stringify(runs, null, 2));
-    report(runs);
+      fs.writeFileSync(
+        path.join(OUT, `react-router${byAuthor ? '-by-author' : ''}.json`),
+        JSON.stringify(runs, null, 2),
+      );
+      report(runs);
+    });
+    const of = (k: keyof Measured) => median(runs.map(r => r[k]));
+    // Coloring is turned on after the map is visible, so that budget is measured once, as it opens.
+    if (!byAuthor) test('react-router: map visible under 2 s', () => expect(of('mapVisible')).toBeLessThan(2000));
+    test('react-router: pan and zoom at 60 fps (at most 2% of frames dropped)', () => {
+      expect(of('panDropped'), 'pan').toBeLessThanOrEqual(2);
+      expect(of('zoomDropped'), 'zoom').toBeLessThanOrEqual(2);
+    });
+    test('react-router: selection visible under 100 ms', () => expect(of('selection')).toBeLessThan(100));
+    test('react-router: canvas updated under 200 ms after a state event', () =>
+      expect(of('stateEvent')).toBeLessThan(200));
   });
-  const of = (k: keyof Measured) => median(runs.map(r => r[k]));
-  test('react-router: map visible under 2 s', () => expect(of('mapVisible')).toBeLessThan(2000));
-  test('react-router: pan and zoom at 60 fps (at most 2% of frames dropped)', () => {
-    expect(of('panDropped'), 'pan').toBeLessThanOrEqual(2);
-    expect(of('zoomDropped'), 'zoom').toBeLessThanOrEqual(2);
-  });
-  test('react-router: selection visible under 100 ms', () => expect(of('selection')).toBeLessThan(100));
-  test('react-router: canvas updated under 200 ms after a state event', () =>
-    expect(of('stateEvent')).toBeLessThan(200));
-});
