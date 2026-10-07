@@ -900,6 +900,28 @@ for (const f of fs.readdirSync(RUNS_DIR))
   }
 let active = null; // { run, child }
 const nextId = () => Math.max(0, ...runs.keys()) + 1;
+/** Runs kept: the newest KEEP_RUNS, and every run from the last KEEP_DAYS days, whichever is more. */
+const KEEP_RUNS = 500,
+  KEEP_DAYS = 30;
+/** Deletes the runs older than both limits: their records, their raw output and their snapshot refs. */
+function pruneRuns() {
+  const ids = [...runs.keys()].sort((a, b) => a - b);
+  const cutoff = Date.now() - KEEP_DAYS * 86400000;
+  const old = ids
+    .slice(0, Math.max(0, ids.length - KEEP_RUNS))
+    .filter(id => (runs.get(id).endedAt ?? runs.get(id).startedAt ?? 0) < cutoff);
+  if (!old.length) return;
+  git(['update-ref', '--stdin'], {
+    input:
+      old.flatMap(id => [`delete refs/loa/runs/${id}/before`, `delete refs/loa/runs/${id}/after`]).join('\n') + '\n',
+  });
+  for (const id of old) {
+    for (const ext of ['.json', '.stream.jsonl', '.stderr.log'])
+      fs.rmSync(path.join(RUNS_DIR, id + ext), { force: true });
+    runs.delete(id);
+  }
+}
+pruneRuns();
 const saveRun = r => fs.writeFileSync(path.join(RUNS_DIR, r.id + '.json'), JSON.stringify(r));
 const publicRun = r => ({ ...r, stream: (r.stream || []).slice(-60) });
 /** A run's title: the prompt's first line, shortened. */
@@ -971,6 +993,7 @@ async function finishRun(run, status = 'done') {
   run.endedAt = Date.now();
   if (active && active.run === run) active = null;
   saveRun(run);
+  pruneRuns();
   emitRun(run);
   if (run.changes.length && CONF.checks?.length) {
     run.checksRunning = true;

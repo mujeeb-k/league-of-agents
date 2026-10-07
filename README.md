@@ -147,6 +147,7 @@ Snapshots stay on your computer unless you send them: `git push`, `git push --al
 - Non-code files, such as images, are in snapshots and undo, but not on the map.
 - Files git ignores and new files that usually hold secrets are never recorded.
 - One run at a time in a repo.
+- It keeps the newest 500 runs, and every run from the last 30 days. Older runs are deleted, with their snapshots.
 - The website needs Chrome, Edge, Brave or Arc. Safari and Firefox use the local app instead.
 
 ## Commands and options

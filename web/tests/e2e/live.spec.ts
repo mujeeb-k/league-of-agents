@@ -2242,6 +2242,55 @@ test('hooks removed while the bridge runs are not recorded as a run, and the rep
   }
 });
 
+// Runs are kept while they're among the newest 500 or from the last 30 days; older ones go, refs and files.
+test('old runs are pruned: past the newest 500 and older than 30 days, with their snapshots', async () => {
+  const repo = makeRepo();
+  const head = git(repo, 'rev-parse', 'HEAD').trim();
+  fs.mkdirSync(path.join(repo, '.loa/runs'), { recursive: true });
+  const day = 86400000;
+  const refs: string[] = [];
+  for (let id = 1; id <= 600; id++) {
+    // Runs 1 to 50 are recent; the rest are 40 days old.
+    const endedAt = id <= 50 ? Date.now() - day : Date.now() - 40 * day;
+    const run = {
+      id,
+      agent: 'detected',
+      title: `Run ${id}`,
+      prompt: '',
+      scope: [],
+      status: 'done',
+      startedAt: endedAt - 1000,
+      endedAt,
+      before: head,
+      after: head,
+      changes: [],
+      checks: [],
+      stream: [],
+    };
+    fs.writeFileSync(path.join(repo, `.loa/runs/${id}.json`), JSON.stringify(run));
+    fs.writeFileSync(path.join(repo, `.loa/runs/${id}.stream.jsonl`), '{}\n');
+    refs.push(`create refs/loa/runs/${id}/before ${head}`, `create refs/loa/runs/${id}/after ${head}`);
+  }
+  execFileSync('git', ['update-ref', '--stdin'], { cwd: repo, input: refs.join('\n') + '\n' });
+  const b = await startBridge(repo, undefined, {}, ['--no-hooks']);
+  try {
+    const ids = (await runsOf(b)).map(r => r.id);
+    // The oldest 100 by number are past the newest 500; of those, 51 to 100 are also older than 30 days.
+    expect(ids).toHaveLength(550);
+    expect(ids.slice(0, 50)).toEqual(Array.from({ length: 50 }, (_, i) => i + 1));
+    expect(ids[50]).toBe(101);
+    const left = git(repo, 'for-each-ref', '--format=%(refname)', 'refs/loa/runs/').trim().split('\n');
+    expect(left).toHaveLength(1100);
+    expect(left).not.toContain('refs/loa/runs/51/before');
+    expect(fs.existsSync(path.join(repo, '.loa/runs/51.json'))).toBe(false);
+    expect(fs.existsSync(path.join(repo, '.loa/runs/51.stream.jsonl'))).toBe(false);
+    expect(fs.existsSync(path.join(repo, '.loa/runs/50.json'))).toBe(true);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 // A hook file in git is the team's: the bridge leaves it as it is, so nothing machine-specific shows as a change.
 test('a hooks file in git is never edited', async () => {
   const repo = makeRepo();
