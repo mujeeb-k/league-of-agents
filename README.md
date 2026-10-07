@@ -2,7 +2,7 @@
 
 ## What is League of Agents?
 
-League of Agents is an agentic code canvas: a map of your codebase where you direct coding agents and review their work.
+See every change your agents make. League of Agents is a map of your codebase where you direct coding agents and review their work.
 
 Coding agents change more code than anyone can review line by line. League of Agents shows your project as a map, and every change an agent makes lands on it. You see what changed, where, and whether it still works, then keep it or undo it.
 

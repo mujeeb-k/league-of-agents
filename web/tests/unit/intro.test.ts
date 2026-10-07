@@ -19,8 +19,11 @@ describe('the homepage HTML, before any script runs', () => {
     expect(meta('name="description"')).toBe(DESCRIPTION);
     expect(meta('property="og:description"')).toBe(DESCRIPTION);
     expect(meta('name="twitter:description"')).toBe(DESCRIPTION);
-    expect(html).toContain('<title>League of Agents: The Agentic Code Canvas</title>');
-    expect(meta('property="og:title"')).toBe('League of Agents: The Agentic Code Canvas');
+    // The page's title is the product name and the tagline, the same in every place that names the page.
+    const title = `League of Agents: ${TAGLINE}`;
+    expect(html).toContain(`<title>${title}</title>`);
+    expect(meta('property="og:title"')).toBe(title);
+    expect(meta('name="twitter:title"')).toBe(title);
   });
   it('carries a website, the app and its author as structured data, with nothing made up', () => {
     expect(ld.map(o => o['@type'])).toEqual(['WebSite', 'SoftwareApplication', 'Person']);
