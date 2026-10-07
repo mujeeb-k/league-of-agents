@@ -22,6 +22,7 @@ import { BetaTag, Dot, Spinner } from './bits';
 import { Tip } from './TopBar';
 import { CopyCommand } from './ConnectDialog';
 import { ScopeChip } from './ScopeChip';
+import { t } from '../i18n';
 
 function ScopeRow() {
   const root = S.ROOT;
@@ -35,7 +36,7 @@ function ScopeRow() {
   const fu = followTarget();
   return (
     <>
-      <span className="text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase">Scope</span>
+      <span className="text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase">{t('Scope')}</span>
       {items.length ? (
         items.map(i => (
           <ScopeChip
@@ -45,7 +46,9 @@ function ScopeRow() {
             title={
               range && ed.stale && ed.path ? staleSelection(ed.path) : (range ?? (i.k.replace(/^d:/, '') || root?.name))
             }
-            removeLabel={range && ed.stale ? 'Clear the selected lines' : `Remove ${i.label} from scope`}
+            removeLabel={
+              range && ed.stale ? t('Clear the selected lines') : t('Remove {name} from scope', { name: i.label })
+            }
             removeData={{ 'data-unsel': i.k }}
             onRemove={() => {
               // Lines that changed or were removed clear in one click, leaving their file in scope.
@@ -56,15 +59,15 @@ function ScopeRow() {
           />
         ))
       ) : (
-        <ScopeChip label="Whole repository" tone="neutral" className="all font-sans" />
+        <ScopeChip label={t('Whole repository')} tone="neutral" className="all font-sans" />
       )}
       {fu ? (
         <ScopeChip
-          label={`Follow-up to run ${fu.id}`}
+          label={t('Follow-up to run {id}', { id: fu.id })}
           tone="neutral"
           className="fu"
-          title={`Continues the same ${agentOf(fu.agent).name} session`}
-          removeLabel="Start a new session instead"
+          title={t('Continues the same {agent} session', { agent: agentOf(fu.agent).name })}
+          removeLabel={t('Start a new session instead')}
           removeData={{ 'data-nofollow': fu.id }}
           onRemove={() => {
             st.noFollow = fu.id;
@@ -126,8 +129,11 @@ function AgentPicker() {
           <div id="claudeOff" className="flex flex-col gap-1 px-2 py-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-2 text-sm">
               <Dot c={agentOf('claude').c} />
-              Claude Code
-              <span className="ml-auto text-xs">{claudeOff === 'missing' ? 'Not installed' : 'Not logged in'}</span>
+
+              {t('Claude Code')}
+              <span className="ml-auto text-xs">
+                {claudeOff === 'missing' ? t('Not installed') : t('Not logged in')}
+              </span>
             </span>
             <code className="font-mono">{CLAUDE_FIX[claudeOff].command}</code>
           </div>
@@ -135,8 +141,8 @@ function AgentPicker() {
         <DropdownMenuSeparator />
         <p className="px-2 py-2 text-xs text-muted-foreground">
           {S.CONN
-            ? 'Agents found on this machine. Changes made in any editor or other agent show up as runs on their own.'
-            : 'Demo data. Connect a repo to run real agents.'}
+            ? t('Agents found on this machine. Changes made in any editor or other agent show up as runs on their own.')
+            : t('Demo data. Connect a repo to run real agents.')}
         </p>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -146,13 +152,13 @@ function AgentPicker() {
 /** Why Claude Code can't run here, and the command that fixes it. */
 export const CLAUDE_FIX = {
   missing: {
-    title: "Claude Code isn't installed",
-    body: 'Install it to run it from here. Changes from any editor still show up as runs.',
+    title: t("Claude Code isn't installed"),
+    body: t('Install it to run it from here. Changes from any editor still show up as runs.'),
     command: 'curl -fsSL https://claude.ai/install.sh | bash',
   },
   loggedOut: {
-    title: "Claude Code isn't logged in",
-    body: 'Log in from a terminal. This clears on its own once you have.',
+    title: t("Claude Code isn't logged in"),
+    body: t('Log in from a terminal. This clears on its own once you have.'),
     command: 'claude auth login',
   },
 };
@@ -184,7 +190,7 @@ function FirstRun() {
     <div id="firstRun" className="flex min-w-0 items-center gap-2 px-1 pb-2 text-xs text-muted-foreground">
       {example ? (
         <>
-          <span className="shrink-0">Try</span>
+          <span className="shrink-0">{t('Try')}</span>
           <button
             type="button"
             id="firstRunExample"
@@ -195,7 +201,7 @@ function FirstRun() {
           </button>
         </>
       ) : (
-        <span>Select a file, then describe a change.</span>
+        <span>{t('Select a file, then describe a change.')}</span>
       )}
     </div>
   );
@@ -233,16 +239,16 @@ export function Composer() {
   // Nothing to run against: connecting or not yet connected, the bridge is offline, or no agent is installed.
   const blocked = claudeProblem
     ? claudeProblem === 'missing'
-      ? 'Install Claude Code to run it from here'
-      : 'Log in to Claude Code to run it from here'
+      ? t('Install Claude Code to run it from here')
+      : t('Log in to Claude Code to run it from here')
     : !S.ROOT
-      ? 'Connect a repo to run agents'
+      ? t('Connect a repo to run agents')
       : isOffline()
-        ? 'Reconnect to run agents'
+        ? t('Reconnect to run agents')
         : S.LIVE && !S.LIVE_AGENTS?.[st.agent]?.available
-          ? 'No agent found. Changes made in any editor still show up as runs.'
+          ? t('No agent found. Changes made in any editor still show up as runs.')
           : null;
-  const placeholder = blocked ?? 'Describe a change';
+  const placeholder = blocked ?? t('Describe a change');
   // Written on every render, as renderComposer() did. The input handler also writes it directly,
   // so a React prop would go stale (React only writes props that changed since its last render).
   // Selected lines that changed under the selection: nothing runs on them until they are selected again.
@@ -270,7 +276,7 @@ export function Composer() {
       {/* With nothing selected, a prompt runs on the whole repository: say so, and how to narrow it. */}
       {blocked ? null : !st.sel.size ? (
         <p id="selectHint" className="px-1 pb-2 text-xs text-muted-foreground text-pretty">
-          Select a file or lines on the map, or describe a change for the whole repository.
+          {t('Select a file or lines on the map, or describe a change for the whole repository.')}
         </p>
       ) : S.LIVE && !S.RUNS.length ? (
         <FirstRun />
@@ -286,11 +292,11 @@ export function Composer() {
             if (el) dom.prompt = el;
           }}
         />
-        <Tip label="Run" keys="↵">
+        <Tip label={t('Run')} keys="↵">
           <Button
             size="icon-sm"
             id="sendBtn"
-            aria-label="Run agent"
+            aria-label={t('Run agent')}
             onClick={() => void send()}
             ref={el => {
               if (el) dom.sendBtn = el;

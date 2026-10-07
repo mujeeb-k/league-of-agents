@@ -11,6 +11,7 @@ import { setConnUI, useRegion } from '../state/render';
 import { Spinner } from './bits';
 import { CopyCommand } from './ConnectDialog';
 import { Button } from './ui/button';
+import { t } from '../i18n';
 
 function Card({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
@@ -46,34 +47,42 @@ function Unreachable({ conn, why }: { conn: Conn; why: string }) {
       <div className="flex gap-2">
         {primary}
         <Button variant="outline" size="sm" id="retryConnect" onClick={() => startConnect(conn)}>
-          Try again
+          {t('Try again')}
         </Button>
       </div>
       <Button variant="ghost" size="sm" id="showDemo" className="text-ink2" onClick={showDemo}>
-        Show the demo instead
+        {t('Show the demo instead')}
       </Button>
     </div>
   );
-  if (why !== UNREACHABLE && why !== BLOCKED)
+  if (why !== t(UNREACHABLE) && why !== BLOCKED)
     return (
-      <Card icon={<Unplug />} title="Your bridge didn't accept this link">
+      <Card icon={<Unplug />} title={t("Your bridge didn't accept this link")}>
         <p className="text-ink2 text-pretty">{why}</p>
         {actions(null)}
       </Card>
     );
   return (
-    <Card icon={<Unplug />} title="Can't reach your bridge">
+    <Card icon={<Unplug />} title={t("Can't reach your bridge")}>
       {why === BLOCKED ? (
         <p id="blocked" className="text-ink2 text-pretty">
-          {`This browser is set to keep ${location.host} from reaching apps on your computer, so it can't reach the bridge. The local app needs no permission. To allow this site instead, click the icon left of the address, turn on access to apps on this device, and try again.`}
+          {t(
+            "This browser is set to keep {host} from reaching apps on your computer, so it can't reach the bridge. The local app needs no permission. To allow this site instead, click the icon left of the address, turn on access to apps on this device, and try again.",
+            { host: location.host },
+          )}
         </p>
       ) : (
         <>
           <p className="text-ink2 text-pretty">
-            {`Nothing answered at ${conn.base.replace(/^https?:\/\//, '')}. The bridge may not be running, or this browser may be keeping the page from reaching your computer (in Chrome, the local network permission). The local app needs no permission.`}
+            {t(
+              'Nothing answered at {address}. The bridge may not be running, or this browser may be keeping the page from reaching your computer (in Chrome, the local network permission). The local app needs no permission.',
+              { address: conn.base.replace(/^https?:\/\//, '') },
+            )}
           </p>
           <div className="w-full text-left">
-            <p className="mb-2 text-xs text-muted-foreground">If the bridge isn't running, start it in your repo:</p>
+            <p className="mb-2 text-xs text-muted-foreground">
+              {t("If the bridge isn't running, start it in your repo:")}
+            </p>
             <CopyCommand ids={['unreachableCommand', 'unreachableCopy']} compact />
           </div>
         </>
@@ -81,7 +90,7 @@ function Unreachable({ conn, why }: { conn: Conn; why: string }) {
       {actions(
         <Button asChild size="sm" id="localLink">
           <a href={`${conn.base}/#t=${conn.token}`} className="no-underline">
-            Open the local app
+            {t('Open the local app')}
           </a>
         </Button>,
       )}
@@ -95,20 +104,23 @@ function Unreachable({ conn, why }: { conn: Conn; why: string }) {
  */
 function AskAccess({ conn }: { conn: Conn }) {
   return (
-    <Card icon={<Laptop />} title="Your browser will ask to connect">
+    <Card icon={<Laptop />} title={t('Your browser will ask to connect')}>
       <p className="text-ink2 text-pretty">
-        {`League of Agents runs on your computer, and this page connects to it there. Next, your browser asks to let ${location.host} reach apps on this device. Choose Allow.`}
+        {t(
+          'League of Agents runs on your computer, and this page connects to it there. Next, your browser asks to let {host} reach apps on this device. Choose Allow.',
+          { host: location.host },
+        )}
       </p>
       <p className="text-xs text-muted-foreground text-pretty">
         League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized.
       </p>
       <div className="flex flex-col items-center gap-1">
         <Button size="sm" id="askContinue" onClick={() => startConnect(conn, true)}>
-          Continue
+          {t('Continue')}
         </Button>
         <Button asChild variant="ghost" size="sm" id="askLocal" className="text-ink2">
           <a href={`${conn.base}/#t=${conn.token}`} className="no-underline">
-            Open the local app instead
+            {t('Open the local app instead')}
           </a>
         </Button>
       </div>
@@ -123,23 +135,25 @@ export function StageState() {
   if (st.asking && !S.ROOT) card = <AskAccess conn={st.asking} />;
   else if (st.starting && !S.ROOT)
     card = (
-      <Card icon={<Spinner className="text-current" />} title="Connecting to your repo">
+      <Card icon={<Spinner className="text-current" />} title={t('Connecting to your repo')}>
         <p className="text-ink2 text-pretty">
-          Waiting for the bridge on this computer. If Chrome or Edge asks to let this site reach your computer, choose
-          Allow.
+          {t(
+            'Waiting for the bridge on this computer. If Chrome or Edge asks to let this site reach your computer, choose Allow.',
+          )}
         </p>
         <Button variant="outline" size="sm" id="showDemo" onClick={showDemo}>
-          Show the demo meanwhile
+          {t('Show the demo meanwhile')}
         </Button>
       </Card>
     );
   else if (st.unreachable && !S.ROOT) card = <Unreachable {...st.unreachable} />;
   else if (S.CONN && S.ROOT && S.FILES.size === 0)
     card = (
-      <Card icon={<FolderPlus />} title="This repository has no files yet">
+      <Card icon={<FolderPlus />} title={t('This repository has no files yet')}>
         <p className="text-ink2 text-pretty">
-          Add a file and commit it, or describe what to build in the prompt below. New files appear here as they are
-          made.
+          {t(
+            'Add a file and commit it, or describe what to build in the prompt below. New files appear here as they are made.',
+          )}
         </p>
       </Card>
     );

@@ -15,6 +15,7 @@ import { closeEditor, ed, openEditor } from './editing';
 import { renderAll, renderSel, renderSide, setConnUI } from './render';
 import { applyPanels, toggleInsp, toggleSide } from './panels';
 import { watchSystemTheme } from './theme';
+import { t } from '../i18n';
 
 function onKey(e: KeyboardEvent) {
   // Handled already, as by the code editor (⌘K on selected lines writes an instruction).
@@ -99,7 +100,7 @@ export function startConnect(target: Conn, explained = false) {
     }
     let why = access === 'denied' ? BLOCKED : await connect(target, true);
     // Refused at the prompt just now: say so, rather than that nothing answered.
-    if (why === UNREACHABLE && (await localAccess(target)) === 'denied') why = BLOCKED;
+    if (why === t(UNREACHABLE) && (await localAccess(target)) === 'denied') why = BLOCKED;
     st.starting = false;
     if (why && !S.ROOT) st.unreachable = { conn: target, why };
     renderAll();

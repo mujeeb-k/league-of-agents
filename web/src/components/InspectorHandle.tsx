@@ -3,6 +3,7 @@ import { useRef } from 'react';
 import { dom } from '../state/app';
 import { INSP_MAX, INSP_MIN, panels, setInspW } from '../state/panels';
 import { useRegion } from '../state/render';
+import { t } from '../i18n';
 
 export function InspectorHandle() {
   useRegion('top');
@@ -13,7 +14,7 @@ export function InspectorHandle() {
       id="inspHandle"
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize inspector"
+      aria-label={t('Resize inspector')}
       aria-valuemin={INSP_MIN}
       aria-valuemax={INSP_MAX}
       aria-valuenow={panels.inspW}

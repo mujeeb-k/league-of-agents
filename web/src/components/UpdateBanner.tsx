@@ -7,6 +7,7 @@ import { S, dom, st } from '../state/app';
 import { bump, useRegion } from '../state/render';
 import { CopyCommand } from './ConnectDialog';
 import { Button } from './ui/button';
+import { t } from '../i18n';
 
 export function UpdateBanner() {
   useRegion('conn');
@@ -27,9 +28,22 @@ export function UpdateBanner() {
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <p>
-          <span className="font-semibold">Update your bridge.</span>{' '}
+          <span className="font-semibold">{t('Update your bridge.')}</span>{' '}
           <span className="text-ink2">
-            {`It's ${S.bridgeVersion ? `version ${S.bridgeVersion}` : 'an older version'}. It still works; ${MIN_BRIDGE} or later has fixes. Stop it, then start the latest in your repo:`}
+            {S.bridgeVersion
+              ? t(
+                  "It's version {version}. It still works; {min} or later has fixes. Stop it, then start the latest in your repo:",
+                  {
+                    version: S.bridgeVersion,
+                    min: MIN_BRIDGE,
+                  },
+                )
+              : t(
+                  "It's an older version. It still works; {min} or later has fixes. Stop it, then start the latest in your repo:",
+                  {
+                    min: MIN_BRIDGE,
+                  },
+                )}
           </span>
         </p>
         <CopyCommand ids={['updateCommand', 'updateCopy']} compact />
@@ -38,7 +52,7 @@ export function UpdateBanner() {
         variant="ghost"
         size="icon-sm"
         id="closeUpdate"
-        aria-label="Close"
+        aria-label={t('Close')}
         className="-mt-1"
         onClick={() => {
           st.updateDismissed = true;

@@ -3,7 +3,7 @@
 import { Fragment, memo, useLayoutEffect } from 'react';
 import { CH, CW } from '../lib/constants';
 import type { Token } from '../lib/highlight';
-import { plural } from '../lib/util';
+import { t, tn } from '../i18n';
 import type { Author } from '../lib/attribution';
 import { scene, updateEdgeFocus, type CardData, type FrameData, type SelBox, type TileData } from '../lib/scene';
 import { fitLabels } from '../lib/labels';
@@ -62,7 +62,7 @@ const Frame = memo(function Frame({ f }: { f: FrameData }) {
           <FileIcon kind="folder" />
           {f.name + '/'}
         </b>
-        {f.count ? <span className="cnt">{plural(f.count, 'file')}</span> : null}
+        {f.count ? <span className="cnt">{tn(f.count, '{n} file', '{n} files')}</span> : null}
         {f.note ? <span>{f.note}</span> : null}
         {f.stat ? <Stat a={f.stat.a} d={f.stat.d} /> : null}
       </div>
@@ -96,18 +96,18 @@ const Card = memo(function Card({ c }: { c: CardData }) {
       <div className="card ghost" data-path={c.path} style={box(c.x, c.y, CW, CH)}>
         {c.name}
         <br />
-        is created in this run
+        {t('is created in this run')}
       </div>
     );
   return (
     <div className={c.cls} data-path={c.path} style={box(c.x, c.y, CW, CH)}>
       <header>
         <span className="fn">{c.name}</span>
-        {c.from ? <span className="from">{`renamed from ${c.from}`}</span> : null}
+        {c.from ? <span className="from">{t('renamed from {name}', { name: c.from })}</span> : null}
         {c.stat ? <Stat a={c.stat.a} d={c.stat.d} /> : null}
       </header>
       <div className="code">
-        {c.above ? <div className="more">{`${plural(c.above, 'line')} above`}</div> : null}
+        {c.above ? <div className="more">{tn(c.above, '{n} line above', '{n} lines above')}</div> : null}
         {c.rows.map(r => (
           <div
             key={r.id}
@@ -121,8 +121,8 @@ const Card = memo(function Card({ c }: { c: CardData }) {
             </span>
           </div>
         ))}
-        {c.rest > 0 ? <div className="more">{plural(c.rest, 'more line')}</div> : null}
-        {c.empty ? <div className="more">Empty file</div> : null}
+        {c.rest > 0 ? <div className="more">{tn(c.rest, '{n} more line', '{n} more lines')}</div> : null}
+        {c.empty ? <div className="more">{t('Empty file')}</div> : null}
       </div>
       {c.imports || c.usedBy ? (
         <div className="uses">

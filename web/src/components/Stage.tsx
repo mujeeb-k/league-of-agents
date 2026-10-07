@@ -4,7 +4,8 @@ import { applyView, flyDir, flyFile, flyTo, zoomAt } from '../lib/camera';
 import { CH, CW } from '../lib/constants';
 import { existsNow } from '../lib/model';
 import { updateEdgeFocus } from '../lib/scene';
-import { clamp, plural } from '../lib/util';
+import { t, tn } from '../i18n';
+import { clamp } from '../lib/util';
 import { S, dom, st } from '../state/app';
 import { toggleSel } from '../state/actions';
 import { openEditor } from '../state/editing';
@@ -17,6 +18,7 @@ import { StageState } from './StageState';
 import { IntroCard } from './Intro';
 import { UpdateBanner } from './UpdateBanner';
 import { Kbd } from './ui/kbd';
+import { Phrase } from './bits';
 import { useScene } from './Scene';
 
 interface Drag {
@@ -131,7 +133,7 @@ function bindStage(stage: HTMLElement) {
           n++;
         }
       renderSel();
-      if (n) toast(`${plural(n, 'file')} added to scope`);
+      if (n) toast(tn(n, '{n} file added to scope', '{n} files added to scope'));
       return;
     }
     if (d.moved) return;
@@ -250,7 +252,7 @@ export function Stage() {
   return (
     <main
       id="stage"
-      aria-label="Code canvas"
+      aria-label={t('Code canvas')}
       className="col-start-1 row-start-2"
       ref={el => {
         if (el) dom.stage = el;
@@ -285,7 +287,10 @@ export function Stage() {
             if (el) dom.tip = el;
           }}
         >
-          Scroll to pan. Pinch or <Kbd>⌘</Kbd> scroll to zoom. Shift-drag to select.
+          <Phrase
+            text={t('Scroll to pan. Pinch or {key} scroll to zoom. Shift-drag to select.')}
+            nodes={{ key: <Kbd>⌘</Kbd> }}
+          />
         </div>
       </div>
       <UpdateBanner />

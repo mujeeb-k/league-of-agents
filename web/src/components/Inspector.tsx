@@ -20,7 +20,6 @@ import { runsRepoCode } from '../lib/checks';
 import { agentOf, modelOf } from '../lib/constants';
 import { existsNow, fileStat, linesAt, needsYou, runStats, viewOf } from '../lib/model';
 import type { Run } from '../lib/types';
-import { plural } from '../lib/util';
 import { S, dom, st } from '../state/app';
 import { panels } from '../state/panels';
 import { isOffline, propagate, runAction, selectRun, toggleReviewed, viewFile } from '../state/actions';
@@ -34,6 +33,7 @@ import { Markdown } from './Markdown';
 import { ScopeChip } from './ScopeChip';
 import { BetaTag, Dot, Spinner, Stat } from './bits';
 import { IntroSection } from './Intro';
+import { t, tn } from '../i18n';
 
 const Section = ({ children, className }: { children: React.ReactNode; className?: string }) => (
   <section className={cn('border-b p-4', className)}>{children}</section>
@@ -109,7 +109,7 @@ function Reply({ run, text, open }: { run: Run; text: string; open: boolean }) {
             bump('inspector');
           }}
         >
-          Show all
+          {t('Show all')}
         </button>
       )}
     </>
@@ -155,7 +155,7 @@ function RunView({ run }: { run: Run }) {
   const reply =
     run.summary ||
     [...(run.stream || [])].reverse().find(e => e.t === 'text')?.text ||
-    (running ? 'Working…' : 'No reply recorded.');
+    (running ? t('Working…') : t('No reply recorded.'));
   // While running, notes show progress; a note that is already the reply above is not repeated.
   const acts = (run.stream || [])
     .filter(e => (e.t !== 'text' || running) && !(e.t === 'text' && e.text === reply))
@@ -163,7 +163,7 @@ function RunView({ run }: { run: Run }) {
   const checksFailed = !!run.checks?.some(c => c.ok === false);
   // Watch mode's runs and saves from the editor have no prompt, reply or scope.
   const detected = run.agent === 'detected' || run.agent === 'you';
-  const meta = [`Run ${run.id}`, run.when, run.dur, run.cost != null ? '$' + run.cost.toFixed(3) : '']
+  const meta = [t('Run {id}', { id: run.id }), run.when, run.dur, run.cost != null ? '$' + run.cost.toFixed(3) : '']
     .filter(Boolean)
     .join(' · ');
   return (
@@ -180,11 +180,13 @@ function RunView({ run }: { run: Run }) {
         </div>
         {detected ? null : (
           <div className="runscope mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase">Scope</span>
+            <span className="text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
+              {t('Scope')}
+            </span>
             {run.scope?.length ? (
               run.scope.map(s => <ScopeChip key={s} label={s} title={s} />)
             ) : (
-              <ScopeChip label="Whole repository" tone="neutral" className="all font-sans" />
+              <ScopeChip label={t('Whole repository')} tone="neutral" className="all font-sans" />
             )}
           </div>
         )}
@@ -193,24 +195,24 @@ function RunView({ run }: { run: Run }) {
         <Section>
           <p className="text-ink2 text-pretty">
             {run.agent === 'you'
-              ? 'Saved in the editor on the map.'
-              : 'Changed outside a run, in an editor or by another agent.'}
+              ? t('Saved in the editor on the map.')
+              : t('Changed outside a run, in an editor or by another agent.')}
           </p>
           {run.agent === 'you' && !run.reverted ? (
             // Propagate: the agent updates whatever depends on this save.
             <>
               <Button variant="outline" size="sm" className="mt-3" id="propagate" onClick={() => void propagate(run)}>
-                Update what depends on this
+                {t('Update what depends on this')}
               </Button>
               <p className="mt-2 text-xs text-muted-foreground text-pretty">
-                The diff of your change goes into the agent's prompt.
+                {t("The diff of your change goes into the agent's prompt.")}
               </p>
             </>
           ) : null}
         </Section>
       ) : (
         <Section>
-          <div className="who mb-1 text-xs text-muted-foreground">You</div>
+          <div className="who mb-1 text-xs text-muted-foreground">{t('You')}</div>
           <div className="bubble me mb-3 max-h-72 overflow-auto rounded-lg bg-muted px-3 py-2 leading-relaxed whitespace-pre-line text-pretty">
             {run.prompt || run.title}
           </div>
@@ -227,7 +229,7 @@ function RunView({ run }: { run: Run }) {
                 <Hand className="size-4 text-mod" />
               </span>
               <div className="min-w-0">
-                <div className="font-medium">{`${a.name} needs you`}</div>
+                <div className="font-medium">{t('{agent} needs you', { agent: a.name })}</div>
                 <p className="text-ink2 text-pretty [overflow-wrap:anywhere]">{run.turn!.needs || run.turn!.detail}</p>
               </div>
             </div>
@@ -255,7 +257,7 @@ function RunView({ run }: { run: Run }) {
           {running ? (
             <div className="actions mt-3 flex gap-2">
               <ActButton run={run} act="cancel" variant="outline" className="flex-1">
-                Cancel run
+                {t('Cancel run')}
               </ActButton>
             </div>
           ) : null}
@@ -263,7 +265,7 @@ function RunView({ run }: { run: Run }) {
       )}
       {run.checks?.length || run.checksRunning ? (
         <Section>
-          <Label>Checks</Label>
+          <Label>{t('Checks')}</Label>
           <div className="checks flex flex-col gap-2">
             {(run.checks || []).map((c, i) =>
               c.couldNotRun ? (
@@ -288,7 +290,7 @@ function RunView({ run }: { run: Run }) {
             {run.checksRunning ? (
               <div className="check flex items-center gap-2">
                 <Spinner />
-                <span className="sm text-ink2">Running checks…</span>
+                <span className="sm text-ink2">{t('Running checks…')}</span>
               </div>
             ) : null}
           </div>
@@ -299,7 +301,7 @@ function RunView({ run }: { run: Run }) {
       {running ? null : (
         <Section>
           <h3 className="mb-3 flex items-center justify-between text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
-            <span>Review</span>
+            <span>{t('Review')}</span>
             {files.length ? (
               <span className="num font-normal tracking-normal normal-case tabular-nums">{`${done} of ${files.length}`}</span>
             ) : null}
@@ -331,7 +333,7 @@ function RunView({ run }: { run: Run }) {
                     >
                       <button
                         data-rev={p}
-                        aria-label={rv ? 'Mark as not reviewed' : 'Mark as reviewed'}
+                        aria-label={rv ? t('Mark as not reviewed') : t('Mark as reviewed')}
                         className={cn(
                           'chk inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring [&_svg]:size-4',
                           rv ? 'on text-add' : 'text-ink3 hover:text-foreground',
@@ -362,15 +364,16 @@ function RunView({ run }: { run: Run }) {
                   <Kbd>J</Kbd>
                   <Kbd>K</Kbd>
                 </KbdGroup>
-                step through files
+                {t('step through files')}
                 <Kbd>R</Kbd>
-                mark reviewed
+                {t('mark reviewed')}
               </div>
             </>
           ) : (
             <div className="quiet flex items-center gap-2 text-muted-foreground">
               <CircleDashed className="size-4 text-ink3" />
-              No changes. No files were edited in this run.
+
+              {t('No changes. No files were edited in this run.')}
             </div>
           )}
           {run.outOfScope?.length ? (
@@ -380,7 +383,7 @@ function RunView({ run }: { run: Run }) {
                 <TriangleAlert className="size-4 text-mod" />
               </span>
               <span>
-                Changed outside the scope:{' '}
+                {t('Changed outside the scope:')}{' '}
                 <span className="font-mono text-xs [overflow-wrap:anywhere]">{run.outOfScope.join(', ')}</span>
               </span>
             </div>
@@ -388,7 +391,8 @@ function RunView({ run }: { run: Run }) {
           {run.reverted ? (
             <div className="outcome mt-4 flex items-center gap-2 text-ink2">
               <Undo2 className="size-4 text-ink3" />
-              Reverted. Its changes are gone from your working tree.
+
+              {t('Reverted. Its changes are gone from your working tree.')}
             </div>
           ) : files.length ? (
             <>
@@ -396,26 +400,26 @@ function RunView({ run }: { run: Run }) {
                 // A kept run shows that it was kept; revert stays available.
                 <div className="outcome mt-4 flex items-center gap-2">
                   <CircleCheck className="size-4 text-add" />
-                  <span className="font-medium">Kept</span>
-                  <span className="text-muted-foreground">Changes stay in your working tree.</span>
+                  <span className="font-medium">{t('Kept')}</span>
+                  <span className="text-muted-foreground">{t('Changes stay in your working tree.')}</span>
                   <ActButton run={run} act="revert" variant="outline" size="sm" className="ml-auto">
-                    Revert
+                    {t('Revert')}
                   </ActButton>
                 </div>
               ) : (
                 <div className="actions mt-4 flex gap-2">
                   {/* The evidence picks the primary action: failed checks make Revert primary, Keep secondary. */}
                   <ActButton run={run} act="revert" variant={checksFailed ? 'default' : 'outline'} className="flex-1">
-                    Revert run
+                    {t('Revert run')}
                   </ActButton>
                   <ActButton run={run} act="keep" variant={checksFailed ? 'outline' : 'default'} className="flex-1">
-                    {done === files.length ? 'Keep changes' : 'Keep anyway'}
+                    {done === files.length ? t('Keep changes') : t('Keep anyway')}
                   </ActButton>
                 </div>
               )}
               <div className="hintline mt-3 flex items-center gap-1 text-xs text-muted-foreground">
                 <Stat a={s.a} d={s.d} />
-                {` across ${plural(s.n, 'file')}`}
+                {tn(s.n, 'across {n} file', 'across {n} files')}
               </div>
             </>
           ) : null}
@@ -428,7 +432,8 @@ function RunView({ run }: { run: Run }) {
 /** The first changed line of a file in the run on screen, or its first line. */
 const firstChange = (v: ReturnType<typeof viewOf>) => v.rows.find(r => r.k)?.n ?? 1;
 
-const AUTHOR_NAMES: Record<Author, string> = { agent: 'Agent', human: 'Human', mixed: 'Mixed', unknown: 'Unknown' };
+const authorName = (a: Author) =>
+  ({ agent: t('Agent'), human: t('Human'), mixed: t('Mixed'), unknown: t('Unknown') })[a];
 
 /** What the clicked line's label means, in words, given the run that last wrote it, if any. */
 function authorText(o: Owner, run: Run | null): string {
@@ -436,16 +441,27 @@ function authorText(o: Owner, run: Run | null): string {
     who = run ? agentOf(run.agent).name : '';
   if (o.source === 'git-ai')
     return author === 'human'
-      ? `Git AI's note on commit ${o.commit} says ${o.by || 'a person'} wrote it.`
-      : `Git AI's note on commit ${o.commit} says an agent wrote it${o.by ? `: ${o.by}` : ''}.`;
+      ? t("Git AI's note on commit {commit} says {who} wrote it.", {
+          commit: o.commit ?? '',
+          who: o.by || t('a person'),
+        })
+      : o.by
+        ? t("Git AI's note on commit {commit} says an agent wrote it: {who}.", { commit: o.commit ?? '', who: o.by })
+        : t("Git AI's note on commit {commit} says an agent wrote it.", { commit: o.commit ?? '' });
   if (o.source === 'trailer')
-    return `Commit ${o.commit} names an agent as co-author (${o.by}). It covers the whole commit, not lines, so this line is at most partly the agent's.`;
-  if (author === 'agent') return `${who} wrote it with its edit tools.`;
-  if (author === 'human') return 'Saved in the editor on the map.';
-  if (author === 'mixed') return 'Rewritten in part after an agent wrote it.';
+    return t(
+      "Commit {commit} names an agent as co-author ({who}). It covers the whole commit, not lines, so this line is at most partly the agent's.",
+      { commit: o.commit ?? '', who: o.by ?? '' },
+    );
+  if (author === 'agent') return t('{agent} wrote it with its edit tools.', { agent: who });
+  if (author === 'human') return t('Saved in the editor on the map.');
+  if (author === 'mixed') return t('Rewritten in part after an agent wrote it.');
   return run
-    ? `Changed in run ${run.id}, by ${who}. Who typed it isn't known: the agent didn't write it with its edit tools.`
-    : "No run kept on this computer changed it, so who wrote it isn't known.";
+    ? t("Changed in run {id}, by {agent}. Who typed it isn't known: the agent didn't write it with its edit tools.", {
+        id: run.id,
+        agent: who,
+      })
+    : t("No run kept on this computer changed it, so who wrote it isn't known.");
 }
 
 /** Coloured by author: the file's lines by who wrote them, and the clicked line's run and prompt. */
@@ -472,17 +488,17 @@ function Authors({ path }: { path: string }) {
   const run = o?.run ? (S.RUNS.find(r => r.id === o.run) ?? null) : null;
   return (
     <Section>
-      <Label>Authors</Label>
+      <Label>{t('Authors')}</Label>
       <div id="authorShare" className="flex flex-wrap gap-x-3 gap-y-1 text-[13px] tabular-nums">
         {(['agent', 'mixed', 'human', 'unknown'] as const).map(a => (
-          <span key={a} className={`au-${a} text-[var(--au,var(--ink2))]`}>{`${AUTHOR_NAMES[a]} ${n[a]}`}</span>
+          <span key={a} className={`au-${a} text-[var(--au,var(--ink2))]`}>{`${authorName(a)} ${n[a]}`}</span>
         ))}
       </div>
       {o ? (
         <div id="authorLine" className="mt-3 border-t pt-3">
           <div className="font-medium">
-            {`Line ${line}: `}
-            <span className={`au-${o.author} text-[var(--au,var(--ink2))]`}>{AUTHOR_NAMES[o.author]}</span>
+            {t('Line {n}:', { n: line ?? '' })}{' '}
+            <span className={`au-${o.author} text-[var(--au,var(--ink2))]`}>{authorName(o.author)}</span>
           </div>
           <p className="mt-1 text-ink2 text-pretty">{authorText(o, run)}</p>
           {run ? (
@@ -490,20 +506,20 @@ function Authors({ path }: { path: string }) {
               <div className="mt-2 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                 <Dot c={agentOf(run.agent).c} />
                 <span className="min-w-0 truncate">
-                  {[agentOf(run.agent).name, modelOf(run.agent, run.model), `Run ${run.id}`, run.when]
+                  {[agentOf(run.agent).name, modelOf(run.agent, run.model), t('Run {id}', { id: run.id }), run.when]
                     .filter(Boolean)
                     .join(' · ')}
                 </span>
               </div>
               {run.prompt ? <p className="mt-2 line-clamp-3 text-pretty">{run.prompt}</p> : null}
               <Button variant="outline" size="sm" className="mt-3" id="openAuthorRun" onClick={() => selectRun(run)}>
-                Open run
+                {t('Open run')}
               </Button>
             </>
           ) : null}
         </div>
       ) : (
-        <p className="mt-2 text-xs text-muted-foreground">Click a line to see who wrote it, in which run.</p>
+        <p className="mt-2 text-xs text-muted-foreground">{t('Click a line to see who wrote it, in which run.')}</p>
       )}
     </Section>
   );
@@ -535,7 +551,7 @@ function FileView({ path }: { path: string }) {
                   data-editor={e.id}
                   className="no-underline"
                 >
-                  {`Open in ${e.name}`}
+                  {t('Open in {editor}', { editor: e.name })}
                 </a>
               </Button>
             ))}
@@ -545,36 +561,36 @@ function FileView({ path }: { path: string }) {
       <Authors path={path} />
       <Section>
         <dl className="kv grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-[13px]">
-          <dt className="text-muted-foreground">Lines</dt>
+          <dt className="text-muted-foreground">{t('Lines')}</dt>
           <dd className="tabular-nums">
             {(st.run ? v.lines.length : (S.TOTALS.get(f.path) ?? v.lines.length)).toLocaleString()}
           </dd>
-          <dt className="text-muted-foreground">Imports</dt>
+          <dt className="text-muted-foreground">{t('Imports')}</dt>
           <dd className="tabular-nums">{outs.length}</dd>
-          <dt className="text-muted-foreground">Used by</dt>
+          <dt className="text-muted-foreground">{t('Used by')}</dt>
           <dd className="tabular-nums">{ins.length}</dd>
         </dl>
       </Section>
       {outs.length ? (
         <Section>
-          <Label>Imports</Label>
+          <Label>{t('Imports')}</Label>
           <div className="links flex flex-col gap-1">{outs.map(link)}</div>
         </Section>
       ) : null}
       {ins.length ? (
         <Section>
-          <Label>Used by</Label>
+          <Label>{t('Used by')}</Label>
           <div className="links flex flex-col gap-1">{ins.map(link)}</div>
         </Section>
       ) : null}
       {touched.length ? (
         <Section>
-          <Label>Changed in</Label>
+          <Label>{t('Changed in')}</Label>
           <div className="links flex flex-col gap-1">
             {touched.map(r => (
               <button key={r.id} data-openrun={r.id} className={cn(linkClass, 'font-sans text-[13px]')}>
                 <Dot c={agentOf(r.agent).c} />
-                <span className="truncate">{`Run ${r.id}: ${r.title}`}</span>
+                <span className="truncate">{t('Run {id}: {title}', { id: r.id, title: r.title })}</span>
               </button>
             ))}
           </div>
@@ -584,16 +600,17 @@ function FileView({ path }: { path: string }) {
   );
 }
 
-const KEYS: [string, string][] = [
-  ['Scroll', 'Pan the canvas'],
-  ['⌘ Scroll', 'Zoom toward the pointer'],
-  ['Click', 'Add a file or folder to scope'],
-  ['Double click', 'Edit a code box, or zoom in'],
-  ['Enter', 'Edit the selected file'],
-  ['Shift drag', 'Select an area'],
-  ['F', 'Zoom to selection'],
-  ['0', 'Fit everything'],
-  ['/', 'Write a prompt'],
+/** The canvas's gestures and keys, in the person's language when shown. */
+const keys = (): [string, string][] => [
+  [t('Scroll'), t('Pan the canvas')],
+  [t('⌘ Scroll'), t('Zoom toward the pointer')],
+  [t('Click'), t('Add a file or folder to scope')],
+  [t('Double click'), t('Edit a code box, or zoom in')],
+  ['Enter', t('Edit the selected file')],
+  [t('Shift drag'), t('Select an area')],
+  ['F', t('Zoom to selection')],
+  ['0', t('Fit everything')],
+  ['/', t('Write a prompt')],
 ];
 
 /** A repo with no checks: the checks found in it, turned on with one click. Nothing runs before that. */
@@ -611,13 +628,13 @@ function CouldNotRun({ name, error }: { name: string; error: string }) {
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <span className="nm font-medium">{name}</span>
-          <span className="text-xs text-ink2">Couldn't run</span>
+          <span className="text-xs text-ink2">{t("Couldn't run")}</span>
         </div>
         <div className="sm mt-1 line-clamp-3 font-mono text-xs text-ink2 [overflow-wrap:anywhere]" title={error}>
           {error}
         </div>
         <p className="mt-1 text-xs text-muted-foreground text-pretty">
-          {on ? 'Something this check needs is missing on this machine.' : 'Turned off.'}
+          {on ? t('Something this check needs is missing on this machine.') : t('Turned off.')}
         </p>
       </div>
       {on ? (
@@ -629,7 +646,7 @@ function CouldNotRun({ name, error }: { name: string; error: string }) {
           onClick={() => void turnOffCheck(name)}
         >
           {st.busy === `checkoff:${name}` ? <Spinner className="text-current" /> : null}
-          Turn off
+          {t('Turn off')}
         </Button>
       ) : null}
     </div>
@@ -641,11 +658,11 @@ function ChecksOffer() {
   if (!S.LIVE || !S.suggestedChecks.length) return null;
   return (
     <Section>
-      <Label>Checks</Label>
+      <Label>{t('Checks')}</Label>
       <p className="mb-2 text-ink2 text-pretty">
         {S.checksFromRepo
-          ? "This repo's loa.config.json asks to run these commands after each run:"
-          : 'No checks are set up. League of Agents found these and can run them after each run:'}
+          ? t("This repo's loa.config.json asks to run these commands after each run:")
+          : t('No checks are set up. League of Agents found these and can run them after each run:')}
       </p>
       <ul id="suggestedChecks" className="mb-3 flex flex-col gap-1">
         {S.suggestedChecks.map(c => {
@@ -680,7 +697,7 @@ function ChecksOffer() {
         onClick={() => void enableChecks(share)}
       >
         {st.busy === 'checks' ? <Spinner className="text-current" /> : null}
-        Run these after each run
+        {t('Run these after each run')}
       </Button>
       {S.checksFromRepo ? null : (
         <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-ink2">
@@ -691,13 +708,13 @@ function ChecksOffer() {
             onChange={e => setShare(e.target.checked)}
             className="mt-px size-3.5 shrink-0 cursor-pointer accent-[var(--sel)]"
           />
-          <span className="text-pretty">Also save them in loa.config.json, to share with your team</span>
+          <span className="text-pretty">{t('Also save them in loa.config.json, to share with your team')}</span>
         </label>
       )}
       <p className="mt-2 text-xs text-muted-foreground text-pretty">
         {S.checksFromRepo
-          ? 'Nothing runs until you turn them on here. Read the commands first: they run on your computer.'
-          : 'Nothing runs until you turn them on. Unless you share them, they stay in .loa/, out of your repo.'}
+          ? t('Nothing runs until you turn them on here. Read the commands first: they run on your computer.')
+          : t('Nothing runs until you turn them on. Unless you share them, they stay in .loa/, out of your repo.')}
       </p>
     </Section>
   );
@@ -714,17 +731,23 @@ function RepoView() {
     <>
       <Section>
         <h2 className="text-[15px] font-semibold tracking-[-0.005em]">{root.name}</h2>
-        <div className="meta quiet mt-2 text-muted-foreground tabular-nums">{`${plural(nFiles, 'file')}, ${nLines.toLocaleString()} lines, ${plural(S.RUNS.length, 'run')}`}</div>
+        <div className="meta quiet mt-2 text-muted-foreground tabular-nums">
+          {[
+            tn(nFiles, '{n} file', '{n} files'),
+            tn(nLines, '{n} line', '{n} lines'),
+            tn(S.RUNS.length, '{n} run', '{n} runs'),
+          ].join(', ')}
+        </div>
       </Section>
       {S.CONN && S.watchOff ? (
         <Section>
-          <Label>Watch mode is off</Label>
+          <Label>{t('Watch mode is off')}</Label>
           <p id="watchOff" className="text-ink2 text-pretty">
-            {`Edits made outside a run aren't recorded: ${S.watchOff}.`}
+            {t("Edits made outside a run aren't recorded: {why}.", { why: S.watchOff })}
           </p>
           {/limit on watched folders/.test(S.watchOff) ? (
             <p className="mt-2 text-xs text-muted-foreground text-pretty">
-              On Linux, raise it, then restart League of Agents:{' '}
+              {t('On Linux, raise it, then restart League of Agents:')}{' '}
               <code className="font-mono">sudo sysctl fs.inotify.max_user_watches=524288</code>
             </p>
           ) : null}
@@ -734,26 +757,26 @@ function RepoView() {
       {S.CONN ? null : (
         // The demo invites you to try it on your own code: the command, a copy button, the requirements.
         <Section>
-          <Label>Try it on your code</Label>
+          <Label>{t('Try it on your code')}</Label>
           <p className="mb-3 text-ink2 text-pretty">
-            This is a demo. To use it on your repo, paste this into your coding agent:
+            {t('This is a demo. To use it on your repo, paste this into your coding agent:')}
           </p>
           <CopyCommand ids={['trySetup', 'trySetupCopy']} text={SETUP_PROMPT} compact />
-          <p className="mt-3 mb-2 text-xs text-muted-foreground">Or run it yourself in the repo:</p>
+          <p className="mt-3 mb-2 text-xs text-muted-foreground">{t('Or run it yourself in the repo:')}</p>
           <CopyCommand ids={['tryCommand', 'tryCopy']} compact />
           <ul className="mt-3 flex list-disc flex-col gap-1 pl-4 text-xs text-muted-foreground">
-            <li>macOS, Node 20 or later, and a git repo. Linux is in testing; Windows isn't supported yet.</li>
-            <li>Claude Code or Cursor to run from the canvas. Changes made in any editor show up as runs.</li>
+            <li>{t("macOS, Node 20 or later, and a git repo. Linux is in testing; Windows isn't supported yet.")}</li>
+            <li>{t('Claude Code or Cursor to run from the canvas. Changes made in any editor show up as runs.')}</li>
           </ul>
           <Button variant="outline" size="sm" className="mt-3" id="tryConnect" onClick={() => setConnectOpen(true)}>
-            I have a link to paste
+            {t('I have a link to paste')}
           </Button>
         </Section>
       )}
       <Section>
-        <Label>Get around</Label>
+        <Label>{t('Get around')}</Label>
         <div className="keys grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-[13px] text-ink2">
-          {KEYS.map(([k, d]) => (
+          {keys().map(([k, d]) => (
             <div key={k} className="contents">
               <Kbd className="justify-self-start">{k}</Kbd>
               <span>{d}</span>
@@ -762,16 +785,16 @@ function RepoView() {
         </div>
       </Section>
       <Section>
-        <Label>Latest run</Label>
+        <Label>{t('Latest run')}</Label>
         {last ? (
           <div className="links">
             <button data-openrun={last.id} className={cn(linkClass, 'font-sans text-[13px]')}>
               <Dot c={agentOf(last.agent).c} />
-              <span className="truncate">{`Run ${last.id}: ${last.title}`}</span>
+              <span className="truncate">{t('Run {id}: {title}', { id: last.id, title: last.title })}</span>
             </button>
           </div>
         ) : (
-          <div className="quiet text-muted-foreground">None yet.</div>
+          <div className="quiet text-muted-foreground">{t('None yet.')}</div>
         )}
       </Section>
     </>
@@ -820,7 +843,8 @@ export function Inspector() {
     <Section>
       <div className="quiet flex items-center gap-2 text-muted-foreground">
         <Spinner />
-        Waiting for the bridge
+
+        {t('Waiting for the bridge')}
       </div>
     </Section>
   ) : null;
@@ -837,7 +861,7 @@ export function Inspector() {
   return (
     <aside
       id="insp"
-      aria-label="Inspector"
+      aria-label={t('Inspector')}
       inert={!panels.insp}
       ref={el => {
         ref.current = el;

@@ -49,6 +49,7 @@ import {
   CommandShortcut,
 } from './ui/command';
 import { Kbd } from './ui/kbd';
+import { t } from '../i18n';
 
 let returnFocus: HTMLElement | null = null;
 export function openPalette(kind: 'files' | 'commands') {
@@ -80,10 +81,10 @@ function QuickOpen() {
   const shown = useMemo(() => searchFiles(files, query), [files, query]);
   return (
     <>
-      <CommandInput autoFocus placeholder="Go to a file" value={query} onValueChange={setQuery} />
+      <CommandInput autoFocus placeholder={t('Go to a file')} value={query} onValueChange={setQuery} />
       <CommandList>
-        <CommandEmpty>No file matches.</CommandEmpty>
-        <CommandGroup heading={query ? 'Best matches' : 'Files'}>
+        <CommandEmpty>{t('No file matches.')}</CommandEmpty>
+        <CommandGroup heading={query ? t('Best matches') : 'Files'}>
           {shown.map(f => (
             <CommandItem key={f.path} value={f.path} data-path={f.path} onSelect={run(() => goToFile(f.path))}>
               <FileIcon kind={fileKind(f.name)} />
@@ -128,52 +129,54 @@ function Commands() {
   const r = st.run;
   return (
     <>
-      <CommandInput autoFocus placeholder="Type a command" />
+      <CommandInput autoFocus placeholder={t('Type a command')} />
       <CommandList>
-        <CommandEmpty>No command matches.</CommandEmpty>
-        <CommandGroup heading="Go to">
-          <Item label="Go to a file" icon={<FileSearch />} keys="⌘P" stay onSelect={() => openPalette('files')} />
-          <Item label="Fit everything" icon={<Maximize />} keys="0" onSelect={flyAll} />
+        <CommandEmpty>{t('No command matches.')}</CommandEmpty>
+        <CommandGroup heading={t('Go to')}>
+          <Item label={t('Go to a file')} icon={<FileSearch />} keys="⌘P" stay onSelect={() => openPalette('files')} />
+          <Item label={t('Fit everything')} icon={<Maximize />} keys="0" onSelect={flyAll} />
           <Item
-            label="Zoom to selection"
+            label={t('Zoom to selection')}
             icon={<Focus />}
             keys="F"
             onSelect={() => (st.sel.size ? flySelection() : r ? flyRun(r) : flyAll())}
           />
-          <Item label="Zoom in" icon={<ZoomIn />} keys="+" onSelect={() => zoom(1.4)} />
-          <Item label="Zoom out" icon={<ZoomOut />} keys="−" onSelect={() => zoom(1 / 1.4)} />
-          <Item label="Tidy layout" icon={<LayoutGrid />} onSelect={tidyLayout} />
+          <Item label={t('Zoom in')} icon={<ZoomIn />} keys="+" onSelect={() => zoom(1.4)} />
+          <Item label={t('Zoom out')} icon={<ZoomOut />} keys="−" onSelect={() => zoom(1 / 1.4)} />
+          <Item label={t('Tidy layout')} icon={<LayoutGrid />} onSelect={tidyLayout} />
           <Item
-            label={st.byAuthor ? 'Stop coloring by author' : 'Color by author'}
+            label={st.byAuthor ? t('Stop coloring by author') : t('Color by author')}
             icon={<Users />}
             keys="C"
             onSelect={toggleByAuthor}
           />
-          <Item label="Write a prompt" icon={<MessageSquareText />} keys="/" onSelect={() => dom.prompt.focus()} />
+          <Item label={t('Write a prompt')} icon={<MessageSquareText />} keys="/" onSelect={() => dom.prompt.focus()} />
         </CommandGroup>
         {r ? (
-          <CommandGroup heading={`Run ${r.id}`}>
-            <Item label="Show before" icon={<Columns2 />} keys="B" onSelect={() => setMode('before')} />
-            <Item label="Show after" icon={<Columns2 />} keys="A" onSelect={() => setMode('after')} />
-            <Item label="Show diff" icon={<Columns2 />} keys="D" onSelect={() => setMode('diff')} />
+          <CommandGroup heading={t('Run {id}', { id: r.id })}>
+            <Item label={t('Show before')} icon={<Columns2 />} keys="B" onSelect={() => setMode('before')} />
+            <Item label={t('Show after')} icon={<Columns2 />} keys="A" onSelect={() => setMode('after')} />
+            <Item label={t('Show diff')} icon={<Columns2 />} keys="D" onSelect={() => setMode('diff')} />
             {r.changes.size && !r.reverted && r.status !== 'running' ? (
               <>
-                {r.kept ? null : <Item label="Keep run" icon={<CircleCheck />} onSelect={() => runAction('keep', r)} />}
-                <Item label="Revert run" icon={<Undo2 />} onSelect={() => runAction('revert', r)} />
+                {r.kept ? null : (
+                  <Item label={t('Keep run')} icon={<CircleCheck />} onSelect={() => runAction('keep', r)} />
+                )}
+                <Item label={t('Revert run')} icon={<Undo2 />} onSelect={() => runAction('revert', r)} />
               </>
             ) : null}
-            <Item label="Close run" icon={<X />} keys="Esc" onSelect={() => selectRun(null)} />
+            <Item label={t('Close run')} icon={<X />} keys="Esc" onSelect={() => selectRun(null)} />
           </CommandGroup>
         ) : null}
         {S.CONN ? (
           <CommandGroup heading="Attribution">
             <Item
-              label="Write attribution for the last commit as Agent Trace"
+              label={t('Write attribution for the last commit as Agent Trace')}
               icon={<GitCommitHorizontal />}
               onSelect={() => showExport('agent-trace')}
             />
             <Item
-              label="Write attribution for the last commit as a Git AI note"
+              label={t('Write attribution for the last commit as a Git AI note')}
               icon={<GitCommitHorizontal />}
               onSelect={() => showExport('git-ai')}
             />
@@ -184,7 +187,7 @@ function Commands() {
             {[...S.RUNS].reverse().map(x => (
               <Item
                 key={x.id}
-                label={`Open run ${x.id}: ${x.title}`}
+                label={t('Open run {id}: {title}', { id: x.id, title: x.title })}
                 icon={<Dot c={agentOf(x.agent).c} className="mx-1" />}
                 onSelect={() => selectRun(x)}
               />
@@ -192,27 +195,35 @@ function Commands() {
           </CommandGroup>
         ) : null}
         <CommandGroup heading="Panels">
-          <Item label="Show or hide the sidebar" icon={<PanelLeft />} keys="[" onSelect={toggleSide} />
-          <Item label="Show or hide the inspector" icon={<PanelRight />} keys="]" onSelect={toggleInsp} />
+          <Item label={t('Show or hide the sidebar')} icon={<PanelLeft />} keys="[" onSelect={toggleSide} />
+          <Item label={t('Show or hide the inspector')} icon={<PanelRight />} keys="]" onSelect={toggleInsp} />
           <Item
-            label={panels.side === 'pinned' ? 'Let the sidebar step aside when zoomed out' : 'Keep the sidebar open'}
+            label={
+              panels.side === 'pinned' ? t('Let the sidebar step aside when zoomed out') : t('Keep the sidebar open')
+            }
             icon={<Pin />}
             onSelect={() => setPinned(panels.side !== 'pinned')}
           />
         </CommandGroup>
         <CommandGroup heading="Theme">
-          <Item label="Light theme" icon={<Sun />} onSelect={() => (setTheme('light'), retheme())} />
-          <Item label="Dark theme" icon={<Moon />} onSelect={() => (setTheme('dark'), retheme())} />
-          <Item label="Match the system theme" icon={<Monitor />} onSelect={() => (setTheme('system'), retheme())} />
+          <Item label={t('Light theme')} icon={<Sun />} onSelect={() => (setTheme('light'), retheme())} />
+          <Item label={t('Dark theme')} icon={<Moon />} onSelect={() => (setTheme('dark'), retheme())} />
+          <Item
+            label={t('Match the system theme')}
+            icon={<Monitor />}
+            onSelect={() => (setTheme('system'), retheme())}
+          />
         </CommandGroup>
         <CommandGroup heading="Bridge">
           {S.CONN ? (
             <>
-              {S.LIVE ? null : <Item label="Reconnect" icon={<RefreshCw />} onSelect={() => void connect(S.CONN!)} />}
-              <Item label="Disconnect" icon={<X />} onSelect={disconnect} />
+              {S.LIVE ? null : (
+                <Item label={t('Reconnect')} icon={<RefreshCw />} onSelect={() => void connect(S.CONN!)} />
+              )}
+              <Item label={t('Disconnect')} icon={<X />} onSelect={disconnect} />
             </>
           ) : (
-            <Item label="Connect a repo" icon={<FolderOpen />} onSelect={() => setConnectOpen(true)} />
+            <Item label={t('Connect a repo')} icon={<FolderOpen />} onSelect={() => setConnectOpen(true)} />
           )}
         </CommandGroup>
       </CommandList>
@@ -229,8 +240,10 @@ export function Palette() {
       onOpenChange={open => {
         if (!open) close();
       }}
-      title={kind === 'files' ? 'Go to a file' : 'Commands'}
-      description={kind === 'files' ? 'Search the repository by file name or path' : 'Search for a command to run'}
+      title={kind === 'files' ? t('Go to a file') : 'Commands'}
+      description={
+        kind === 'files' ? t('Search the repository by file name or path') : t('Search for a command to run')
+      }
       showCloseButton={false}
       commandProps={{ shouldFilter: kind !== 'files' }}
       className="top-[18%] translate-y-0 sm:max-w-xl"

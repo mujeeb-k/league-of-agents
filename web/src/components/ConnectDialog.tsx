@@ -12,6 +12,7 @@ import { Tip } from './TopBar';
 import { Button } from './ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
+import { t } from '../i18n';
 
 /** What a person types to start the bridge in their repo. */
 export const RUN_COMMAND = 'npx leagueofagents-cli@latest';
@@ -58,7 +59,7 @@ export function CopyCommand({
       variant="ghost"
       size={compact ? 'icon-sm' : 'sm'}
       id={ids[1]}
-      aria-label={copied ? 'Copied' : command ? 'Copy the command' : 'Copy the line'}
+      aria-label={copied ? 'Copied' : command ? t('Copy the command') : t('Copy the line')}
       onClick={() => {
         void navigator.clipboard.writeText(text).then(() => setCopied(true));
       }}
@@ -106,7 +107,8 @@ function ShareSetup() {
         }}
       >
         <Share />
-        Share
+
+        {t('Share')}
       </Button>
     </div>
   );
@@ -116,21 +118,22 @@ function ShareSetup() {
 function OnYourMac() {
   return (
     <>
-      <DialogTitle className="mb-2 text-base">Use it on your Mac</DialogTitle>
+      <DialogTitle className="mb-2 text-base">{t('Use it on your Mac')}</DialogTitle>
       <DialogDescription className="mb-6 text-ink2 text-pretty">
-        League of Agents runs next to your code, on a Mac. Send yourself this line, then paste it into your coding agent
-        there.
+        {t(
+          'League of Agents runs next to your code, on a Mac. Send yourself this line, then paste it into your coding agent there.',
+        )}
       </DialogDescription>
       <ShareSetup />
-      <p className="mt-3 mb-2 text-xs text-muted-foreground">Or run this in your repo on the Mac:</p>
+      <p className="mt-3 mb-2 text-xs text-muted-foreground">{t('Or run this in your repo on the Mac:')}</p>
       <CopyCommand />
       <p className="mt-2 text-xs text-muted-foreground">
-        Requires macOS, Node 20 or later, and a git repo. Linux is in testing; Windows isn't supported yet.
+        {t("Requires macOS, Node 20 or later, and a git repo. Linux is in testing; Windows isn't supported yet.")}
       </p>
       <DialogFooter className="mt-6">
         <DialogClose asChild>
           <Button variant="outline" id="connectCancel">
-            Close
+            {t('Close')}
           </Button>
         </DialogClose>
       </DialogFooter>
@@ -149,7 +152,7 @@ export function ConnectDialog() {
     e.preventDefault();
     const c = parseConn(input.current!.value.trim());
     if (!c) {
-      setError('Paste the full link the bridge printed. It starts with http://127.0.0.1.');
+      setError(t('Paste the full link the bridge printed. It starts with http://127.0.0.1.'));
       return;
     }
     setError(null);
@@ -202,10 +205,10 @@ function ConnectForm({
 }) {
   return (
     <>
-      <DialogTitle className="mb-2 text-base">Connect your repo</DialogTitle>
+      <DialogTitle className="mb-2 text-base">{t('Connect your repo')}</DialogTitle>
       <DialogDescription className="mb-6 text-ink2 text-pretty">
-        A small bridge runs on your machine, inside your repo. League of Agents never uploads your code anywhere. Your
-        code goes only to the agent you authorized.{' '}
+        {t('A small bridge runs on your machine, inside your repo.')} League of Agents never uploads your code anywhere.
+        Your code goes only to the agent you authorized.{' '}
         <a
           id="privacyLink"
           href="https://leagueofagents.dev/privacy"
@@ -213,27 +216,27 @@ function ConnectForm({
           rel="noopener"
           className="text-ink2 underline underline-offset-2 hover:text-foreground"
         >
-          Privacy
+          {t('Privacy')}
         </a>
       </DialogDescription>
       <form onSubmit={e => void onSubmit(e)}>
         <ol className="flex flex-col gap-6">
-          <Step n={1} title="Paste this into your coding agent">
+          <Step n={1} title={t('Paste this into your coding agent')}>
             <CopyCommand ids={['setupPrompt', 'copySetup']} text={SETUP_PROMPT} />
-            <p className="mt-3 mb-2 text-xs text-muted-foreground">Or run it yourself in your repo:</p>
+            <p className="mt-3 mb-2 text-xs text-muted-foreground">{t('Or run it yourself in your repo:')}</p>
             <CopyCommand />
             <p className="mt-2 text-xs text-muted-foreground">
-              Requires macOS, Node 20 or later, and a git repo. Linux is in testing; Windows isn't supported yet.
+              {t("Requires macOS, Node 20 or later, and a git repo. Linux is in testing; Windows isn't supported yet.")}
             </p>
           </Step>
-          <Step n={2} title="It opens your repo in your browser. Or paste the link it prints">
+          <Step n={2} title={t('It opens your repo in your browser. Or paste the link it prints')}>
             <Input
               id="connectInput"
               ref={input}
-              aria-label="Bridge link"
+              aria-label={t('Bridge link')}
               aria-invalid={error ? true : undefined}
               aria-describedby={error ? 'connectError' : undefined}
-              placeholder="http://127.0.0.1:43210/#t=…"
+              placeholder={t('http://127.0.0.1:43210/#t=…')}
               autoComplete="off"
               spellCheck="false"
               className="font-mono text-xs md:text-xs"
@@ -245,16 +248,16 @@ function ConnectForm({
               </p>
             ) : null}
             <p className="mt-2 text-xs text-muted-foreground text-pretty">
-              Chrome, Edge, Brave and Arc ask once to let this site reach apps on your computer, because the bridge runs
-              there: choose Allow. To skip it, open the link the bridge prints that starts with http://127.0.0.1, the
-              local app.
+              {t(
+                'Chrome, Edge, Brave and Arc ask once to let this site reach apps on your computer, because the bridge runs there: choose Allow. To skip it, open the link the bridge prints that starts with http://127.0.0.1, the local app.',
+              )}
             </p>
           </Step>
         </ol>
         <DialogFooter className="mt-6">
           <DialogClose asChild>
             <Button variant="outline" id="connectCancel">
-              Cancel
+              {t('Cancel')}
             </Button>
           </DialogClose>
           <Button type="submit" id="connectGo" disabled={busy}>

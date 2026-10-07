@@ -8,6 +8,7 @@ import { S, st } from '../state/app';
 import { bump, useRegion } from '../state/render';
 import { CopyCommand } from './ConnectDialog';
 import { Button } from './ui/button';
+import { t } from '../i18n';
 
 const NARROW = '(width < 860px)';
 const subscribe = (fn: () => void) => {
@@ -26,7 +27,7 @@ function About() {
       <h1 id="introTitle" className="text-lg leading-snug font-semibold tracking-[-0.01em] text-balance">
         {TAGLINE}
       </h1>
-      <p className="mt-2 text-[13px] leading-relaxed text-ink2 text-pretty">{ABOUT}</p>
+      <p className="mt-2 text-[13px] leading-relaxed text-ink2 text-pretty">{t(ABOUT)}</p>
       <div className="mt-3">
         <CopyCommand ids={['introCommand', 'introCopy']} compact />
       </div>
@@ -60,7 +61,7 @@ export function IntroCard() {
         variant="ghost"
         size="icon-sm"
         id="closeIntro"
-        aria-label="Close"
+        aria-label={t('Close')}
         className="absolute top-2 right-2"
         onClick={() => {
           st.introClosed = true;

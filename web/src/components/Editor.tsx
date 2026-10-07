@@ -34,6 +34,7 @@ import { fileKind } from '../lib/fileKind';
 import { Tip } from './TopBar';
 import { Button } from './ui/button';
 import { changedBlock } from '../lib/textdiff';
+import { t } from '../i18n';
 
 const DUR = 240;
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -120,7 +121,9 @@ function Related({ path, box }: { path: string; box: Frame }) {
           className="rel-chip absolute flex h-7 items-center gap-1.5 truncate rounded-md border bg-popover px-2 font-mono text-xs text-ink2 shadow-[var(--e1)] hover:text-foreground"
           style={{ left: chipX, top, width: chipW }}
           data-path={p}
-          aria-label={`${side === 'right' ? 'Imports' : 'Used by'} ${p}. Open it`}
+          aria-label={
+            side === 'right' ? t('Imports {path}. Open it', { path: p }) : t('Used by {path}. Open it', { path: p })
+          }
           title={p}
           onClick={() => void openEditor(p)}
         >
@@ -162,7 +165,7 @@ function OpenIn({ path, line }: { path: string; line: () => number }) {
     <DropdownMenu onOpenChange={open => open && setAt(line())}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" id="openIn" className="text-ink2">
-          Open in
+          {t('Open in')}
           <ChevronDown className="size-3.5" />
         </Button>
       </DropdownMenuTrigger>
@@ -328,7 +331,7 @@ export function Editor() {
         id="editor"
         ref={panel}
         role="dialog"
-        aria-label={`Editing ${name}`}
+        aria-label={t('Editing {name}', { name })}
         className="absolute flex origin-top-left flex-col overflow-hidden rounded-xl border bg-card shadow-[var(--e2)] will-change-transform"
         style={{ left: b.left, top: b.top, width: b.width, height: b.height }}
         onKeyDown={e => {
@@ -338,21 +341,21 @@ export function Editor() {
         <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
           <FileIcon kind={fileKind(name)} />
           <span className="shrink-0 font-mono text-[13px] font-medium whitespace-nowrap">{name}</span>
-          {dirty ? <span className="dirty size-2 rounded-full bg-mod" aria-label="Unsaved changes" /> : null}
+          {dirty ? <span className="dirty size-2 rounded-full bg-mod" aria-label={t('Unsaved changes')} /> : null}
           <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{shown}</span>
           <span className="ml-auto flex shrink-0 items-center gap-2">
             {blocked ? (
               <span id="editorBlocked" className="text-xs text-ink2">
-                {`Run ${blocked.id} is working. Editing waits until it finishes.`}
+                {t('Run {id} is working. Editing waits until it finishes.', { id: blocked.id })}
               </span>
             ) : null}
             {S.repoRoot ? <OpenIn path={shown} line={() => cursorLine(cm.current?.editor)} /> : null}
             {dirty && !blocked ? (
               <Button variant="ghost" size="sm" id="discardDraft" onClick={discardDraft}>
-                Discard changes
+                {t('Discard changes')}
               </Button>
             ) : null}
-            <Tip label="Save" keys="⌘S">
+            <Tip label={t('Save')} keys="⌘S">
               <Button
                 size="sm"
                 id="saveFile"
@@ -360,15 +363,15 @@ export function Editor() {
                 onClick={() => void saveEditor()}
               >
                 {ed.saving ? <Spinner className="text-current" /> : null}
-                Save
+                {t('Save')}
               </Button>
             </Tip>
-            <Tip label="Close" keys="Esc">
+            <Tip label={t('Close')} keys="Esc">
               <Button
                 variant="ghost"
                 size="icon-sm"
                 id="closeEditor"
-                aria-label="Close the editor"
+                aria-label={t('Close the editor')}
                 onClick={closeEditor}
               >
                 <X />
@@ -379,27 +382,30 @@ export function Editor() {
         {review ? (
           <div id="editorReview" className="flex shrink-0 items-center gap-3 border-b bg-card px-4 py-2">
             <span className="min-w-0 flex-1 text-ink2 text-pretty">
-              {`${agentOf(review.agent).name} changed lines ${reviewLines(review, shown)}. Keep the change, or revert it.`}
+              {t('{agent} changed lines {lines}. Keep the change, or revert it.', {
+                agent: agentOf(review.agent).name,
+                lines: reviewLines(review, shown),
+              })}
             </span>
             <Button variant="outline" size="sm" id="rejectChange" onClick={() => runAction('revert', review)}>
-              Revert
+              {t('Revert')}
             </Button>
             <Button size="sm" id="acceptChange" onClick={() => runAction('keep', review)}>
-              Keep
+              {t('Keep')}
             </Button>
           </div>
         ) : null}
         {ed.conflict ? (
           <div id="editorConflict" className="shrink-0 border-b border-l-2 border-l-mod bg-card px-4 py-3">
-            <div className="font-medium">This file changed on disk since you opened it</div>
-            <p className="text-ink2">Saving now would replace these lines with yours:</p>
+            <div className="font-medium">{t('This file changed on disk since you opened it')}</div>
+            <p className="text-ink2">{t('Saving now would replace these lines with yours:')}</p>
             <DiskChange before={ed.saved} now={ed.conflict.text} />
             <div className="mt-3 flex gap-2">
               <Button variant="outline" size="sm" id="useDisk" onClick={useDiskVersion}>
-                Use the file on disk
+                {t('Use the file on disk')}
               </Button>
               <Button size="sm" id="overwrite" onClick={() => void saveEditor(true)}>
-                Save mine anyway
+                {t('Save mine anyway')}
               </Button>
             </div>
           </div>

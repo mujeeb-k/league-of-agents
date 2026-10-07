@@ -7,7 +7,6 @@ import { drawMap } from '../lib/minimap';
 import { fileKind } from '../lib/fileKind';
 import { dirStat, existsNow, fileStat, needsYou, runStats } from '../lib/model';
 import type { DirNode, Run, Tab } from '../lib/types';
-import { plural } from '../lib/util';
 import { S, dom, st } from '../state/app';
 import { drafts, openEditor } from '../state/editing';
 import { panels, setPinned, sideVisibleAt } from '../state/panels';
@@ -19,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { FileIcon } from './FileIcon';
 import { Tip } from './TopBar';
 import { Button } from './ui/button';
+import { t, tn } from '../i18n';
 
 const row =
   'ti relative flex h-6 cursor-pointer items-center gap-1 pr-3 font-mono text-xs whitespace-nowrap text-foreground transition-colors outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset';
@@ -123,7 +123,7 @@ function tree(d: DirNode, depth: number): ReactNode[] {
           {f.name}
         </span>
         {drafts.has(f.path) ? (
-          <span className="dirty size-1.5 shrink-0 rounded-full bg-mod" aria-label="Unsaved changes" />
+          <span className="dirty size-1.5 shrink-0 rounded-full bg-mod" aria-label={t('Unsaved changes')} />
         ) : null}
         {s ? (
           <span className="ml-auto pl-2 text-[11px]">
@@ -149,7 +149,7 @@ function RunRow({ r }: { r: Run }) {
       : r.status === 'failed' || r.status === 'cancelled' || r.status === 'interrupted'
         ? cap(r.status)
         : needsYou(r)
-          ? 'Needs you'
+          ? t('Needs you')
           : r.kept
             ? 'Kept'
             : null;
@@ -179,7 +179,7 @@ function RunRow({ r }: { r: Run }) {
           <Dot c={a.c} className={cn('size-1.5', running && 'animate-pulse')} />
           {/* The model is in the inspector; here, in the row's tooltip, so the time stays readable. */}
           <span className="truncate" title={r.model ? `${a.name} · ${r.model}` : undefined}>
-            {running ? `${a.name} is working` : `${a.name} · ${r.when}`}
+            {running ? t('{agent} is working', { agent: a.name }) : `${a.name} · ${r.when}`}
           </span>
           {a.beta ? <BetaTag /> : null}
         </div>
@@ -190,10 +190,10 @@ function RunRow({ r }: { r: Run }) {
               {s.n ? (
                 <>
                   <Stat a={s.a} d={s.d} />
-                  <span>{`in ${plural(s.n, 'file')}`}</span>
+                  <span>{tn(s.n, 'in {n} file', 'in {n} files')}</span>
                 </>
               ) : (
-                <span>No changes</span>
+                <span>{t('No changes')}</span>
               )}
             </div>
             {status || r.checks?.length || r.checksRunning ? (
@@ -324,7 +324,7 @@ function FileTree() {
   const root = S.ROOT;
   if (root && st.openRepo !== S.repoName) syncOpen();
   return (
-    <div role="tree" aria-label="Files" ref={ref} onKeyDown={onTreeKey} className="pt-1">
+    <div role="tree" aria-label={t('Files')} ref={ref} onKeyDown={onTreeKey} className="pt-1">
       {root ? (
         <>
           <div
@@ -377,8 +377,8 @@ function RunList() {
       ) : (
         <div className="empty p-4 text-[13px] text-pretty text-muted-foreground">
           {S.LIVE && !Object.values(S.LIVE_AGENTS ?? {}).some(a => a.available)
-            ? 'No runs yet. Edit any file and it shows up here.'
-            : 'No runs yet. Select code on the canvas and describe a change.'}
+            ? t('No runs yet. Edit any file and it shows up here.')
+            : t('No runs yet. Select code on the canvas and describe a change.')}
         </div>
       )}
     </div>
@@ -388,12 +388,12 @@ function RunList() {
 function PinButton() {
   const pinned = panels.side === 'pinned';
   return (
-    <Tip label={pinned ? 'Let the sidebar step aside when zoomed out' : 'Keep the sidebar open'}>
+    <Tip label={pinned ? t('Let the sidebar step aside when zoomed out') : t('Keep the sidebar open')}>
       <Button
         variant="ghost"
         size="icon-sm"
         id="pinSide"
-        aria-label="Keep the sidebar open"
+        aria-label={t('Keep the sidebar open')}
         aria-pressed={pinned}
         className="shrink-0 text-ink3 aria-pressed:text-foreground"
         onClick={() => setPinned(!pinned)}
@@ -431,10 +431,10 @@ export function Sidebar() {
         <div className="flex items-center gap-1 p-2">
           <TabsList className="flex-1">
             <TabsTrigger value="files" data-tab="files" className="flex-1">
-              Files
+              {t('Files')}
             </TabsTrigger>
             <TabsTrigger value="runs" data-tab="runs" className="flex-1 gap-2">
-              Runs
+              {t('Runs')}
               <span id="runCount" className="num text-muted-foreground tabular-nums">
                 {S.RUNS.length || ''}
               </span>

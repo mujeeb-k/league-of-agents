@@ -12,7 +12,7 @@ import { obstacles, pathOf, route, type Rect } from './route';
 import { allDirs, dirStat, filesUnder, linesAt, viewOf } from './model';
 import type { FileView, RowKind } from './types';
 import { authorsOf, shareOf, type Author } from './attribution';
-import { plural } from './util';
+import { t, tn } from '../i18n';
 
 /** A file zoomed out: a tile in its card's slot, with its name and its changed lines marked. */
 export interface TileData {
@@ -285,7 +285,7 @@ function selsOf(): SelBox[] {
       const d = S.DIRMAP.get(k.slice(2));
       if (!d?.files.length) continue;
       const n = filesUnder(d).filter(f => views.get(f.path)?.exists).length;
-      out.push({ file: false, x: d.x, y: d.y, w: d.w, h: d.h, label: plural(n, 'file') });
+      out.push({ file: false, x: d.x, y: d.y, w: d.w, h: d.h, label: tn(n, '{n} file', '{n} files') });
       continue;
     }
     const f = S.FILES.get(k),
@@ -298,8 +298,8 @@ function selsOf(): SelBox[] {
       w: CW,
       h: CH,
       label: v.ghost
-        ? 'not created yet'
-        : plural((v.rows.filter(r => r.k !== 'del').length || v.rows.length) + beyondOf(k, v), 'line'),
+        ? t('not created yet')
+        : tn((v.rows.filter(r => r.k !== 'del').length || v.rows.length) + beyondOf(k, v), '{n} line', '{n} lines'),
     });
   }
   return out;

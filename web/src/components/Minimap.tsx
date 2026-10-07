@@ -8,6 +8,7 @@ import { useRegion } from '../state/render';
 import { cn } from '@/lib/utils';
 import { Tip } from './TopBar';
 import { Button } from './ui/button';
+import { t } from '../i18n';
 
 function miniJump(e: PointerEvent) {
   const mini = dom.mini,
@@ -60,12 +61,18 @@ export function Minimap() {
       )}
     >
       <div className="flex items-center justify-between p-1">
-        <Tip label="Zoom out" keys="−">
-          <Button variant="ghost" size="icon-sm" id="zOut" aria-label="Zoom out" onClick={() => zoomCenter(1 / 1.4)}>
+        <Tip label={t('Zoom out')} keys="−">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            id="zOut"
+            aria-label={t('Zoom out')}
+            onClick={() => zoomCenter(1 / 1.4)}
+          >
             <Minus />
           </Button>
         </Tip>
-        <Tip label="Fit everything" keys="0">
+        <Tip label={t('Fit everything')} keys="0">
           <Button
             variant="ghost"
             size="sm"
@@ -79,15 +86,15 @@ export function Minimap() {
             20%
           </Button>
         </Tip>
-        <Tip label="Zoom in" keys="+">
-          <Button variant="ghost" size="icon-sm" id="zIn" aria-label="Zoom in" onClick={() => zoomCenter(1.4)}>
+        <Tip label={t('Zoom in')} keys="+">
+          <Button variant="ghost" size="icon-sm" id="zIn" aria-label={t('Zoom in')} onClick={() => zoomCenter(1.4)}>
             <Plus />
           </Button>
         </Tip>
       </div>
       <canvas
         id="mini"
-        aria-label="Minimap"
+        aria-label={t('Minimap')}
         className="block h-35 w-full cursor-crosshair border-t max-[1280px]:h-24"
         ref={el => {
           if (el) dom.mini = el;

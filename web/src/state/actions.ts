@@ -7,7 +7,7 @@ import { applyView, flyAll, flyFile, flyRun, openingView } from '../lib/camera';
 import { agentOf } from '../lib/constants';
 import { buildModel, diffRows, existsNow, filesUnder, layout, linesAt, parseSample } from '../lib/model';
 import type { FileNode, Mode, Run } from '../lib/types';
-import { clamp, plural } from '../lib/util';
+import { clamp } from '../lib/util';
 import { DEMO_AGENTS, SAMPLE_BRANCH, SAMPLE_REPO, SAMPLE_RUNS, SAMPLE_TREE } from '../demo/sample';
 import { SAMPLE_TEXT } from '../demo/sampleText';
 import { toast } from '../ui/toast';
@@ -23,6 +23,7 @@ import {
   renderSide,
   renderTop,
 } from './render';
+import { t, tn } from '../i18n';
 
 export function selectRun(run: Run | null, fly = true) {
   st.run = run;
@@ -38,7 +39,7 @@ export function toggleByAuthor() {
   st.authorLine = null;
   if (st.run) selectRun(null, false);
   else renderAll();
-  toast(st.byAuthor ? 'Colored by author' : 'Coloring by author off');
+  toast(st.byAuthor ? t('Colored by author') : t('Coloring by author off'));
 }
 
 export function toggleSel(k: string, add: boolean) {
@@ -92,13 +93,13 @@ export function revertDemoRun(run: Run) {
   run.reverted = true;
   for (const p of run.changes.keys()) if (!existsNow(S.FILES.get(p)!)) st.sel.delete(p);
   renderAll();
-  toast(`Reverted run ${run.id}`);
+  toast(t('Reverted run {id}', { id: run.id }));
 }
 
 export function keepDemoRun(run: Run) {
   run.kept = true;
   renderInspector();
-  toast(`Kept run ${run.id}`);
+  toast(t('Kept run {id}', { id: run.id }));
 }
 
 /** The selection as a run scope: file paths, and folders ending in /. The whole repository is an empty scope. */
@@ -129,7 +130,7 @@ export function simulateRun(prompt: string) {
   const range = rangeScope() && ed.range;
   if (range) targets = [S.FILES.get(ed.path!)!];
   if (!targets.length) {
-    toast('Open a folder with code first.');
+    toast(t('Open a folder with code first.'));
     return;
   }
   const last = S.RUNS[S.RUNS.length - 1];
@@ -142,7 +143,7 @@ export function simulateRun(prompt: string) {
     prompt,
     summary: '',
     scope: scopeFromSelection(),
-    when: 'Just now',
+    when: t('Just now'),
     dur: '',
     status: 'running',
     changes: new Map(),
@@ -151,7 +152,7 @@ export function simulateRun(prompt: string) {
   S.RUNS.push(run);
   st.tab = 'runs';
   renderSide();
-  toast(`${agentOf(run.agent).name} started run ${id}`);
+  toast(t('{agent} started run {id}', { agent: agentOf(run.agent).name, id }));
   const words = (prompt.toLowerCase().match(/[a-z]+/g) || []).filter(w => w.length > 2).slice(0, 3);
   const fn = words.map((w, i) => (i ? w[0]!.toUpperCase() + w.slice(1) : w)).join('') || 'change';
   setTimeout(() => {
@@ -188,11 +189,16 @@ export function simulateRun(prompt: string) {
     run.dur = '1.4s';
     const names = [...run.changes.keys()].map(p => p.split('/').pop()).join(', ');
     run.summary = scoped
-      ? `Changed ${plural(run.changes.size, 'file')} inside the scope: ${names}. Nothing outside it was touched.`
-      : `Changed ${plural(run.changes.size, 'file')}: ${names}.`;
+      ? tn(
+          run.changes.size,
+          'Changed {n} file inside the scope: {names}. Nothing outside it was touched.',
+          'Changed {n} files inside the scope: {names}. Nothing outside it was touched.',
+          { names },
+        )
+      : tn(run.changes.size, 'Changed {n} file: {names}.', 'Changed {n} files: {names}.', { names });
     st.mode = 'diff';
     selectRun(run);
-    toast(`Run ${id} finished`);
+    toast(t('Run {id} finished', { id }));
   }, 1400);
 }
 
@@ -221,7 +227,7 @@ const OFFLINE = 'The bridge is offline. Reconnect first.';
 
 /** Keep, revert, cancel or stop a run, on the bridge or in the demo. */
 export function runAction(act: string, run: Run) {
-  if (isOffline()) toast(OFFLINE);
+  if (isOffline()) toast(t(OFFLINE));
   else if (S.LIVE) void liveAction(act, run);
   else if (act === 'keep') keepDemoRun(run);
   else if (act === 'revert') revertDemoRun(run);
@@ -235,13 +241,13 @@ function clearPrompt() {
 export async function send() {
   const v = dom.prompt.value.trim();
   if (isOffline()) {
-    toast(OFFLINE);
+    toast(t(OFFLINE));
     return;
   }
   if (S.LIVE && S.CONN) {
     const conn = S.CONN;
     if (S.ACTIVE) {
-      toast(`Run ${S.ACTIVE.id} is still active`);
+      toast(t('Run {id} is still active', { id: S.ACTIVE.id }));
       return;
     }
     if (!v) return;
@@ -276,7 +282,7 @@ export async function send() {
       dom.prompt.blur();
       live.pendingSelect = r.id;
       st.tab = 'runs';
-      toast(`${agentOf(st.agent).name} started run ${r.id}`);
+      toast(t('{agent} started run {id}', { agent: agentOf(st.agent).name, id: r.id }));
     } catch (e) {
       ed.sent = null;
       toast(explain(e));
@@ -333,7 +339,7 @@ export function tidyLayout() {
   renderAll();
   saveLayoutSoon();
   flyAll();
-  toast('Layout tidied');
+  toast(t('Layout tidied'));
 }
 
 /** A run's changed lines as text: removed lines with -, added lines with +, under each file's path. */
@@ -361,7 +367,7 @@ export async function propagate(run: Run) {
   try {
     const r = await bridge.startRun(S.CONN, { agent: st.agent, prompt, scope: [], resumeFrom: null });
     live.pendingSelect = r.id;
-    toast(`${agentOf(st.agent).name} started run ${r.id}`);
+    toast(t('{agent} started run {id}', { agent: agentOf(st.agent).name, id: r.id }));
   } catch (e) {
     toast(explain(e));
   } finally {
@@ -389,7 +395,7 @@ function propagateInDemo(run: Run, files: string) {
     title: `Update what depends on my change to ${files}`,
     prompt: `Update what depends on my change to ${files}.`,
     summary: '',
-    when: 'Just now',
+    when: t('Just now'),
     dur: '1.4s',
     status: 'done',
     changes: new Map(),
@@ -406,10 +412,17 @@ function propagateInDemo(run: Run, files: string) {
     }
   const names = [...next.changes.keys()].map(p => p.split('/').pop()).join(', ');
   next.summary = next.changes.size
-    ? `Updated ${plural(next.changes.size, 'file')} that use${next.changes.size === 1 ? 's' : ''} your change: ${names}.`
-    : 'Nothing else depends on this change.';
+    ? tn(
+        next.changes.size,
+        'Updated {n} file that uses your change: {names}.',
+        'Updated {n} files that use your change: {names}.',
+        {
+          names,
+        },
+      )
+    : t('Nothing else depends on this change.');
   S.RUNS.push(next);
   st.mode = 'diff';
   selectRun(next);
-  toast(`Run ${next.id} finished`);
+  toast(t('Run {id} finished', { id: next.id }));
 }

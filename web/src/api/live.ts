@@ -6,7 +6,8 @@ import { carryRenames, type SavedLayout } from '../lib/layout';
 import { renamesOf } from '../lib/renames';
 import { changedBlock } from '../lib/textdiff';
 import type { Run } from '../lib/types';
-import { fmtDur, plural, relTime } from '../lib/util';
+import { t, tn } from '../i18n';
+import { fmtDur, relTime } from '../lib/util';
 import { S, st } from '../state/app';
 import { loadDemo } from '../state/actions';
 import { refreshEditor } from '../state/editing';
@@ -121,7 +122,17 @@ export async function exportAttribution(format: 'agent-trace' | 'git-ai') {
   const files = Object.fromEntries([...authorsOf(S.RUNS, now, S.RECORDED)].map(([p, o]) => [p, rangesOf(o)]));
   try {
     const r = await bridge.exportAttribution(c, format, files);
-    toast(`Wrote attribution for ${plural(r.files, 'file')} to ${r.ref} on ${r.commit.slice(0, 8)}`);
+    toast(
+      tn(
+        r.files,
+        'Wrote attribution for {n} file to {ref} on {commit}',
+        'Wrote attribution for {n} files to {ref} on {commit}',
+        {
+          ref: r.ref,
+          commit: r.commit.slice(0, 8),
+        },
+      ),
+    );
   } catch (e) {
     toast(explain(e));
   }
@@ -308,7 +319,7 @@ export async function connect(c: Conn, quiet = false): Promise<string | null> {
     // A repository is laid out as it was last time, or afresh; later state events keep this layout.
     S.LAYOUT = await loadLayout(c, s.repo.root);
     applyState(s, true);
-    toast(`Connected to ${s.repo.name}`);
+    toast(t('Connected to {repo}', { repo: s.repo.name }));
     void poll();
     return null;
   } catch (e) {
@@ -327,11 +338,11 @@ function onDisconnect(_e: unknown) {
   S.LIVE = false;
   setConnUI();
   renderInspector();
-  toast('Lost the bridge connection. Showing the last state.');
+  toast(t('Lost the bridge connection. Showing the last state.'));
   setTimeout(async () => {
     if (!S.LIVE && S.CONN) {
       const c = S.CONN;
-      if ((await connect(c, true)) === null) toast('Reconnected');
+      if ((await connect(c, true)) === null) toast(t('Reconnected'));
     }
   }, 3000);
 }
@@ -342,7 +353,7 @@ export function disconnect() {
   clearConn();
   setConnUI();
   loadDemo();
-  toast('Disconnected');
+  toast(t('Disconnected'));
 }
 
 /** Revert even though the files changed again since the run; their later edits are lost. */
@@ -352,7 +363,7 @@ export async function forceRevert(run: Run) {
   renderInspector();
   try {
     await bridge.revert(conn(), run.id, true);
-    toast(`Reverted run ${run.id}`);
+    toast(t('Reverted run {id}', { id: run.id }));
     queueRefresh();
   } catch (e) {
     toast(explain(e));
@@ -374,7 +385,7 @@ export async function enableChecks(share: boolean) {
       share,
     );
     S.suggestedChecks = [];
-    toast(`Checks on: ${r.checks.map(c => c.name).join(', ')}`);
+    toast(t('Checks on: {names}', { names: r.checks.map(c => c.name).join(', ') }));
   } catch (e) {
     toast(explain(e));
   } finally {
@@ -391,7 +402,7 @@ export async function turnOffCheck(name: string) {
   try {
     await bridge.turnOffCheck(S.CONN, name);
     S.checksOn = S.checksOn.filter(n => n !== name);
-    toast(`Turned off ${name}`);
+    toast(t('Turned off {name}', { name }));
   } catch (e) {
     toast(explain(e));
   } finally {
@@ -409,12 +420,12 @@ export async function liveAction(act: string, run: Run) {
     if (act === 'cancel') await bridge.cancel(c, run.id);
     else if (act === 'keep') {
       await bridge.keep(c, run.id);
-      toast(`Kept run ${run.id}`);
+      toast(t('Kept run {id}', { id: run.id }));
     } else if (act === 'revert') {
       const r = await bridge.revert(c, run.id, false);
       // Files changed again since the run: ask in the conflict dialog, which may call forceRevert.
       if ('conflict' in r) showConflict({ run, files: r.conflict });
-      else toast(`Reverted run ${run.id}`);
+      else toast(t('Reverted run {id}', { id: run.id }));
     }
     queueRefresh();
   } catch (e) {

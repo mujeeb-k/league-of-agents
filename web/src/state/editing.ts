@@ -12,6 +12,7 @@ import { toast } from '../ui/toast';
 import { S, dom, st } from './app';
 import { applyPanels } from './panels';
 import { bump, renderAll, renderComposer, renderSel } from './render';
+import { t } from '../i18n';
 
 export interface Draft {
   text: string;
@@ -49,8 +50,8 @@ export const ed = {
 /** Said when the selected lines can't be found as they were. */
 export const staleSelection = (path: string) =>
   ed.stale === 'removed'
-    ? `The lines you selected in ${path.split('/').pop()} were removed. Select lines again.`
-    : `The lines you selected in ${path.split('/').pop()} changed. Select them again.`;
+    ? t('The lines you selected in {name} were removed. Select lines again.', { name: path.split('/').pop()! })
+    : t('The lines you selected in {name} changed. Select them again.', { name: path.split('/').pop()! });
 
 /** The scope while lines are selected in the open file: "path:12-18", or null. */
 export function rangeScope(): string | null {
@@ -111,7 +112,7 @@ export async function checkSelection(conn: Conn): Promise<string | null> {
   const path = ed.path;
   if (!path || !ed.range || !rangeScope()) return null;
   if (drafts.has(path))
-    return `Save your changes to ${path.split('/').pop()} first: the agent works on the saved file.`;
+    return t('Save your changes to {name} first: the agent works on the saved file.', { name: path.split('/').pop()! });
   if (ed.stale) return staleSelection(path);
   const r = await bridge.file(conn, path);
   if (ed.path !== path) return null;
@@ -251,7 +252,7 @@ export async function saveEditor(force = false) {
       ed.hash = now.hash;
       ed.conflict = null;
       drafts.delete(path);
-      toast('id' in r ? `Saved as run ${r.id}` : 'No changes to save');
+      toast('id' in r ? t('Saved as run {id}', { id: r.id }) : t('No changes to save'));
     } else saveInDemo(path, d.text);
     renderAll();
   } catch (e) {
@@ -284,16 +285,16 @@ function saveInDemo(path: string, text: string) {
   S.RUNS.push({
     id,
     agent: 'you',
-    title: `Edited ${path.split('/').pop()}`,
+    title: t('Edited {name}', { name: path.split('/').pop()! }),
     prompt: '',
     summary: '',
-    when: 'Just now',
+    when: t('Just now'),
     dur: '',
     status: 'done',
     changes: new Map([[path, { created: false, deleted: false, pre: null, lines: [], hunks: [hunk] }]]),
     reviewed: new Set(),
   });
-  toast(`Saved as run ${id}`);
+  toast(t('Saved as run {id}', { id }));
 }
 
 /**

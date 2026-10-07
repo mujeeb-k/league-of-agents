@@ -8,6 +8,7 @@ import { selectRun } from '../state/actions';
 import { bump, useRegion } from '../state/render';
 import { Button } from './ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';
+import { t } from '../i18n';
 
 let returnFocus: HTMLElement | null = null;
 export function showConflict(c: Conflict | null) {
@@ -36,13 +37,21 @@ export function ConflictDialog() {
             <div className="mb-3 flex items-center gap-2">
               <TriangleAlert className="size-4 text-mod" />
               <DialogTitle className="text-base">
-                {c.later ? `Run ${c.later.id} changed these files again` : `These files changed after run ${c.run.id}`}
+                {c.later
+                  ? t('Run {id} changed these files again', { id: c.later.id })
+                  : t('These files changed after run {id}', { id: c.run.id })}
               </DialogTitle>
             </div>
             <DialogDescription className="mb-3 text-ink2 text-pretty">
               {c.later
-                ? `Reverting run ${c.run.id} now would undo part of run ${c.later.id}. Revert run ${c.later.id} first, then run ${c.run.id}.`
-                : `Reverting run ${c.run.id} puts these files back as they were before it, and the edits made since are lost.`}
+                ? t('Reverting run {id} now would undo part of run {later}. Revert run {later} first, then run {id}.', {
+                    id: c.run.id,
+                    later: c.later.id,
+                  })
+                : t(
+                    'Reverting run {id} puts these files back as they were before it, and the edits made since are lost.',
+                    { id: c.run.id },
+                  )}
             </DialogDescription>
             <ul
               id="conflictFiles"
@@ -58,7 +67,7 @@ export function ConflictDialog() {
               {c.later ? (
                 <>
                   <DialogClose asChild>
-                    <Button variant="outline">Close</Button>
+                    <Button variant="outline">{t('Close')}</Button>
                   </DialogClose>
                   <Button
                     onClick={() => {
@@ -67,14 +76,14 @@ export function ConflictDialog() {
                       selectRun(later);
                     }}
                   >
-                    {`Open run ${c.later.id}`}
+                    {t('Open run {id}', { id: c.later.id })}
                   </Button>
                 </>
               ) : (
                 <>
                   <DialogClose asChild>
                     <Button variant="outline" id="conflictKeep">
-                      Keep my later edits
+                      {t('Keep my later edits')}
                     </Button>
                   </DialogClose>
                   {/* Destructive, but no red fill: warm colours stay small markers (BRAND.md). */}
@@ -87,7 +96,7 @@ export function ConflictDialog() {
                       void forceRevert(c.run);
                     }}
                   >
-                    Revert anyway
+                    {t('Revert anyway')}
                   </Button>
                 </>
               )}
