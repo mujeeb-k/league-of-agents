@@ -28,11 +28,13 @@ export default defineConfig({
     { name: 'media', testMatch: /(gif|og)\.spec\.ts/, use: base },
     // A large public repository and the real Claude Code. Run alone with `npm run large`.
     { name: 'large', testMatch: /large\.spec\.ts/, use: base },
-    // Real motion, so no reduced-motion preference. Run alone with `npm run perf`.
+    // Real motion, so no reduced-motion preference. Run alone with `npm run perf`. In the installed Chrome, as
+    // people use it: Playwright's own Chromium paints differently (pan on react-router before 016: 10% of frames
+    // dropped there, 40% in Chrome).
     {
       name: 'perf',
       testMatch: /perf\.spec\.ts/,
-      use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
+      use: { ...devices['Desktop Chrome'], channel: 'chrome', viewport: { width: 1440, height: 900 } },
     },
   ],
 });
