@@ -2171,6 +2171,12 @@ test('checks for new users: found, offered, turned on in one click, never run be
     expect(fs.existsSync(path.join(repo, 'loa.config.json'))).toBe(false);
     await page.goto(linkFor(b));
     await expect(page.locator('#suggestedChecks li')).toHaveCount(3);
+    // Each says it runs the repo's own code: these commands run what package.json and the tests say.
+    await expect(page.locator('#suggestedChecks .repoCode')).toHaveText([
+      'Runs the "test" script in this repo\'s package.json.',
+      'Runs the "typecheck" script in this repo\'s package.json.',
+      "Runs this repo's tests with pytest, and the conftest.py files they load.",
+    ]);
     await page.screenshot({ path: test.info().outputPath('checks-offer.png') });
     expect(await runsOf(b)).toEqual([]);
     await page.locator('#enableChecks').click();

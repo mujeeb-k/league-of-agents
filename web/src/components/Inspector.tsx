@@ -15,6 +15,7 @@ import {
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { enableChecks, turnOffCheck } from '../api/live';
 import { flyFile } from '../lib/camera';
+import { runsRepoCode } from '../lib/checks';
 import { agentOf, modelOf } from '../lib/constants';
 import { existsNow, fileStat, linesAt, needsYou, runStats, viewOf } from '../lib/model';
 import type { Run } from '../lib/types';
@@ -563,21 +564,29 @@ function ChecksOffer() {
           : 'No checks are set up. League of Agents found these and can run them after each run:'}
       </p>
       <ul id="suggestedChecks" className="mb-3 flex flex-col gap-1">
-        {S.suggestedChecks.map(c => (
-          <li key={c.name} className="flex min-w-0 items-baseline gap-2">
-            <span className="shrink-0 font-medium">{c.name}</span>
-            {/* A repo's own command is read in full before it's approved; found ones are the bridge's own. */}
-            <code
-              className={cn(
-                'font-mono text-xs text-ink2',
-                S.checksFromRepo ? 'min-w-0 break-all whitespace-pre-wrap' : 'truncate',
-              )}
-              title={c.run}
-            >
-              {c.run}
-            </code>
-          </li>
-        ))}
+        {S.suggestedChecks.map(c => {
+          const repoCode = runsRepoCode(c.run);
+          return (
+            <li key={c.name} className="min-w-0">
+              <div className="flex min-w-0 items-baseline gap-2">
+                <span className="shrink-0 font-medium">{c.name}</span>
+                {/* A repo's own command is read in full before it's approved; found ones are the bridge's own. */}
+                <code
+                  className={cn(
+                    'font-mono text-xs text-ink2',
+                    S.checksFromRepo ? 'min-w-0 break-all whitespace-pre-wrap' : 'truncate',
+                  )}
+                  title={c.run}
+                >
+                  {c.run}
+                </code>
+              </div>
+              {repoCode ? (
+                <p className="repoCode mt-0.5 text-xs text-muted-foreground text-pretty">{repoCode}</p>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
       <Button
         variant="outline"
