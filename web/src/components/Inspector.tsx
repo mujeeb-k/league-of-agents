@@ -565,7 +565,14 @@ function ChecksOffer() {
         {S.suggestedChecks.map(c => (
           <li key={c.name} className="flex min-w-0 items-baseline gap-2">
             <span className="shrink-0 font-medium">{c.name}</span>
-            <code className="truncate font-mono text-xs text-ink2" title={c.run}>
+            {/* A repo's own command is read in full before it's approved; found ones are the bridge's own. */}
+            <code
+              className={cn(
+                'font-mono text-xs text-ink2',
+                S.checksFromRepo ? 'min-w-0 break-all whitespace-pre-wrap' : 'truncate',
+              )}
+              title={c.run}
+            >
               {c.run}
             </code>
           </li>

@@ -2139,6 +2139,11 @@ test("a cloned repo's checks wait for approval, and wait again when they change"
     await page.goto(linkFor(b));
     await expect(page.locator('#suggestedChecks li')).toHaveCount(1);
     await expect(page.locator('#suggestedChecks li')).toContainText(checks[0]!.run);
+    // The whole command shows, never cut off: it's read before it's approved.
+    const code = page.locator('#suggestedChecks code');
+    expect(await code.evaluate(el => el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight)).toBe(
+      true,
+    );
     await expect(page.locator('#insp')).toContainText("This repo's loa.config.json asks to run these commands");
     await expect(page.locator('#shareChecks')).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath('repo-checks-offer.png') });
