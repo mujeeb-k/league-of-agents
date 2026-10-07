@@ -8,13 +8,12 @@ import { fileKind, type FileKind } from './fileKind';
 import { importResolver } from './imports';
 import { LABEL } from './layout';
 import { drafts } from '../state/editing';
-import { ROWS, textureOf, textureUrl } from './texture';
 import { obstacles, pathOf, route, type Rect } from './route';
 import { allDirs, dirStat, filesUnder, viewOf } from './model';
 import type { FileView, RowKind } from './types';
 import { plural } from './util';
 
-/** A file zoomed out: a tile in its card's slot, with its name and the texture of its lines. */
+/** A file zoomed out: a tile in its card's slot, with its name and its changed lines marked. */
 export interface TileData {
   path: string;
   name: string;
@@ -22,9 +21,7 @@ export interface TileData {
   cls: string;
   x: number;
   y: number;
-  /** The texture image; null for a file created later in the run, shown as a ghost. */
-  texture: string | null;
-  /** Changed lines, by texture row. */
+  /** Changed lines, by tick row. */
   ticks: { k: RowKind; row: number }[];
 }
 export interface FrameData {
@@ -89,8 +86,11 @@ export interface SceneData {
 
 export let scene: SceneData | null = null;
 
-/** Changed lines as texture rows, one tick per row and kind. */
-function ticksOf(v: FileView, per: number): TileData['ticks'] {
+/** Tick rows a tile has room for, 4 world pixels each (05-canvas.css `.fr .tk i`). */
+const ROWS = 60;
+/** Changed lines as tick rows, one tick per row and kind: a file longer than ROWS lines folds several into a row. */
+function ticksOf(v: FileView): TileData['ticks'] {
+  const per = Math.max(1, Math.ceil(v.rows.length / ROWS));
   const out: TileData['ticks'] = [],
     seen = new Set<string>();
   v.rows.forEach((r, i) => {
@@ -132,7 +132,6 @@ export function computeScene(): SceneData {
         run && st.cur === f.path ? 'cur' : '',
         drafts.has(f.path) ? 'dirty' : '',
       ].join(' ');
-      const tex = v.ghost ? null : textureOf(v.rows);
       out.tiles.push({
         path: f.path,
         name: f.name,
@@ -140,8 +139,7 @@ export function computeScene(): SceneData {
         cls,
         x: f.x,
         y: f.y,
-        texture: tex && textureUrl(tex),
-        ticks: tex && v.kind ? ticksOf(v, tex.per) : [],
+        ticks: !v.ghost && v.kind ? ticksOf(v) : [],
       });
       count++;
     }

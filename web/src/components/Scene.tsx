@@ -18,7 +18,7 @@ const box = (x: number, y: number, w: number, h: number) => ({
   height: `${h}px`,
 });
 
-/** A file zoomed out: its name on one line, and the texture of its lines, with changed rows marked. */
+/** A file zoomed out: its name on one line, and its changed rows marked. */
 function Tile({ f }: { f: TileData }) {
   return (
     <div className={f.cls} data-path={f.path} style={box(f.x, f.y, CW, CH)}>
@@ -26,9 +26,6 @@ function Tile({ f }: { f: TileData }) {
         <FileIcon kind={f.kind} />
         {f.name}
       </span>
-      {f.texture ? (
-        <i className="tx" style={{ maskImage: `url(${f.texture})`, WebkitMaskImage: `url(${f.texture})` }} />
-      ) : null}
       {f.ticks.length ? (
         <span className="tk">
           {f.ticks.map(t => (

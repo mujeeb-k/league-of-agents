@@ -22,7 +22,8 @@ export async function zoomTo(page: Page, pct: number) {
 
 /**
  * Requirement 4: visible folder labels never overlap and are one line. Names never break: tiles' names are
- * one line. Requirement 3: below code zoom, every folder with files draws its tiles, each with a texture.
+ * one line. Requirement 3: below code zoom, every folder with files draws its tiles: named, except at the
+ * farthest zoom (`.over`), where a tile is its block and its change marks.
  */
 export async function checkLevel(page: Page) {
   const r = await page.evaluate(() => {
@@ -53,9 +54,10 @@ export async function checkLevel(page: Page) {
         const tiles = [...document.querySelectorAll<HTMLElement>('.fr')].filter(
           t => t.dataset.path!.slice(0, Math.max(0, t.dataset.path!.lastIndexOf('/'))) === f.dataset.dir,
         );
+        const over = document.getElementById('world')!.classList.contains('over');
         const drawn = tiles.filter(t => {
-          const tx = t.querySelector('.tx');
-          return vis(t) && tx && getComputedStyle(tx).maskImage.startsWith('url(');
+          const name = t.querySelector<HTMLElement>('.n');
+          return vis(t) && t.getBoundingClientRect().width > 0 && (over || (name && vis(name)));
         });
         if (!drawn.length) bare.push(f.dataset.dir || '/');
       }

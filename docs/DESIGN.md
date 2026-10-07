@@ -111,7 +111,7 @@ shadcn/ui (Radix, Tailwind, Lucide) for every panel and control. The canvas rend
 
 - The map never reshuffles once laid out. New files slot in.
 - First open fits the whole repo to the screen, using the screen's shape.
-- Zoomed out must look rich: real line-length textures, change ticks, folder labels with totals. No empty rectangles.
+- Zoomed out, below 34%: each file shows its name and change ticks, and folder labels show totals. Line textures are left out there, so panning a large repo stays at 60 fps. From 34% up, code cards show the real lines.
 - Zoomed in: code boxes like Figma frames, import lines as thin curves, highlighted on hover and selection.
 - Selection looks like Figma: blue outline, square corner handles, a small label pill underneath.
 

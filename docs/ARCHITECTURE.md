@@ -147,7 +147,7 @@ Note: `acceptEdits` lets Claude Code edit files and run `mkdir`, `touch`, `rm`, 
 - `src/api` holds typed wire types and a client for every bridge route, plus the long-poll loop.
 - Model: `FILES`, `DIRMAP`, `RUNS`. `layout()` places folders as columns by depth (wider than tall), files as a grid of 420×300 boxes inside each folder frame, and persists nothing yet.
 - `viewOf(file)` returns rows for the current mode (before, after, diff) using the run's `pre` and `hunks`.
-- Semantic zoom: below 34% the canvas shows the tree with file lists and line-length bars with change ticks. Above it, code boxes with import lines.
+- Semantic zoom: below 34% the canvas shows the tree with a tile per file, its name and change ticks, and no line texture: painting a texture per tile made panning drop frames on large repos. Above it, code boxes with import lines.
 - Demo mode uses a neutral sample repo (`src/demo`, a fictional webhook service). Live mode loads `/api/state` and polls events.
 
 ## Verified vs not

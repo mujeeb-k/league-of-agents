@@ -149,21 +149,13 @@
 .tight .fr .n svg {
   display: none;
 }
-/* The texture of the file's lines, under the name. */
-.fr .tx,
+/* The area the changed-row marks are placed against, under the name. */
 .fr .tk {
   position: absolute;
   top: max(24px, calc(26px / var(--s)));
   left: 24px;
   right: 24px;
   bottom: 20px;
-}
-.fr .tx {
-  background: var(--spark);
-  mask-size: 360px auto;
-  mask-repeat: no-repeat;
-  -webkit-mask-size: 360px auto;
-  -webkit-mask-repeat: no-repeat;
 }
 /* Changed rows: marks on the right edge, like an editor's overview ruler. */
 .fr .tk i {
@@ -184,7 +176,6 @@
 .over .fr .n {
   display: none;
 }
-.over .fr .tx,
 .over .fr .tk {
   top: 24px;
 }
