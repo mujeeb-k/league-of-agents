@@ -1,7 +1,9 @@
 // Live connection to the local bridge.
 import { applyView, flyRun, openingView } from '../lib/camera';
 import { buildModel, specFromPaths } from '../lib/model';
-import type { SavedLayout } from '../lib/layout';
+import { carryRenames, type SavedLayout } from '../lib/layout';
+import { renamesOf } from '../lib/renames';
+import { changedBlock } from '../lib/textdiff';
 import type { Run } from '../lib/types';
 import { fmtDur, relTime } from '../lib/util';
 import { S, st } from '../state/app';
@@ -28,14 +30,32 @@ function conn(): Conn {
 
 function liveRun(r: RunDTO): Run {
   const changes: Run['changes'] = new Map();
-  for (const c of r.changes || [])
-    changes.set(c.path, {
-      created: c.created,
-      deleted: c.deleted,
-      pre: c.pre,
-      hunks: c.hunks,
-      lines: c.created ? c.hunks.flatMap(h => h.add) : [],
-    });
+  const renames = renamesOf(r.changes || []),
+    renamed = new Set(renames.values());
+  for (const c of r.changes || []) {
+    if (renamed.has(c.path)) continue;
+    const from = renames.get(c.path);
+    // A renamed file is one change: from its old text to its new one, under its new name.
+    const pre = from ? r.changes.find(x => x.path === from)!.pre : null;
+    const block =
+      pre &&
+      changedBlock(
+        pre,
+        c.hunks.flatMap(h => h.add),
+      );
+    changes.set(
+      c.path,
+      pre
+        ? { created: false, deleted: false, pre, hunks: block ? [block] : [], lines: [], renamedFrom: from }
+        : {
+            created: c.created,
+            deleted: c.deleted,
+            pre: c.pre,
+            hunks: c.hunks,
+            lines: c.created ? c.hunks.flatMap(h => h.add) : [],
+          },
+    );
+  }
   if (!S.REVIEWED.has(r.id)) S.REVIEWED.set(r.id, new Set());
   return {
     ...r,
@@ -125,21 +145,27 @@ function applyState(s: StateResponse, first: boolean) {
     code[f.path] = f.lines.join('\n');
     present.add(f.path);
   }
-  const gone = new Set<string>();
-  for (const r of s.runs)
-    for (const c of r.changes || [])
-      if (!present.has(c.path)) {
-        paths.push(c.path);
-        gone.add(c.path);
+  // A file a run removed stays on the map, marked gone, while a run lists it; a renamed one is under its new name.
+  const runs = s.runs.map(liveRun);
+  const gone = new Set<string>(),
+    renames = new Map<string, string>();
+  for (const r of runs)
+    for (const [p, c] of r.changes) {
+      if (c.renamedFrom) renames.set(p, c.renamedFrom);
+      if (!present.has(p) && !gone.has(p)) {
+        paths.push(p);
+        gone.add(p);
       }
+    }
   const keepRun = st.run && st.run.id,
     keepSel = [...st.sel];
+  S.LAYOUT = carryRenames(S.LAYOUT, renames, present);
   buildModel(specFromPaths(s.repo.name, paths), code, []);
   for (const p of gone) {
     const f = S.FILES.get(p);
     if (f) f.gone = true;
   }
-  S.RUNS = s.runs.map(liveRun);
+  S.RUNS = runs;
   S.ACTIVE = S.RUNS.find(r => r.id === s.active) || null;
   st.run = S.RUNS.find(r => r.id === (live.pendingSelect || keepRun)) || null;
   if (live.pendingSelect && st.run) live.pendingSelect = null;

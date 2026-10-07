@@ -72,6 +72,8 @@ export interface Change {
   pre: string[] | null;
   hunks: Hunk[];
   lines: string[];
+  /** For a renamed file, its old path: the run deleted that file and created this one (lib/renames.ts). */
+  renamedFrom?: string;
 }
 
 export interface Run {

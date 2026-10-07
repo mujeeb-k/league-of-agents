@@ -810,6 +810,34 @@ test('the layout is kept: another window, another size, every folder and file wh
   }
 });
 
+test('a renamed file keeps its place, shows as one file renamed, and leaves no ghost', async ({ page }) => {
+  const repo = repoWithFolders(),
+    b = await startBridge(repo, FAKE_CLAUDE, { LOA_QUIET_MS: String(QUIET) }, ['--no-hooks']);
+  try {
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    const before = await placesOf(page);
+    // Renamed in an editor, with one line changed on the way.
+    fs.renameSync(path.join(repo, 'src/area0/part0/file0.ts'), path.join(repo, 'src/area0/part0/renamed.ts'));
+    fs.appendFileSync(path.join(repo, 'src/area0/part0/renamed.ts'), 'export const more = 1;\n');
+    await expect.poll(async () => (await runsOf(b)).length, { timeout: 10_000 }).toBe(1);
+    await expect(page.locator('#sideList .run')).toHaveCount(1);
+    const after = await placesOf(page);
+    expect(after['src/area0/part0/renamed.ts']).toBe(before['src/area0/part0/file0.ts']);
+    expect(after['src/area0/part0/file0.ts']).toBeUndefined();
+    for (const [p, xy] of Object.entries(before)) if (p !== 'src/area0/part0/file0.ts') expect(after[p], p).toBe(xy);
+    // The run: one file, renamed, its one added line, and the old name on its card.
+    await page.locator('#sideList .run').click();
+    await expect(page.locator('.flist li .p')).toHaveText(['renamed.ts']);
+    const card = page.locator('.card[data-path="src/area0/part0/renamed.ts"]');
+    await expect(card.locator('header .from')).toHaveText('renamed from file0.ts');
+    await expect(card.locator('header .stat')).toHaveText('+1');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('the layout is kept on a 0.1.2 bridge, in the browser', async ({ page }) => {
   const repo = repoWithFolders(),
     b = await startBridge(repo, FAKE_CLAUDE, {}, [], publishedBridge('0.1.2'));

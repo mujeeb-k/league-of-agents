@@ -67,7 +67,7 @@ Edits made during an agent's run are counted in that run, including your own. On
 
 **From any editor.** Just work. When files you changed go quiet for a few seconds, League of Agents records them as one run, such as "Edited main.py". Files git ignores and new files that usually hold secrets ([listed below](#privacy-and-security)) are never recorded, and branch switches and pulls never make a run.
 
-A rename is recorded as the old file deleted and a new file created, so the file gets a new place on the map.
+A renamed file keeps its place on the map and shows as renamed, with what changed in it. A folder renamed as a whole keeps its place too.
 
 ### Checks
 

@@ -343,7 +343,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.card header .dir {
+/* A renamed file's old name, beside its new one. */
+.card header .from {
   color: var(--ink3);
   overflow: hidden;
   text-overflow: ellipsis;

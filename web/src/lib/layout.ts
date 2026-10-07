@@ -242,3 +242,46 @@ export function bounds(root: DirNode): Rect {
     y = Math.min(...ds.map(d => d.y)) - LABEL;
   return { x, y, w: Math.max(...ds.map(d => d.x + d.w)) - x, h: Math.max(...ds.map(d => d.y + d.h)) - y };
 }
+
+const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '');
+
+/**
+ * Carries places across renames (new path to old, lib/renames.ts): a renamed file takes its old slot, and a folder
+ * renamed as a whole takes the old folder's place, its files their slots. Only where the new path has no place
+ * yet, and a folder only once nothing is left in the old one (`present`: every path on the map now).
+ */
+export function carryRenames(
+  saved: SavedLayout | null,
+  renames: Map<string, string>,
+  present: Set<string>,
+): SavedLayout | null {
+  if (!saved || !renames.size) return saved;
+  const out: SavedLayout = { v: 1, dirs: { ...saved.dirs }, files: { ...saved.files } };
+  // Each folder a file moved out of, and where to, matched from the deepest folder up: lib/old/x → lib/new/x
+  // also moves lib/old to lib/new.
+  const moves = new Map<string, Set<string>>();
+  for (const [to, from] of renames) {
+    let a = dirOf(from),
+      b = dirOf(to);
+    while (a !== b) {
+      if (!moves.has(a)) moves.set(a, new Set());
+      moves.get(a)!.add(b);
+      if (a.slice(a.lastIndexOf('/') + 1) !== b.slice(b.lastIndexOf('/') + 1)) break;
+      a = dirOf(a);
+      b = dirOf(b);
+    }
+  }
+  const emptied = (d: string) => ![...present].some(p => p.startsWith(d + '/'));
+  const carried = new Set<string>();
+  for (const [from, to] of moves) {
+    const target = [...to][0]!;
+    if (to.size === 1 && saved.dirs[from] && !saved.dirs[target] && emptied(from)) {
+      out.dirs[target] = saved.dirs[from];
+      carried.add(from);
+    }
+  }
+  for (const [to, from] of renames)
+    if (out.files[to] === undefined && saved.files[from] !== undefined)
+      if (dirOf(from) === dirOf(to) || carried.has(dirOf(from))) out.files[to] = saved.files[from];
+  return out;
+}

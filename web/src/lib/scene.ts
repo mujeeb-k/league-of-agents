@@ -58,6 +58,8 @@ export type CardData =
       x: number;
       y: number;
       stat: { a: number; d: number } | null;
+      /** In a run that renamed the file, its old name. */
+      from: string | null;
       above: number;
       rows: CodeRow[];
       rest: number;
@@ -222,6 +224,7 @@ export function computeScene(): SceneData {
         run && st.cur === f.path ? 'cur' : '',
       ].join(' '),
       stat: v.kind ? { a: v.a!, d: v.d! } : null,
+      from: run?.changes.get(f.path)?.renamedFrom?.split('/').pop() ?? null,
       above: start,
       rows: slice.map(r => ({
         id: lineId(r.k, r.t || ''),

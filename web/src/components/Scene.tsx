@@ -88,6 +88,7 @@ const Card = memo(function Card({ c }: { c: CardData }) {
     <div className={c.cls} data-path={c.path} style={box(c.x, c.y, CW, CH)}>
       <header>
         <span className="fn">{c.name}</span>
+        {c.from ? <span className="from">{`renamed from ${c.from}`}</span> : null}
         {c.stat ? <Stat a={c.stat.a} d={c.stat.d} /> : null}
       </header>
       <div className="code">

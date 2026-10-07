@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CH, COLGAP, CW, GAP, PAD } from '../../src/lib/constants';
-import { LABEL, bounds, layoutTree, pickCols } from '../../src/lib/layout';
+import { LABEL, bounds, carryRenames, layoutTree, pickCols } from '../../src/lib/layout';
 import { buildModel, specFromPaths } from '../../src/lib/model';
 import type { DirNode } from '../../src/lib/types';
 import { S } from '../../src/state/app';
@@ -168,5 +168,50 @@ describe('layout', () => {
         expect((f.x - d.x - PAD) % (CW + GAP)).toBe(0);
         expect((f.y - d.y - PAD) % (CH + GAP)).toBe(0);
       }
+  });
+});
+
+describe('carryRenames', () => {
+  const saved = {
+    v: 1 as const,
+    dirs: { 'lib/old': { x: 900, y: 40, cols: 2, rows: 1 }, src: { x: 0, y: 40, cols: 2, rows: 1 } },
+    files: { 'src/auth.ts': 1, 'src/keep.ts': 0, 'lib/old/x.ts': 0, 'lib/old/y.ts': 1 },
+  };
+  it('gives a file renamed in its folder its old slot', () => {
+    const out = carryRenames(saved, new Map([['src/session.ts', 'src/auth.ts']]), new Set(['src/session.ts']))!;
+    expect(out.files['src/session.ts']).toBe(1);
+  });
+  it('gives a folder renamed as a whole its old place, and its files their slots', () => {
+    const renames = new Map([
+      ['lib/new/x.ts', 'lib/old/x.ts'],
+      ['lib/new/y.ts', 'lib/old/y.ts'],
+    ]);
+    const out = carryRenames(saved, renames, new Set(['lib/new/x.ts', 'lib/new/y.ts', 'src/keep.ts']))!;
+    expect(out.dirs['lib/new']).toEqual(saved.dirs['lib/old']);
+    expect([out.files['lib/new/x.ts'], out.files['lib/new/y.ts']]).toEqual([0, 1]);
+  });
+  it('leaves a folder where it is while files remain in the old one', () => {
+    const out = carryRenames(
+      saved,
+      new Map([['lib/new/x.ts', 'lib/old/x.ts']]),
+      new Set(['lib/new/x.ts', 'lib/old/y.ts']),
+    )!;
+    expect(out.dirs['lib/new']).toBeUndefined();
+    expect(out.files['lib/new/x.ts']).toBeUndefined();
+  });
+  it('moves nothing on the map: the renamed file is laid out in its old place', () => {
+    const paths = ['src/a.ts', 'src/auth.ts', 'src/b.ts', 'docs/x.md'];
+    let root = build(paths);
+    const first = layoutTree(root, null, { w: 1440, h: 900 }).saved;
+    const before = positions();
+    const renamed = paths.map(p => (p === 'src/auth.ts' ? 'src/session.ts' : p));
+    root = build(renamed);
+    layoutTree(root, carryRenames(first, new Map([['src/session.ts', 'src/auth.ts']]), new Set(renamed)), {
+      w: 1440,
+      h: 900,
+    });
+    const now = positions();
+    expect(now.get('src/session.ts')).toBe(before.get('src/auth.ts'));
+    for (const p of ['src/a.ts', 'src/b.ts', 'docs/x.md']) expect(now.get(p)).toBe(before.get(p));
   });
 });

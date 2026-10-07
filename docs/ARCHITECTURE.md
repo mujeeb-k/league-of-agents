@@ -80,7 +80,7 @@ Every change becomes a run: an agent's, a save in the map's editor (`you`), or e
 - `writeTree()` writes the working tree as a git tree through a private index, `GIT_INDEX_FILE=.loa/snapshot.index`. The index starts from `read-tree HEAD` and is kept between snapshots, so git hashes only changed files; it starts again when HEAD moves. It runs `git add -A`, then removes untracked files whose names usually hold secrets, at any depth (`SECRET_FILES`: `.env`, `.env.*`, private keys, keystores, credential and secrets files; `ls-files --others --exclude-standard`), so a new `.env` or `id_rsa` never enters a snapshot. Tracked ones, such as `.env.example`, are in the repo's history already and are snapshotted like any file. Ignored files never enter one.
 - `commitTree(tree, label, head)` makes a commit of that tree whose parent is HEAD, reachable only from the refs it is pinned to.
 - `pin(id, which, commit)` writes `refs/loa/runs/<id>/before` or `/after`.
-- `computeChanges(before, after)` runs `git diff --no-renames -U0` between the two and parses it into `{ path, created, deleted, pre[], hunks[{ at, del, add[] }] }`. `pre` is the file at `before`, up to its first 4,000 lines; `at` is a 0-based index into it. With `--no-renames`, a renamed file is a deleted file and a created one.
+- `computeChanges(before, after)` runs `git diff --no-renames -U0` between the two and parses it into `{ path, created, deleted, pre[], hunks[{ at, del, add[] }] }`. `pre` is the file at `before`, up to its first 4,000 lines; `at` is a 0-based index into it. With `--no-renames`, a renamed file is a deleted file and a created one; the app pairs them again (`renamesOf()` in `lib/renames.ts`: at least half their lines shared, one to one) into one change under the new name, from the old text to the new (`liveRun()`), and `carryRenames()` in `lib/layout.ts` gives the new name the old place. The bridge's records, and reverting them, are unchanged.
 - `saveRun(run)` writes `.loa/runs/<id>.json`: agent, prompt, scope, sessionId, model (as the agent reports it: Claude Code's and Cursor's first `system`/`init` event or Claude Code's replies, read in `onAgentLine()`; Codex reports none), status, timestamps, summary, stream (last 400 entries), cost, checks, kept, reverted, outOfScope. Raw agent output is kept as-is in `.loa/runs/<id>.stream.jsonl` and `<id>.stderr.log`.
 
 **Lifecycle:**
@@ -159,7 +159,7 @@ Not yet verified with real runs: Cursor and Codex output (tested against stand-i
 
 ## Known gaps
 
-- A rename moves a file to a new place on the map.
+- A file renamed and moved to another folder that still has files takes a free slot there.
 - File contents (first 400 lines each) are sent in full with `/api/state`. Fine for hundreds of files, not tens of thousands.
 - The scope lock needs the hooks and doesn't see shell commands (above).
 - Cursor and Codex stream parsing is approximate.
