@@ -15,7 +15,7 @@ export const NEAR = 0.34,
   /** Below this, tile names drop their icon and shrink a size, so a short name still shows in full. */
   TIGHT = 0.2;
 /** The oldest bridge this app works with; an older one gets the update banner. */
-export const MIN_BRIDGE = '0.1.2';
+export const MIN_BRIDGE = '0.1.3';
 /** Whether a bridge version is older than `min`; a bridge that sends none is older than every version. */
 export function olderThan(version: string | null, min: string) {
   if (!version) return true;

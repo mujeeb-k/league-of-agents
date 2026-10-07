@@ -1988,10 +1988,10 @@ test('version check: an old bridge shows the update banner, a current one does n
     await expect(banner).toHaveCount(0);
     await reporting(null);
     await expect(banner).toContainText(
-      "Update your bridge. It's an older version. It still works; 0.1.2 or later has fixes.",
+      "Update your bridge. It's an older version. It still works; 0.1.3 or later has fixes.",
     );
-    await reporting('0.1.1');
-    await expect(banner).toContainText("It's version 0.1.1. It still works; 0.1.2 or later has fixes.");
+    await reporting('0.1.2');
+    await expect(banner).toContainText("It's version 0.1.2. It still works; 0.1.3 or later has fixes.");
     await expect(page.locator('#updateCommand')).toHaveText('npx leagueofagents-cli@latest');
     // It takes the hint's place, and closes for this connection.
     await expect(page.locator('#tip')).toBeHidden();
@@ -2001,7 +2001,7 @@ test('version check: an old bridge shows the update banner, a current one does n
     }
     await page.locator('#closeUpdate').click();
     await expect(banner).toHaveCount(0);
-    await reporting('0.1.2');
+    await reporting('0.1.3');
     await expect(banner).toHaveCount(0);
   } finally {
     b.stop();
