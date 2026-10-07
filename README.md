@@ -1,5 +1,7 @@
 <p align="center"><img src="brand/wordmark-600.png" alt="League of Agents" width="420"></p>
 
+[English](README.md) · [简体中文](README.zh-CN.md) · [Français](README.fr.md) · [Português (Brasil)](README.pt-BR.md) · [Español](README.es.md)
+
 ## What is League of Agents?
 
 See every change your agents make. League of Agents is a map of your codebase where you direct coding agents and review their work.
