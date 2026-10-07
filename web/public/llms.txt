@@ -33,3 +33,12 @@ Changes from any other editor show up as runs too.
 - npm: https://www.npmjs.com/package/leagueofagents-cli
 - Setup guide for coding agents: https://leagueofagents.dev/setup.md
 - Privacy: https://leagueofagents.dev/privacy
+
+## Other languages
+
+The site and the app are also in these languages, as beta translations not yet checked by a fluent reader:
+
+- 简体中文 (Simplified Chinese): https://leagueofagents.dev/zh-CN/
+- Français (French): https://leagueofagents.dev/fr/
+- Português (Brasil) (Brazilian Portuguese): https://leagueofagents.dev/pt-BR/
+- Español (Spanish): https://leagueofagents.dev/es/

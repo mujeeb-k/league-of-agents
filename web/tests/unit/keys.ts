@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
-import { ABOUT, PRIVACY, TAGLINE } from '../../src/lib/intro';
+import { ABOUT, IMAGE_ALT, PRIVACY, PRIVACY_ABOUT, SUMMARY, TAGLINE } from '../../src/lib/intro';
 import { SAMPLE_RUNS, SAMPLE_TREE } from '../../src/demo/sample';
 import type { TreeSpec } from '../../src/lib/types';
 import { BY_CODE, UNREACHABLE } from '../../src/api/errors';
@@ -30,6 +30,10 @@ export const VARIABLE_KEYS = [
   // Shown in English everywhere, with their translation beneath (Translation).
   TAGLINE,
   PRIVACY,
+  // On each language's homepage and privacy page (i18n/pages.ts).
+  SUMMARY,
+  IMAGE_ALT,
+  PRIVACY_ABOUT,
 ];
 
 /** The demo's words: its runs' titles, prompts, replies and times, and its folders' notes (lib/model.ts buildModel). */

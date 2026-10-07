@@ -16,9 +16,32 @@
     var conn = null;
     try { conn = localStorage.getItem('loa.conn'); } catch (e) {}
     if (/[#&]t=/.test(location.hash) || conn) document.documentElement.dataset.boot = 'repo';
+    // The app opens in the person's language (i18n/index.ts preferredLang): when that isn't this page's, the
+    // introduction below waits for the app rather than show first in another language.
+    var langs = ['en', 'zh-CN', 'fr', 'pt-BR', 'es'];
+    var match = function (s, base) {
+      s = String(s || '').toLowerCase();
+      for (var i = 0; i < langs.length; i++) {
+        var l = langs[i].toLowerCase();
+        if (l === s || (base && l.split('-')[0] === s.split('-')[0])) return langs[i];
+      }
+      return null;
+    };
+    var want = match(location.pathname.split('/')[1]), saved = null;
+    try { saved = localStorage.getItem('loa.lang'); } catch (e) {}
+    want = want || match(saved);
+    var asked = navigator.languages || [navigator.language];
+    for (var j = 0; !want && j < asked.length; j++) want = match(asked[j]) || match(asked[j], true);
+    if ((want || 'en') !== document.documentElement.lang) document.documentElement.dataset.intro = 'later';
   })();
 </script>
 <link rel="canonical" href="https://leagueofagents.dev/">
+<link rel="alternate" hreflang="en" href="https://leagueofagents.dev/">
+<link rel="alternate" hreflang="zh-CN" href="https://leagueofagents.dev/zh-CN/">
+<link rel="alternate" hreflang="fr" href="https://leagueofagents.dev/fr/">
+<link rel="alternate" hreflang="pt-BR" href="https://leagueofagents.dev/pt-BR/">
+<link rel="alternate" hreflang="es" href="https://leagueofagents.dev/es/">
+<link rel="alternate" hreflang="x-default" href="https://leagueofagents.dev/">
 <link rel="icon" href="./favicon.ico" sizes="any">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <link rel="icon" href="./favicon-32.png" type="image/png" sizes="32x32">
@@ -42,7 +65,7 @@
 {"@context":"https://schema.org","@type":"WebSite","@id":"https://leagueofagents.dev/#website","name":"League of Agents","url":"https://leagueofagents.dev/"}
 </script>
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","@id":"https://leagueofagents.dev/#app","name":"League of Agents","description":"See every change your agents make. A map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.","url":"https://leagueofagents.dev/","applicationCategory":"DeveloperApplication","operatingSystem":"macOS","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://github.com/mujeeb-k/league-of-agents/blob/main/LICENSE","sameAs":["https://github.com/mujeeb-k/league-of-agents","https://www.npmjs.com/package/leagueofagents-cli"],"author":{"@id":"https://leagueofagents.dev/#person"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","@id":"https://leagueofagents.dev/#app","name":"League of Agents","description":"See every change your agents make. A map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.","url":"https://leagueofagents.dev/","applicationCategory":"DeveloperApplication","operatingSystem":"macOS","inLanguage":["en","zh-CN","fr","pt-BR","es"],"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"license":"https://github.com/mujeeb-k/league-of-agents/blob/main/LICENSE","sameAs":["https://github.com/mujeeb-k/league-of-agents","https://www.npmjs.com/package/leagueofagents-cli"],"author":{"@id":"https://leagueofagents.dev/#person"}}
 </script>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"Person","@id":"https://leagueofagents.dev/#person","name":"Mujeeb Khan","url":"https://leagueofagents.dev/","sameAs":["https://github.com/mujeeb-k"]}
@@ -54,13 +77,16 @@
     border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--panel);
     color: var(--foreground); font: 15px/1.5 'IBM Plex Sans', system-ui, sans-serif; }
   #introStatic h1 { margin: 0; font-size: 18px; line-height: 1.375; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+  #introStatic .translation { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: var(--muted-foreground); text-wrap: wrap; }
   #introStatic p { margin: 8px 0 0; font-size: 13px; line-height: 1.625; color: var(--ink2); text-wrap: pretty; }
-  #introStatic code { display: block; margin-top: 12px; padding: 8px 12px; border-radius: 8px; background: var(--muted);
-    font: 12px 'IBM Plex Mono', ui-monospace, monospace; white-space: nowrap; }
+  /* As tall as the app's copy box, its button included, so the introduction keeps its height when the app starts. */
+  #introStatic code { display: block; margin-top: 12px; padding: 0 12px; border-radius: 8px; background: var(--muted);
+    font: 12px/40px 'IBM Plex Mono', ui-monospace, monospace; white-space: nowrap; }
   @media (width < 860px) {
     #introStatic { top: 60px; right: 12px; left: 12px; width: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--popover); }
   }
-  [data-boot='repo'] #introStatic { display: none; }
+  :lang(zh) #introStatic { font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif; }
+  [data-boot='repo'] #introStatic, [data-intro='later'] #introStatic { display: none; }
 </style>
 </head>
 <body>

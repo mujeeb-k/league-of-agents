@@ -6,6 +6,12 @@
 <title>Privacy · League of Agents</title>
 <meta name="description" content="What League of Agents collects. League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized.">
 <link rel="canonical" href="https://leagueofagents.dev/privacy">
+<link rel="alternate" hreflang="en" href="https://leagueofagents.dev/privacy">
+<link rel="alternate" hreflang="zh-CN" href="https://leagueofagents.dev/zh-CN/privacy">
+<link rel="alternate" hreflang="fr" href="https://leagueofagents.dev/fr/privacy">
+<link rel="alternate" hreflang="pt-BR" href="https://leagueofagents.dev/pt-BR/privacy">
+<link rel="alternate" hreflang="es" href="https://leagueofagents.dev/es/privacy">
+<link rel="alternate" hreflang="x-default" href="https://leagueofagents.dev/privacy">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
@@ -62,6 +68,10 @@
   code { font: 13px 'IBM Plex Mono', ui-monospace, monospace; }
   a { color: var(--sel); }
   .updated { font-size: 13px; margin-bottom: 20px; }
+  /* On a translated page: the note that the English page is the reference, and the privacy pair's translation. */
+  .beta { font-size: 13px; padding: 8px 12px; border: 1px solid var(--hair); border-radius: 8px; }
+  .translation { margin-top: -6px; }
+  :lang(zh) body { font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif; }
   @media (width < 720px) {
     main { margin: 0; border: 0; border-radius: 0; padding: 24px 16px; min-height: 100vh; }
   }
@@ -74,7 +84,7 @@
     <a href="/">League of Agents</a>
   </header>
   <h1>Privacy</h1>
-  <p class="updated">Last updated 6 October 2026</p>
+  <p class="updated">Last updated 7 October 2026</p>
 
   <h2>Your code</h2>
   <p>League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized.</p>
@@ -92,7 +102,7 @@
   <p>It uses no cookies. Visitors are told apart by a hash of the request, which is discarded after 24 hours, and the numbers are only ever seen added up. Nothing is counted in the app the bridge serves on your computer.</p>
 
   <h2>What your browser keeps</h2>
-  <p>Your browser saves the bridge you connected to (its port and token) and your panel and theme choices in its own storage on your device, so a reload reconnects. Disconnecting removes the connection.</p>
+  <p>Your browser saves the bridge you connected to (its port and token) and your panel, theme and language choices in its own storage on your device, so a reload reconnects. Disconnecting removes the connection.</p>
 
   <h2>Your coding agents</h2>
   <p>When you run Claude Code, Codex, Cursor or another agent, it sends your prompts and code to its own provider, under that provider's terms. League of Agents starts the agent on your computer and records what it changed there. It gives the agent your prompt and the selected files or lines, as paths and line numbers. "Update what depends on this" also puts the diff of your change in the prompt.</p>

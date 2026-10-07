@@ -374,60 +374,66 @@ test('the editor on a 1,000-line file: expand at 60 fps, keystrokes under 100 ms
   }
 });
 
-test('first paint on the hosted site is under 1.5 s', async ({ browser }) => {
-  const SITE = 'https://leagueofagents.dev/';
-  const visit = async (net: { latency: number; downloadThroughput: number; uploadThroughput: number } | null) => {
-    const ctx = await browser.newContext();
-    const page = await ctx.newPage();
-    const cdp = await ctx.newCDPSession(page);
-    await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
-    if (net) await cdp.send('Network.emulateNetworkConditions', { offline: false, ...net });
-    await page.goto(SITE, { waitUntil: 'load' });
-    await page.locator('#insp section').first().waitFor();
-    const m = await page.evaluate(
-      () =>
-        new Promise<{ fp: number; fcp: number; ttfb: number; script: string }>(resolve => {
-          const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
-          const fp = performance.getEntriesByName('first-paint')[0]?.startTime ?? NaN;
-          const script =
-            [...document.scripts]
-              .map(s => s.src)
-              .find(Boolean)
-              ?.split('/')
-              .pop() ?? '';
-          new PerformanceObserver(list => {
-            const fcp = list.getEntriesByName('first-contentful-paint')[0];
-            if (fcp) resolve({ fp, fcp: fcp.startTime, ttfb: nav.responseStart, script });
-          }).observe({ type: 'paint', buffered: true });
-        }),
+for (const home of ['/', '/zh-CN/', '/fr/'])
+  test(`first paint on the hosted site is under 1.5 s: ${home}`, async ({ browser }) => {
+    const SITE = 'https://leagueofagents.dev' + home;
+    // A language's page reaches the site when its build is promoted; until then there is nothing to measure.
+    if (home !== '/') test.skip((await fetch(SITE)).status === 404, `${SITE} isn't on the site yet`);
+    const visit = async (net: { latency: number; downloadThroughput: number; uploadThroughput: number } | null) => {
+      const ctx = await browser.newContext();
+      const page = await ctx.newPage();
+      const cdp = await ctx.newCDPSession(page);
+      await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
+      if (net) await cdp.send('Network.emulateNetworkConditions', { offline: false, ...net });
+      await page.goto(SITE, { waitUntil: 'load' });
+      await page.locator('#insp section').first().waitFor();
+      const m = await page.evaluate(
+        () =>
+          new Promise<{ fp: number; fcp: number; ttfb: number; script: string }>(resolve => {
+            const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
+            const fp = performance.getEntriesByName('first-paint')[0]?.startTime ?? NaN;
+            const script =
+              [...document.scripts]
+                .map(s => s.src)
+                .find(Boolean)
+                ?.split('/')
+                .pop() ?? '';
+            new PerformanceObserver(list => {
+              const fcp = list.getEntriesByName('first-contentful-paint')[0];
+              if (fcp) resolve({ fp, fcp: fcp.startTime, ttfb: nav.responseStart, script });
+            }).observe({ type: 'paint', buffered: true });
+          }),
+      );
+      await ctx.close();
+      return m;
+    };
+    await visit(null);
+    const runs = [];
+    for (const [label, net] of [
+      ['no throttling', null],
+      [
+        'Lighthouse desktop network (10 Mbps, 40 ms RTT)',
+        { latency: 40, downloadThroughput: 1.25e6, uploadThroughput: 1.25e6 },
+      ],
+    ] as const)
+      for (let i = 0; i < 3; i++) {
+        const m = await visit(net);
+        runs.push({
+          label,
+          run: i + 1,
+          ttfb: Math.round(m.ttfb),
+          fp: Math.round(m.fp),
+          fcp: Math.round(m.fcp),
+          script: m.script,
+        });
+      }
+    fs.writeFileSync(
+      path.join(OUT, `first-paint${home.replace(/\/$/, '').replace('/', '-')}.json`),
+      JSON.stringify(runs, null, 2),
     );
-    await ctx.close();
-    return m;
-  };
-  await visit(null);
-  const runs = [];
-  for (const [label, net] of [
-    ['no throttling', null],
-    [
-      'Lighthouse desktop network (10 Mbps, 40 ms RTT)',
-      { latency: 40, downloadThroughput: 1.25e6, uploadThroughput: 1.25e6 },
-    ],
-  ] as const)
-    for (let i = 0; i < 3; i++) {
-      const m = await visit(net);
-      runs.push({
-        label,
-        run: i + 1,
-        ttfb: Math.round(m.ttfb),
-        fp: Math.round(m.fp),
-        fcp: Math.round(m.fcp),
-        script: m.script,
-      });
-    }
-  fs.writeFileSync(path.join(OUT, 'first-paint.json'), JSON.stringify(runs, null, 2));
-  report(runs);
-  for (const r of runs) expect(r.fcp, `${r.label}, run ${r.run}`).toBeLessThan(1500);
-});
+    report(runs);
+    for (const r of runs) expect(r.fcp, `${r.label}, run ${r.run}`).toBeLessThan(1500);
+  });
 
 // A real repo inside the 1,500-file cap: remix-run/react-router at a fixed commit, 1,139 files on the map. Fetched
 // once into test-results/perf-repos/ (needs the network the first time). Each measurement is the median of 3

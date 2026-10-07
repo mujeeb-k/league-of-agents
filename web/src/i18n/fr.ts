@@ -444,5 +444,10 @@ const catalogue: Catalogue = {
     'Ce commit a déjà une note Git AI ; League of Agents ne l’écrase jamais.',
   'No line from a kept run was written by an agent.':
     'Aucune ligne d’une exécution conservée n’a été écrite par un agent.',
+  'A map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.':
+    'Une carte de votre dépôt pour Claude Code, Codex et Cursor. Sélectionnez des fichiers ou des lignes, confiez une tâche à votre agent, puis relisez ses changements.',
+  "A map of a repository with an agent's changes marked.":
+    'La carte d’un dépôt, avec les changements d’un agent signalés.',
+  'What League of Agents collects.': 'Ce que League of Agents collecte.',
 };
 export default catalogue;

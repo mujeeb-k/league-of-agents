@@ -2158,7 +2158,10 @@ function serveWeb(res, pathname) {
     );
   let rel;
   try {
-    rel = decodeURIComponent(pathname).replace(/^\/+/, '') || 'index.html';
+    // A folder serves its index.html: each language's homepage, /fr/ and so on.
+    rel = decodeURIComponent(pathname)
+      .replace(/^\/+/, '')
+      .replace(/(^|\/)$/, '$1index.html');
   } catch {
     return send(res, 400, 'Bad path');
   }

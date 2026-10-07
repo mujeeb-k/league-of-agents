@@ -19,7 +19,10 @@ const TYPES = {
 
 http
   .createServer((req, res) => {
-    const rel = decodeURIComponent(new URL(req.url, 'http://x').pathname).replace(/^\/+/, '') || 'index.html';
+    // A folder serves its index.html, as on the site: /fr/ is fr/index.html.
+    const rel = decodeURIComponent(new URL(req.url, 'http://x').pathname)
+      .replace(/^\/+/, '')
+      .replace(/(^|\/)$/, '$1index.html');
     for (const root of roots) {
       const abs = path.resolve(root, rel);
       if (!abs.startsWith(path.resolve(root) + path.sep)) continue;

@@ -1226,3 +1226,74 @@ test.describe('editor', () => {
     await expect.poll(() => asked).toBe(true);
   });
 });
+
+test.describe('a page per language', () => {
+  const ABOUT_FR =
+    'League of Agents est une carte de votre dépôt pour Claude Code, Codex et Cursor. Sélectionnez des fichiers ou des lignes, confiez une tâche à votre agent, puis relisez ses changements.';
+
+  test('/fr/ opens in French, its introduction in the HTML before the app starts', async ({ page, browser }) => {
+    // Before any script: the page's own HTML.
+    const bare = await browser.newContext({ javaScriptEnabled: false, viewport: page.viewportSize()! });
+    const html = await bare.newPage();
+    await html.goto('/fr/');
+    await expect(html.locator('html')).toHaveAttribute('lang', 'fr');
+    await expect(html.locator('#introStatic h1')).toHaveText('See every change your agents make.');
+    await expect(html.locator('#introStatic .translation')).toHaveText('Voyez chaque changement que font vos agents.');
+    await expect(html.locator('#introStatic p').last()).toHaveText(ABOUT_FR);
+    await bare.close();
+    // The app: the same words.
+    await page.goto('/fr/');
+    await expect(page.locator('#intro p').last()).toHaveText(ABOUT_FR);
+    await expect(page.locator('#intro .translation')).toHaveText('Voyez chaque changement que font vos agents.');
+    await expect(page.locator('#conn')).toHaveText('Démo');
+  });
+
+  for (const path of ['/', '/zh-CN/', '/fr/', '/pt-BR/', '/es/'])
+    test(`${path}: the introduction keeps its place and size when the app starts`, async ({ page, browser }) => {
+      const bare = await browser.newContext({ javaScriptEnabled: false, viewport: page.viewportSize()! });
+      const html = await bare.newPage();
+      await html.goto(path);
+      await html.evaluate(() => document.fonts.ready);
+      // The heading and the command: where the text starts, and where the introduction ends.
+      const boxes = (p: Page, root: string, command: string) =>
+        Promise.all([p.locator(`${root} h1`).boundingBox(), p.locator(command).boundingBox()]);
+      const before = await boxes(html, '#introStatic', '#introStatic code');
+      await bare.close();
+      await page.goto(path);
+      await page.locator('#intro').waitFor();
+      const after = await boxes(page, '#intro', '#introCommand >> xpath=..');
+      expect(after[0]).toEqual(before[0]);
+      expect(after[1]!.y + after[1]!.height).toBeCloseTo(before[1]!.y + before[1]!.height, 0);
+    });
+
+  test("on /, a person who chose French doesn't see the English introduction first", async ({ page }) => {
+    // Only the page's own script runs: the app's never starts.
+    await page.route(/\/assets\/index-.*\.js$/, r => r.abort());
+    await page.addInitScript(() => localStorage.getItem('loa.lang') || localStorage.setItem('loa.lang', 'fr'));
+    await page.goto('/');
+    await expect(page.locator('html')).toHaveAttribute('data-intro', 'later');
+    await expect(page.locator('#introStatic')).toBeHidden();
+    await page.evaluate(() => localStorage.setItem('loa.lang', 'en'));
+    await page.reload();
+    await expect(page.locator('#introStatic')).toBeVisible();
+  });
+
+  test('the command menu changes the language, and the choice is kept', async ({ page }) => {
+    await page.keyboard.press('ControlOrMeta+k');
+    await page.keyboard.type('Français');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
+    await expect(page.locator('#conn')).toHaveText('Démo');
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
+    // From a language's own page, English is the homepage at /.
+    await page.goto('/zh-CN/');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
+    await page.keyboard.press('ControlOrMeta+k');
+    await page.keyboard.type('English');
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(page.locator('#conn')).toHaveText('Demo');
+  });
+});

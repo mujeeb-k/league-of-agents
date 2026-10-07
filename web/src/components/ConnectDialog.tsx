@@ -13,7 +13,7 @@ import { Tip } from './TopBar';
 import { Button } from './ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
-import { t } from '../i18n';
+import { locale, t } from '../i18n';
 
 /** What a person types to start the bridge in their repo. */
 export const RUN_COMMAND = 'npx leagueofagents-cli@latest';
@@ -216,7 +216,8 @@ function ConnectForm({
         {t('A small bridge runs on your machine, inside your repo.')} {PRIVACY}{' '}
         <a
           id="privacyLink"
-          href="https://leagueofagents.dev/privacy"
+          // The privacy page in the person's language: /privacy, or /fr/privacy and so on.
+          href={`https://leagueofagents.dev/${locale() === 'en' ? '' : `${locale()}/`}privacy`}
           target="_blank"
           rel="noopener"
           className="text-ink2 underline underline-offset-2 hover:text-foreground"
