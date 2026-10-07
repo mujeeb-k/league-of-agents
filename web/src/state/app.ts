@@ -37,6 +37,8 @@ export const S = {
   checksFromRepo: false,
   /** The checks set up now, by name: a check that couldn't run can be turned off while it is one. */
   checksOn: [] as string[],
+  /** Why the bridge's watch mode is off, if it is. */
+  watchOff: null as string | null,
   /** Shown in the top bar crumb. */
   repoName: '',
   /** The repository's absolute path when live; empty in the demo. */

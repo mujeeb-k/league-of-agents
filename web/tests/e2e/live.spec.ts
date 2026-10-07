@@ -2291,6 +2291,35 @@ test('old runs are pruned: past the newest 500 and older than 30 days, with thei
   }
 });
 
+// When watch mode can't start (on Linux, the limit on watched folders), edits outside a run go unrecorded: the
+// app says so, and how to fix the limit. The bridge's state carries why (watchOff), set here on its way.
+test('watch mode off: the app says edits outside a run are not recorded, and how to raise the limit', async ({
+  page,
+}) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo, FAKE_CLAUDE, {}, ['--no-hooks']);
+  try {
+    expect((await call(b, '/api/state')).body.watchOff).toBeNull();
+    await page.route('**/api/state', async route => {
+      const res = await route.fetch();
+      const body = (await res.json()) as StateResponse;
+      await route.fulfill({
+        response: res,
+        json: { ...body, watchOff: 'the system limit on watched folders is reached' },
+      });
+    });
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await expect(page.locator('#watchOff')).toHaveText(
+      "Edits made outside a run aren't recorded: the system limit on watched folders is reached.",
+    );
+    await expect(page.locator('#insp')).toContainText('sudo sysctl fs.inotify.max_user_watches=524288');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 // A hook file in git is the team's: the bridge leaves it as it is, so nothing machine-specific shows as a change.
 test('a hooks file in git is never edited', async () => {
   const repo = makeRepo();

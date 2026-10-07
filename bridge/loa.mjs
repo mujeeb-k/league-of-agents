@@ -1440,6 +1440,13 @@ function writeConfig(file) {
   });
 }
 /** Takes the first baseline, then watches. The bridge starts listening only once the baseline exists. */
+/** Why watch mode is off, if it is: the app says so, since edits outside a run then go unrecorded. */
+let watchOff = null;
+function watchFailed(e) {
+  watchOff = e.code === 'ENOSPC' ? 'the system limit on watched folders is reached' : e.message;
+  console.error('Watch mode is off: ' + watchOff);
+  emit('state');
+}
 async function watch() {
   await serial(() => rebase(true));
   try {
@@ -1456,17 +1463,18 @@ async function watch() {
       clearTimeout(quietTimer);
       quietTimer = setTimeout(onQuiet, QUIET_MS);
     });
-    watcher.on('error', e => console.error('Watch mode is off: ' + e.message));
+    watcher.on('error', watchFailed);
   } catch (e) {
-    console.error('Watch mode is off: ' + e.message);
+    watchFailed(e);
   }
 }
-await watch();
 
 // ---------------------------------------------------------------- events (long polling; works where WebSockets get blocked)
 let seq = 0;
 const events = [];
 const waiters = new Set();
+// Watch mode starts once events can be sent: it says so if it can't start.
+await watch();
 /**
  * A run finished or changed: a state event that also carries the run and its files as the map shows them now
  * (null for one no longer on it), so an app that asks for deltas updates without fetching the whole state.
@@ -1609,6 +1617,7 @@ const server = http.createServer(async (req, res) => {
           suggestedChecks: CONF.checks?.length ? [] : repoChecks.length ? repoChecks : detectChecks(),
           ...(repoChecks.length ? { suggestedChecksFrom: 'repo' } : {}),
           checksOn: (CONF.checks || []).map(c => c.name),
+          watchOff,
         },
         cors,
       );

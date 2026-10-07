@@ -632,6 +632,20 @@ function RepoView() {
         <h2 className="text-[15px] font-semibold tracking-[-0.005em]">{root.name}</h2>
         <div className="meta quiet mt-2 text-muted-foreground tabular-nums">{`${plural(nFiles, 'file')}, ${nLines.toLocaleString()} lines, ${plural(S.RUNS.length, 'run')}`}</div>
       </Section>
+      {S.CONN && S.watchOff ? (
+        <Section>
+          <Label>Watch mode is off</Label>
+          <p id="watchOff" className="text-ink2 text-pretty">
+            {`Edits made outside a run aren't recorded: ${S.watchOff}.`}
+          </p>
+          {/limit on watched folders/.test(S.watchOff) ? (
+            <p className="mt-2 text-xs text-muted-foreground text-pretty">
+              On Linux, raise it, then restart League of Agents:{' '}
+              <code className="font-mono">sudo sysctl fs.inotify.max_user_watches=524288</code>
+            </p>
+          ) : null}
+        </Section>
+      ) : null}
       <ChecksOffer />
       {S.CONN ? null : (
         // The demo invites you to try it on your own code: the command, a copy button, the requirements.

@@ -134,6 +134,7 @@ function applyState(s: StateResponse, first: boolean) {
   S.suggestedChecks = s.suggestedChecks ?? [];
   S.checksFromRepo = s.suggestedChecksFrom === 'repo';
   S.checksOn = s.checksOn ?? [];
+  S.watchOff = s.watchOff ?? null;
   const avail = Object.keys(s.agents).filter(k => s.agents[k]!.available);
   if (!avail.includes(st.agent) && avail[0]) st.agent = avail[0];
   const code: Record<string, string> = {},

@@ -102,6 +102,8 @@ export interface StateResponse {
   suggestedChecksFrom?: 'repo';
   /** The checks set up now, by name (bridges before 0.1.0 don't send it). */
   checksOn?: string[];
+  /** Why watch mode is off, or null (bridges before 0.2.0 don't send it). */
+  watchOff?: string | null;
 }
 
 /** Progress payload carried by `progress` events (bridge emit()). */
