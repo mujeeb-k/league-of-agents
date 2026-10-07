@@ -89,6 +89,8 @@ In agent settings, only after you say yes to the hooks:
 
 - Claude Code: `.claude/settings.local.json` in the repo, kept out of git.
 - Codex: `.codex/hooks.json` in the repo, kept out of git if League of Agents created it.
+
+A hook file that's in git is never edited: the hooks hold this computer's paths. League of Agents says so when it starts, and that agent's terminal sessions aren't recorded.
 - Cursor: `~/.cursor/hooks.json` in your home folder. Cursor reads project hooks only from the folder it opened, which is often above the repo.
 
 Your own hooks in these files are never changed. Your browser also keeps the bridge's port and token, and your panel and theme choices, in its own storage.

@@ -2219,12 +2219,10 @@ test('first run: a hint to select, then an example prompt for the selected file,
 // and a page can only turn on what the bridge found, never send its own command.
 test('hooks removed while the bridge runs are not recorded as a run, and the repo is as it was', async () => {
   const repo = makeRepo();
-  // The person's own Codex hooks, committed: ours go in beside them, then come out.
+  // The person's own Codex hooks, not in git: ours go in beside them, then come out.
   const own = JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'echo mine' }] }] } }, null, 2);
   fs.mkdirSync(path.join(repo, '.codex'));
   fs.writeFileSync(path.join(repo, '.codex/hooks.json'), own);
-  git(repo, 'add', '-A');
-  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'own hooks');
   const b = await startBridge(repo, undefined, { LOA_QUIET_MS: String(QUIET) });
   try {
     expect(fs.readFileSync(path.join(repo, '.codex/hooks.json'), 'utf8')).not.toBe(own);
@@ -2235,9 +2233,30 @@ test('hooks removed while the bridge runs are not recorded as a run, and the rep
     });
     expect(out).toContain('Removed the League of Agents hooks.');
     expect(fs.readFileSync(path.join(repo, '.codex/hooks.json'), 'utf8')).toBe(own);
-    expect(git(repo, 'status', '--porcelain')).toBe('');
+    expect(git(repo, 'status', '--porcelain')).toBe('?? .codex/\n');
     await settled();
     expect(await runsOf(b)).toEqual([]);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// A hook file in git is the team's: the bridge leaves it as it is, so nothing machine-specific shows as a change.
+test('a hooks file in git is never edited', async () => {
+  const repo = makeRepo();
+  const own = JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'echo team' }] }] } }, null, 2);
+  fs.mkdirSync(path.join(repo, '.codex'));
+  fs.writeFileSync(path.join(repo, '.codex/hooks.json'), own);
+  git(repo, 'add', '-A');
+  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'team hooks');
+  const b = await startBridge(repo);
+  try {
+    expect(b.output()).toContain("Left .codex/hooks.json as it is: it's in git");
+    expect(fs.readFileSync(path.join(repo, '.codex/hooks.json'), 'utf8')).toBe(own);
+    expect(git(repo, 'status', '--porcelain')).toBe('');
+    // The other agents' hooks still go in.
+    expect(fs.readFileSync(path.join(repo, '.claude/settings.local.json'), 'utf8')).toContain('hook pre');
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });

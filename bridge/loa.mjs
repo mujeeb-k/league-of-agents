@@ -356,6 +356,11 @@ function installHooks() {
       console.error(`  Left ${shown(p)} as it is: it isn't plain JSON.`);
       continue;
     }
+    // A hook file in git is the team's: ours hold this computer's paths, and would show as a change to commit.
+    if (p.startsWith(ROOT + path.sep) && git(['ls-files', '--', path.relative(ROOT, p)]).trim()) {
+      console.error(`  Left ${shown(p)} as it is: it's in git, and the hooks hold this computer's paths.`);
+      continue;
+    }
     if (!(p in backup)) backup[p] = { text, dir: fs.existsSync(path.dirname(p)) };
     const next = withoutOurs(json);
     if (agent === 'cursor') next.version ??= 1;
