@@ -17,6 +17,7 @@ import {
 } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { hl, type TokenClass } from './highlight';
+import { tn } from '../i18n';
 
 const marks: Record<TokenClass, Decoration> = {
   k: Decoration.mark({ class: 'tk-k' }),
@@ -72,7 +73,7 @@ class Removed extends WidgetType {
   toDOM() {
     const el = document.createElement('div');
     el.className = 'cm-removed';
-    el.setAttribute('aria-label', `${this.lines.length} removed`);
+    el.setAttribute('aria-label', tn(this.lines.length, '{n} line removed', '{n} lines removed'));
     for (const l of this.lines) el.appendChild(document.createElement('div')).textContent = l || ' ';
     return el;
   }

@@ -8,7 +8,8 @@ import { S, dom, st } from '../state/app';
 import { loadDemo } from '../state/actions';
 import { startConnect } from '../state/boot';
 import { setConnUI, useRegion } from '../state/render';
-import { Spinner } from './bits';
+import { Spinner, Translation } from './bits';
+import { PRIVACY } from '../lib/intro';
 import { CopyCommand } from './ConnectDialog';
 import { Button } from './ui/button';
 import { t } from '../i18n';
@@ -112,7 +113,8 @@ function AskAccess({ conn }: { conn: Conn }) {
         )}
       </p>
       <p className="text-xs text-muted-foreground text-pretty">
-        League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized.
+        {PRIVACY}
+        <Translation of={PRIVACY} className="mt-1" />
       </p>
       <div className="flex flex-col items-center gap-1">
         <Button size="sm" id="askContinue" onClick={() => startConnect(conn, true)}>

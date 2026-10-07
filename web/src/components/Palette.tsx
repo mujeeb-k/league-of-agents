@@ -6,6 +6,7 @@ import {
   Focus,
   FolderOpen,
   GitCommitHorizontal,
+  Languages,
   LayoutGrid,
   Users,
   Maximize,
@@ -49,7 +50,7 @@ import {
   CommandShortcut,
 } from './ui/command';
 import { Kbd } from './ui/kbd';
-import { t } from '../i18n';
+import { LANGS, chooseLang, locale, t } from '../i18n';
 
 let returnFocus: HTMLElement | null = null;
 export function openPalette(kind: 'files' | 'commands') {
@@ -84,7 +85,7 @@ function QuickOpen() {
       <CommandInput autoFocus placeholder={t('Go to a file')} value={query} onValueChange={setQuery} />
       <CommandList>
         <CommandEmpty>{t('No file matches.')}</CommandEmpty>
-        <CommandGroup heading={query ? t('Best matches') : 'Files'}>
+        <CommandGroup heading={query ? t('Best matches') : t('Files')}>
           {shown.map(f => (
             <CommandItem key={f.path} value={f.path} data-path={f.path} onSelect={run(() => goToFile(f.path))}>
               <FileIcon kind={fileKind(f.name)} />
@@ -169,7 +170,7 @@ function Commands() {
           </CommandGroup>
         ) : null}
         {S.CONN ? (
-          <CommandGroup heading="Attribution">
+          <CommandGroup heading={t('Attribution')}>
             <Item
               label={t('Write attribution for the last commit as Agent Trace')}
               icon={<GitCommitHorizontal />}
@@ -183,7 +184,7 @@ function Commands() {
           </CommandGroup>
         ) : null}
         {S.RUNS.length ? (
-          <CommandGroup heading="Runs">
+          <CommandGroup heading={t('Runs')}>
             {[...S.RUNS].reverse().map(x => (
               <Item
                 key={x.id}
@@ -194,7 +195,17 @@ function Commands() {
             ))}
           </CommandGroup>
         ) : null}
-        <CommandGroup heading="Panels">
+        <CommandGroup heading={t('Language')}>
+          {LANGS.map(l => (
+            <Item
+              key={l.code}
+              label={l.code === locale() ? `${l.name} ✓` : l.name}
+              icon={<Languages />}
+              onSelect={() => chooseLang(l.code)}
+            />
+          ))}
+        </CommandGroup>
+        <CommandGroup heading={t('Panels')}>
           <Item label={t('Show or hide the sidebar')} icon={<PanelLeft />} keys="[" onSelect={toggleSide} />
           <Item label={t('Show or hide the inspector')} icon={<PanelRight />} keys="]" onSelect={toggleInsp} />
           <Item
@@ -205,7 +216,7 @@ function Commands() {
             onSelect={() => setPinned(panels.side !== 'pinned')}
           />
         </CommandGroup>
-        <CommandGroup heading="Theme">
+        <CommandGroup heading={t('Theme')}>
           <Item label={t('Light theme')} icon={<Sun />} onSelect={() => (setTheme('light'), retheme())} />
           <Item label={t('Dark theme')} icon={<Moon />} onSelect={() => (setTheme('dark'), retheme())} />
           <Item
@@ -214,7 +225,7 @@ function Commands() {
             onSelect={() => (setTheme('system'), retheme())}
           />
         </CommandGroup>
-        <CommandGroup heading="Bridge">
+        <CommandGroup heading={t('Bridge')}>
           {S.CONN ? (
             <>
               {S.LIVE ? null : (
@@ -240,7 +251,7 @@ export function Palette() {
       onOpenChange={open => {
         if (!open) close();
       }}
-      title={kind === 'files' ? t('Go to a file') : 'Commands'}
+      title={kind === 'files' ? t('Go to a file') : t('Commands')}
       description={
         kind === 'files' ? t('Search the repository by file name or path') : t('Search for a command to run')
       }

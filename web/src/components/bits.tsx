@@ -4,7 +4,7 @@ import { Fragment } from 'react';
 import type { Check } from '../api/types';
 import type { Run } from '../lib/types';
 import { cn } from '@/lib/utils';
-import { t, tn } from '../i18n';
+import { locale, t, tn } from '../i18n';
 
 /** `+a −d` stat. The space before the deletion count is part of the markup. */
 export const Stat = ({ a, d }: { a: number; d: number }) => (
@@ -83,5 +83,18 @@ export function Phrase({ text, nodes }: { text: string; nodes: Record<string, Re
         return name && name in nodes ? <Fragment key={i}>{nodes[name]}</Fragment> : part;
       })}
     </>
+  );
+}
+
+/**
+ * Under words that stay exactly as written in every language (the tagline, the privacy pair): their translation,
+ * when the page is in another language.
+ */
+export function Translation({ of, className }: { of: string; className?: string }) {
+  if (locale() === 'en') return null;
+  return (
+    <span lang={locale()} className={cn('translation block text-muted-foreground', className)}>
+      {t(of)}
+    </span>
   );
 }

@@ -126,7 +126,9 @@ const Card = memo(function Card({ c }: { c: CardData }) {
       </div>
       {c.imports || c.usedBy ? (
         <div className="uses">
-          {[c.imports ? `imports ${c.imports}` : '', c.usedBy ? `used by ${c.usedBy}` : ''].filter(Boolean).join(' · ')}
+          {[c.imports ? t('imports {n}', { n: c.imports }) : '', c.usedBy ? t('used by {n}', { n: c.usedBy }) : '']
+            .filter(Boolean)
+            .join(' · ')}
         </div>
       ) : null}
     </div>

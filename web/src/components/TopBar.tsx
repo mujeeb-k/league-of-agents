@@ -184,14 +184,14 @@ function ConnControls() {
           />
         )}
         {S.LIVE
-          ? 'Live'
+          ? t('Live')
           : offline
-            ? 'Offline'
+            ? t('Offline')
             : connecting
-              ? 'Connecting'
+              ? t('Connecting')
               : st.unreachable || st.asking
                 ? t('Not connected')
-                : 'Demo'}
+                : t('Demo')}
       </Badge>
       {/* While connecting, the badge says so; the button steps aside rather than repeat it. */}
       {connecting ? null : (
@@ -205,7 +205,7 @@ function ConnControls() {
           }}
         >
           {/* In the demo, the button names the next step: connecting your own repo. */}
-          {S.LIVE ? 'Disconnect' : offline ? 'Reconnect' : t('Try it on your code')}
+          {S.LIVE ? t('Disconnect') : offline ? t('Reconnect') : t('Try it on your code')}
         </Button>
       )}
       <Tip label={theme === 'dark' ? t('Switch to light theme') : t('Switch to dark theme')}>

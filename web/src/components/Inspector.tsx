@@ -303,7 +303,9 @@ function RunView({ run }: { run: Run }) {
           <h3 className="mb-3 flex items-center justify-between text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase">
             <span>{t('Review')}</span>
             {files.length ? (
-              <span className="num font-normal tracking-normal normal-case tabular-nums">{`${done} of ${files.length}`}</span>
+              <span className="num font-normal tracking-normal normal-case tabular-nums">
+                {t('{done} of {total}', { done, total: files.length })}
+              </span>
             ) : null}
           </h3>
           {files.length ? (

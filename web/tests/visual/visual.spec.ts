@@ -85,3 +85,40 @@ for (const size of SIZES)
         await ctx.close();
       });
     }
+
+// French runs longest and Chinese needs its own fonts: the same screens in both, on a wide and a phone screen, with
+// nothing pushed past the edge.
+const LOCALIZED = ['first-view', 'connect-dialog', 'command-menu'] as const;
+for (const lang of ['fr', 'zh-CN'])
+  for (const size of [
+    { width: 1440, height: 900 },
+    { width: 375, height: 812 },
+  ])
+    for (const theme of ['light', 'dark'] as const)
+      for (const name of LOCALIZED) {
+        test(`${name} ${lang} ${size.width}x${size.height} ${theme}`, async ({ browser }) => {
+          const ctx = await browser.newContext({
+            viewport: size,
+            deviceScaleFactor: 1,
+            colorScheme: theme,
+            reducedMotion: 'reduce',
+          });
+          await ctx.addInitScript(l => localStorage.setItem('loa.lang', l), lang);
+          const page = await ctx.newPage();
+          await page.goto('/');
+          await page.locator('#insp section, #intro').first().waitFor();
+          await page.evaluate(() => document.fonts.ready);
+          await expect(page.locator('html')).toHaveAttribute('lang', lang);
+          if (name !== 'first-view') await SCENARIOS[name]!(page);
+          await page.mouse.move(size.width - 2, size.height - 2);
+          await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth - innerWidth),
+            'page wider than the screen',
+          ).toBe(0);
+          await expect(page).toHaveScreenshot(`${name}-${lang}-${size.width}x${size.height}-${theme}.png`, {
+            maxDiffPixels: 0,
+          });
+          await ctx.close();
+        });
+      }

@@ -7,6 +7,7 @@ import { ABOUT, TAGLINE } from '../lib/intro';
 import { S, st } from '../state/app';
 import { bump, useRegion } from '../state/render';
 import { CopyCommand } from './ConnectDialog';
+import { Translation } from './bits';
 import { Button } from './ui/button';
 import { t } from '../i18n';
 
@@ -27,6 +28,7 @@ function About() {
       <h1 id="introTitle" className="text-lg leading-snug font-semibold tracking-[-0.01em] text-balance">
         {TAGLINE}
       </h1>
+      <Translation of={TAGLINE} className="mt-1 text-[13px]" />
       <p className="mt-2 text-[13px] leading-relaxed text-ink2 text-pretty">{t(ABOUT)}</p>
       <div className="mt-3">
         <CopyCommand ids={['introCommand', 'introCopy']} compact />

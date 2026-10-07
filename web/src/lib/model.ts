@@ -3,6 +3,7 @@ import { S, dom, st } from '../state/app';
 import { wordDiff } from './worddiff';
 import { bounds, layoutTree } from './layout';
 import type { Change, DirNode, FileNode, FileView, Hunk, Row, Run, SampleRunDef, Stat, TreeSpec } from './types';
+import { t } from '../i18n';
 
 /** Parses the "@@ path" sample format. */
 export function parseSample(text: string): Record<string, string> {
@@ -42,7 +43,7 @@ export function buildModel(spec: TreeSpec, code: Record<string, string>, runDefs
     const d: DirNode = {
       type: 'dir',
       name: s.n,
-      note: s.note || '',
+      note: s.note ? t(s.note) : '',
       path,
       parent,
       depth,
@@ -82,12 +83,13 @@ export function buildModel(spec: TreeSpec, code: Record<string, string>, runDefs
     const run: Run = {
       id: r.id,
       agent: r.agent,
-      title: r.title,
+      // The demo's words, in the person's language.
+      title: t(r.title),
       model: r.model ?? null,
-      when: r.when,
+      when: t(r.when),
       dur: r.dur,
-      prompt: r.prompt,
-      summary: r.summary,
+      prompt: t(r.prompt),
+      summary: t(r.summary),
       scope: r.scope,
       status: 'done',
       changes: new Map(),

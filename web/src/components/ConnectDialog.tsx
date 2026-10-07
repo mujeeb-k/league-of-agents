@@ -1,13 +1,14 @@
 // The connect screen: how to start the bridge, where its link goes, and what the browser will ask.
 // Built on shadcn/ui; it is also the first-run screen.
 import { Check, CircleAlert, Copy, Share } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { connect } from '../api/live';
 import { parseConn } from '../api/conn';
 import { dom, st } from '../state/app';
 import { bump, useRegion } from '../state/render';
 import { cn } from '../lib/utils';
-import { Spinner } from './bits';
+import { Spinner, Translation } from './bits';
+import { PRIVACY } from '../lib/intro';
 import { Tip } from './TopBar';
 import { Button } from './ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';
@@ -59,28 +60,33 @@ export function CopyCommand({
       variant="ghost"
       size={compact ? 'icon-sm' : 'sm'}
       id={ids[1]}
-      aria-label={copied ? 'Copied' : command ? t('Copy the command') : t('Copy the line')}
+      aria-label={copied ? t('Copied') : command ? t('Copy the command') : t('Copy the line')}
       onClick={() => {
         void navigator.clipboard.writeText(text).then(() => setCopied(true));
       }}
     >
       {copied ? <Check className="text-add" /> : <Copy />}
-      {compact ? null : copied ? 'Copied' : 'Copy'}
+      {/* On a phone the label would push the command under the button; the icon and its name remain. */}
+      {compact ? null : <span className="max-[420px]:sr-only">{copied ? t('Copied') : t('Copy')}</span>}
     </Button>
   );
   return (
     <div className="flex items-center gap-2 rounded-lg bg-muted py-1 pr-1 pl-3">
       <code
         id={ids[0]}
-        // A command reads in mono on one line; a sentence for an agent reads as text.
-        className={cn(
-          'min-w-0 flex-1',
-          command ? 'font-mono text-xs whitespace-nowrap' : 'py-1 font-sans text-[13px] text-pretty',
-        )}
+        // A command reads in mono, breaking only between its words where it must (a phone); a sentence reads as text.
+        className={cn('min-w-0 flex-1', command ? 'font-mono text-xs' : 'py-1 font-sans text-[13px] text-pretty')}
       >
-        {text}
+        {command
+          ? text.split(' ').map((word, i) => (
+              <Fragment key={i}>
+                {i ? ' ' : null}
+                <span className="whitespace-nowrap">{word}</span>
+              </Fragment>
+            ))
+          : text}
       </code>
-      {compact ? <Tip label={copied ? 'Copied' : 'Copy'}>{button}</Tip> : button}
+      {compact ? <Tip label={copied ? t('Copied') : t('Copy')}>{button}</Tip> : button}
     </div>
   );
 }
@@ -207,8 +213,7 @@ function ConnectForm({
     <>
       <DialogTitle className="mb-2 text-base">{t('Connect your repo')}</DialogTitle>
       <DialogDescription className="mb-6 text-ink2 text-pretty">
-        {t('A small bridge runs on your machine, inside your repo.')} League of Agents never uploads your code anywhere.
-        Your code goes only to the agent you authorized.{' '}
+        {t('A small bridge runs on your machine, inside your repo.')} {PRIVACY}{' '}
         <a
           id="privacyLink"
           href="https://leagueofagents.dev/privacy"
@@ -218,6 +223,7 @@ function ConnectForm({
         >
           {t('Privacy')}
         </a>
+        <Translation of={PRIVACY} className="mt-1" />
       </DialogDescription>
       <form onSubmit={e => void onSubmit(e)}>
         <ol className="flex flex-col gap-6">
@@ -262,7 +268,7 @@ function ConnectForm({
           </DialogClose>
           <Button type="submit" id="connectGo" disabled={busy}>
             {busy ? <Spinner className="text-current" /> : null}
-            {busy ? 'Connecting' : 'Connect'}
+            {busy ? t('Connecting') : t('Connect')}
           </Button>
         </DialogFooter>
       </form>
