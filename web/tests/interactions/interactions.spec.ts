@@ -913,6 +913,22 @@ test('connect screen: the command to copy, errors inline, cancel and Escape', as
   await expect(page.locator('#connectError')).toHaveCount(0);
 });
 
+// Colored by author in the demo: its Claude Code run's lines are the agent's, and the map shows it, with no error.
+test('the demo colored by author: C marks the agent lines on cards and tiles', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/');
+  await page.locator('#insp section').first().waitFor();
+  await page.keyboard.press('c');
+  await expect(page.locator('#byAuthor')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.ln.au-agent').first()).toBeVisible();
+  await page.keyboard.press('0');
+  await expect(page.locator('.fr .au i.au-agent').first()).toBeVisible();
+  await page.keyboard.press('c');
+  await expect(page.locator('.ln.au-agent')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test('the demo invites you to try it on your code: command, copy, requirements', async ({ page }) => {
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.keyboard.press('Escape');

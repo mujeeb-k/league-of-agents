@@ -86,6 +86,8 @@ export function authorsOf(
   runs: Run[],
   now: Map<string, string[]>,
   recorded: Map<string, RecordedLine[]> = new Map(),
+  /** The file before a run, for runs that don't carry it (the demo's, built from each file's start). */
+  before: (run: Run, path: string) => string[] = () => [],
 ): Map<string, Owner[]> {
   const files = new Map<string, Tracked>();
   for (const run of [...runs].sort((a, b) => a.id - b.id)) {
@@ -96,7 +98,7 @@ export function authorsOf(
         continue;
       }
       const from = c.renamedFrom ?? path;
-      const start = c.created ? { lines: [], owners: [] } : align(files.get(from), c.pre ?? []);
+      const start = c.created ? { lines: [], owners: [] } : align(files.get(from), c.pre ?? before(run, path));
       if (c.renamedFrom) files.delete(c.renamedFrom);
       const lines: string[] = [],
         owners: Owner[] = [];

@@ -9,7 +9,7 @@ import { importResolver } from './imports';
 import { LABEL } from './layout';
 import { drafts } from '../state/editing';
 import { obstacles, pathOf, route, type Rect } from './route';
-import { allDirs, dirStat, filesUnder, viewOf } from './model';
+import { allDirs, dirStat, filesUnder, linesAt, viewOf } from './model';
 import type { FileView, RowKind } from './types';
 import { authorsOf, shareOf, type Author } from './attribution';
 import { plural } from './util';
@@ -125,7 +125,12 @@ export function computeScene(): SceneData {
   // Coloured by author: who wrote each line of the files as they are now.
   const byAuthor = st.byAuthor && !run;
   S.AUTHORS = byAuthor
-    ? authorsOf(S.RUNS, new Map([...views].filter(([, v]) => v.exists).map(([p, v]) => [p, v.lines])), S.RECORDED)
+    ? authorsOf(
+        S.RUNS,
+        new Map([...views].filter(([, v]) => v.exists).map(([p, v]) => [p, v.lines])),
+        S.RECORDED,
+        (r, p) => linesAt(S.FILES.get(p)!, S.RUNS.indexOf(r)).L,
+      )
     : new Map();
   const out: SceneData = { frames: [], tiles: [], cards: [], wires: [], sels: [] };
   // Import lines: between files as they are in the view on screen.
