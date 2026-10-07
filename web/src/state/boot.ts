@@ -17,6 +17,14 @@ import { applyPanels, toggleInsp, toggleSide } from './panels';
 import { watchSystemTheme } from './theme';
 import { t } from '../i18n';
 
+/** The characters the canvas's shortcuts are. */
+const SHORTCUTS = 'badjkrc0f=+-[]/';
+/**
+ * [, ] and 0 by where they sit on a US keyboard, for layouts that type something else there: a French Mac's [ is a
+ * dead key, and 0 needs Shift on AZERTY. A key that types a shortcut keeps that meaning (Dvorak's / is /).
+ */
+const BY_POSITION: Record<string, string> = { BracketLeft: '[', BracketRight: ']', Digit0: '0' };
+
 function onKey(e: KeyboardEvent) {
   // Handled already, as by the code editor (⌘K on selected lines writes an instruction).
   if (e.defaultPrevented) return;
@@ -37,7 +45,8 @@ function onKey(e: KeyboardEvent) {
     return;
   }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
-  const k = e.key.toLowerCase();
+  const typed = e.key.toLowerCase();
+  const k = e.key.length === 1 && SHORTCUTS.includes(typed) ? typed : (BY_POSITION[e.code] ?? typed);
   const center = (f: number) => zoomAt(...viewCenter(), f);
   if (st.run && 'bad'.includes(k) && k.length === 1) {
     setMode(({ b: 'before', a: 'after', d: 'diff' } as const)[k as 'b' | 'a' | 'd']);

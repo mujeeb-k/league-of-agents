@@ -480,6 +480,33 @@ test('explorer: arrows move focus, Right and Left open and close, Enter opens a 
   expect(await chips(page)).toEqual(['relay.config.ts', 'relay/']);
 });
 
+test('[, ] and 0 work by key position on layouts that type something else there', async ({ page }) => {
+  // A key as another layout reports it: the character it types, and where it is on a US keyboard.
+  const press = (key: string, code: string) =>
+    page.evaluate(
+      ([key, code]) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key, code, bubbles: true })),
+      [key, code] as const,
+    );
+  const side = page.locator('#side'),
+    insp = page.locator('#insp');
+  const AWAY = /(^|\s)away(\s|$)/;
+  // Stepping into a file zooms in, and the sidebar comes back.
+  await page.keyboard.press('j');
+  await expect(side).not.toHaveClass(AWAY);
+  // French AZERTY: the 0 key types à without Shift; it still fits everything, which sets the sidebar aside.
+  await press('à', 'Digit0');
+  await expect(side).toHaveClass(AWAY);
+  // French Mac: [ is a dead key (^), ] types $.
+  await press('Dead', 'BracketLeft');
+  await expect(side).not.toHaveClass(AWAY);
+  await press('$', 'BracketRight');
+  await expect(insp).toHaveAttribute('inert', '');
+  // Dvorak: the [ position types /, which keeps its own meaning: write a prompt.
+  await press('/', 'BracketLeft');
+  await expect(page.locator('#prompt')).toBeFocused();
+  await expect(side).not.toHaveClass(AWAY);
+});
+
 test('sidebar steps aside below code zoom; pin, [ and ] and the inspector handle; choices are remembered', async ({
   page,
 }) => {
