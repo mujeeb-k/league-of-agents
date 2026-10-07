@@ -1,6 +1,6 @@
 // Canvas content: folder frames, file tiles, code cards, wires, import edges, selection.
 // Renders the scene that computeScene() in lib/scene.ts builds.
-import { Fragment, useLayoutEffect } from 'react';
+import { Fragment, memo, useLayoutEffect } from 'react';
 import { CH, CW } from '../lib/constants';
 import type { Token } from '../lib/highlight';
 import { plural } from '../lib/util';
@@ -19,9 +19,9 @@ const box = (x: number, y: number, w: number, h: number) => ({
 });
 
 /** A file zoomed out: its name on one line, and its changed rows marked. */
-function Tile({ f }: { f: TileData }) {
+const Tile = memo(function Tile({ f }: { f: TileData }) {
   return (
-    <div className={f.cls} data-path={f.path} style={box(f.x, f.y, CW, CH)}>
+    <div className={f.sel ? f.cls + ' sel' : f.cls} data-path={f.path} style={box(f.x, f.y, CW, CH)}>
       <span className="n">
         <FileIcon kind={f.kind} />
         {f.name}
@@ -35,13 +35,13 @@ function Tile({ f }: { f: TileData }) {
       ) : null}
     </div>
   );
-}
+});
 
-function Frame({ f }: { f: FrameData }) {
+const Frame = memo(function Frame({ f }: { f: FrameData }) {
   const style: React.CSSProperties & Record<string, string> = box(f.x, f.y, f.w, f.h);
   if (f.hotc) style['--hotc'] = f.hotc;
   return (
-    <div className={f.cls} data-dir={f.path} style={style}>
+    <div className={f.sel ? f.cls + ' sel' : f.cls} data-dir={f.path} style={style}>
       <div className="flabel">
         <b>
           <FileIcon kind="folder" />
@@ -53,7 +53,7 @@ function Frame({ f }: { f: FrameData }) {
       </div>
     </div>
   );
-}
+});
 
 /** A line that appears because the view switched (actions.ts setMode) fades in; other new lines just appear. */
 const markFresh = (el: HTMLDivElement | null) => {
@@ -75,7 +75,7 @@ const Code = ({ tokens }: { tokens: Token[] }) => (
   </>
 );
 
-function Card({ c }: { c: CardData }) {
+const Card = memo(function Card({ c }: { c: CardData }) {
   if (c.ghost)
     return (
       <div className="card ghost" data-path={c.path} style={box(c.x, c.y, CW, CH)}>
@@ -110,7 +110,7 @@ function Card({ c }: { c: CardData }) {
       ) : null}
     </div>
   );
-}
+});
 
 const Sel = ({ s }: { s: SelBox }) => (
   <div className={s.file ? 'selbox f' : 'selbox'} style={box(s.x, s.y, s.w, s.h)}>

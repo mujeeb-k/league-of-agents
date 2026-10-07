@@ -19,6 +19,8 @@ export interface TileData {
   name: string;
   kind: FileKind;
   cls: string;
+  /** Selected: kept apart from cls so a selection change replaces only the tiles it touches (reselect). */
+  sel: boolean;
   x: number;
   y: number;
   /** Changed lines, by tick row. */
@@ -29,6 +31,7 @@ export interface FrameData {
   name: string;
   note: string;
   cls: string;
+  sel: boolean;
   x: number;
   y: number;
   w: number;
@@ -85,6 +88,8 @@ export interface SceneData {
 }
 
 export let scene: SceneData | null = null;
+/** Each file's view when the scene was computed: a selection change reuses them. */
+let views = new Map<string, FileView>();
 
 /** Tick rows a tile has room for, 4 world pixels each (05-canvas.css `.fr .tk i`). */
 const ROWS = 60;
@@ -107,7 +112,7 @@ function ticksOf(v: FileView): TileData['ticks'] {
 export function computeScene(): SceneData {
   const run = st.run,
     rc = run ? agentOf(run.agent).c : null;
-  const views = new Map<string, FileView>();
+  views = new Map<string, FileView>();
   for (const f of S.FILES.values()) views.set(f.path, viewOf(f));
   const out: SceneData = { frames: [], tiles: [], cards: [], wires: [], sels: [] };
   // Import lines: between files as they are in the view on screen.
@@ -128,7 +133,6 @@ export function computeScene(): SceneData {
         v.kind ? 'k-' + v.kind : '',
         v.ghost ? 'ghost' : '',
         run && !v.kind ? 'dim' : '',
-        st.sel.has(f.path) ? 'sel' : '',
         run && st.cur === f.path ? 'cur' : '',
         drafts.has(f.path) ? 'dirty' : '',
       ].join(' ');
@@ -137,6 +141,7 @@ export function computeScene(): SceneData {
         name: f.name,
         kind: fileKind(f.name),
         cls,
+        sel: st.sel.has(f.path),
         x: f.x,
         y: f.y,
         ticks: !v.ghost && v.kind ? ticksOf(v) : [],
@@ -148,11 +153,12 @@ export function computeScene(): SceneData {
       path: d.path,
       name: d.name,
       note: d.note,
-      cls: `frame${st.sel.has('d:' + d.path) ? ' sel' : ''}${empty ? ' bare' : ''}${empty && !d.dirs.length ? ' leaf' : ''}${ds ? ' hot' : ''}${run && !ds ? ' dim' : ''}`,
+      cls: `frame${empty ? ' bare' : ''}${empty && !d.dirs.length ? ' leaf' : ''}${ds ? ' hot' : ''}${run && !ds ? ' dim' : ''}`,
       x: d.x,
       y: d.y,
       w: d.w,
       h: d.h,
+      sel: st.sel.has('d:' + d.path),
       hotc: ds ? rc : null,
       stat: ds && d.path !== '' ? { a: ds.a, d: ds.d } : null,
       count,
@@ -171,28 +177,13 @@ export function computeScene(): SceneData {
           : `M${x1} ${p.y}H${gap0}V${p.y - LABEL - 8}H${gap}V${d.y}H${d.x}`;
       out.wires.push({ d: path, hot: !!ds, color: ds ? rc : null });
     }
-    if (st.sel.has('d:' + d.path) && !empty) {
-      const n = filesUnder(d).filter(f => views.get(f.path)!.exists).length;
-      out.sels.push({ file: false, x: d.x, y: d.y, w: d.w, h: d.h, label: plural(n, 'file') });
-    }
   }
 
   for (const f of S.FILES.values()) {
     const v = views.get(f.path)!;
     if (!v.exists && !v.ghost) continue;
     // Live, the bridge sends a file's first 400 lines; its length is the real one.
-    const beyond = run ? 0 : Math.max(0, (S.TOTALS.get(f.path) ?? 0) - v.rows.length);
-    if (st.sel.has(f.path))
-      out.sels.push({
-        file: true,
-        x: f.x,
-        y: f.y,
-        w: CW,
-        h: CH,
-        label: v.ghost
-          ? 'not created yet'
-          : plural((v.rows.filter(r => r.k !== 'del').length || v.rows.length) + beyond, 'line'),
-      });
+    const beyond = beyondOf(f.path, v);
     if (v.ghost) {
       out.cards.push({ ghost: true, path: f.path, name: f.name, x: f.x, y: f.y });
       continue;
@@ -256,8 +247,52 @@ export function computeScene(): SceneData {
       c.imports = S.GRAPH.out.get(c.path)?.length ?? 0;
       c.usedBy = S.GRAPH.in.get(c.path)?.length ?? 0;
     }
+  out.sels = selsOf();
   scene = out;
   return out;
+}
+
+/** Lines past the 400 the bridge sends: live, a file's length is the real one. */
+const beyondOf = (path: string, v: FileView) => (st.run ? 0 : Math.max(0, (S.TOTALS.get(path) ?? 0) - v.rows.length));
+
+/** A box around each selected file and folder, labelled with its size. */
+function selsOf(): SelBox[] {
+  const out: SelBox[] = [];
+  for (const k of st.sel) {
+    if (k.startsWith('d:')) {
+      const d = S.DIRMAP.get(k.slice(2));
+      if (!d?.files.length) continue;
+      const n = filesUnder(d).filter(f => views.get(f.path)?.exists).length;
+      out.push({ file: false, x: d.x, y: d.y, w: d.w, h: d.h, label: plural(n, 'file') });
+      continue;
+    }
+    const f = S.FILES.get(k),
+      v = views.get(k);
+    if (!f || !v || (!v.exists && !v.ghost)) continue;
+    out.push({
+      file: true,
+      x: f.x,
+      y: f.y,
+      w: CW,
+      h: CH,
+      label: v.ghost
+        ? 'not created yet'
+        : plural((v.rows.filter(r => r.k !== 'del').length || v.rows.length) + beyondOf(k, v), 'line'),
+    });
+  }
+  return out;
+}
+
+/**
+ * A selection change, without computing the scene again: new objects only for the tiles and frames whose
+ * selection changed, and new selection boxes. Everything else keeps its object, so memoized components skip it.
+ */
+export function reselect(): SceneData {
+  if (!scene) return computeScene();
+  const tiles = scene.tiles.map(t => (t.sel === st.sel.has(t.path) ? t : { ...t, sel: !t.sel }));
+  const frames = scene.frames.map(f => (f.sel === st.sel.has('d:' + f.path) ? f : { ...f, sel: !f.sel }));
+  scene = { ...scene, tiles, frames, sels: selsOf() };
+  return scene;
 }
 
 let cache: { rev: number; obs: Rect[]; paths: Map<string, string | null> } | null = null;

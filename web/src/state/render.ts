@@ -3,7 +3,7 @@
 // (fresh elements, entry animations replay, no stale focus).
 import { useSyncExternalStore } from 'react';
 import { drawMini } from '../lib/minimap';
-import { computeScene } from '../lib/scene';
+import { computeScene, reselect } from '../lib/scene';
 
 export type Region =
   'scene' | 'top' | 'side' | 'composer' | 'inspector' | 'conn' | 'crumb' | 'dialog' | 'palette' | 'editor';
@@ -57,8 +57,11 @@ export function renderAll() {
   renderComposer();
   renderInspector();
 }
+/** A selection change: only the selection is updated on the canvas (reselect), not the whole scene. */
 export const renderSel = () => {
-  renderScene();
+  reselect();
+  bump('scene');
+  drawMini();
   renderSide();
   renderComposer();
   renderInspector();
