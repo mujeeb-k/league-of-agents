@@ -1,13 +1,13 @@
 // Top bar: brand, repo and branch, the run bar with Before, After and Diff, connection and theme.
 // Built on shadcn/ui.
-import { Moon, PanelLeft, PanelRight, Sun, X } from 'lucide-react';
+import { Moon, PanelLeft, PanelRight, Sun, Users, X } from 'lucide-react';
 import { connect, disconnect } from '../api/live';
 import { agentOf } from '../lib/constants';
 import { cn } from '../lib/utils';
 import { drawMini, readCss } from '../lib/minimap';
 import type { Mode } from '../lib/types';
 import { S, dom, st } from '../state/app';
-import { selectRun, setMode } from '../state/actions';
+import { selectRun, setMode, toggleByAuthor } from '../state/actions';
 import { renderSide, useRegion } from '../state/render';
 import { panels, sideVisibleAt, toggleInsp, toggleSide } from '../state/panels';
 import { toggleTheme, useResolvedTheme } from '../state/theme';
@@ -53,11 +53,26 @@ function RunBar() {
     ) : (
       <div
         id="runbar"
-        className="flex min-w-0 flex-1 items-center justify-center max-[700px]:order-last max-[700px]:basis-full"
+        className="flex min-w-0 flex-1 items-center justify-center gap-3 max-[700px]:order-last max-[700px]:basis-full"
       >
         <span className="quiet truncate text-muted-foreground">
-          Latest state. Open a run to compare before and after.
+          {st.byAuthor
+            ? 'Latest state, colored by who wrote each line.'
+            : 'Latest state. Open a run to compare before and after.'}
         </span>
+        <Tip label={st.byAuthor ? 'Stop coloring by author' : 'Color by author'} keys="C">
+          <Button
+            variant={st.byAuthor ? 'secondary' : 'ghost'}
+            size="sm"
+            id="byAuthor"
+            aria-pressed={st.byAuthor}
+            className="shrink-0"
+            onClick={toggleByAuthor}
+          >
+            <Users />
+            By author
+          </Button>
+        </Tip>
       </div>
     );
   const a = agentOf(r.agent);

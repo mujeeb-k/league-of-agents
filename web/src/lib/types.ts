@@ -24,6 +24,8 @@ export interface SampleRunDef {
   agent: string;
   /** The model the agent reported, as a live run shows it. */
   model?: string;
+  /** Every line it added came through its edit tools, as a live Claude Code run reports them (agentLines). */
+  toolWritten?: true;
   title: string;
   when: string;
   dur: string;
@@ -86,6 +88,8 @@ export interface Run {
   summary: string;
   status: RunStatus;
   changes: Map<string, Change>;
+  /** The added lines the agent wrote through its edit tools: [from, to] indexes in each file after the run. */
+  agentLines?: Record<string, [number, number][]>;
   reviewed: Set<string>;
   kept?: boolean;
   reverted?: boolean;

@@ -11,6 +11,7 @@ import { drafts } from '../state/editing';
 import { obstacles, pathOf, route, type Rect } from './route';
 import { allDirs, dirStat, filesUnder, viewOf } from './model';
 import type { FileView, RowKind } from './types';
+import { authorsOf, shareOf, type Author } from './attribution';
 import { plural } from './util';
 
 /** A file zoomed out: a tile in its card's slot, with its name and its changed lines marked. */
@@ -25,6 +26,8 @@ export interface TileData {
   y: number;
   /** Changed lines, by tick row. */
   ticks: { k: RowKind; row: number }[];
+  /** Coloured by author: the share of the file's lines each wrote. */
+  share: Record<Author, number> | null;
 }
 export interface FrameData {
   path: string;
@@ -47,6 +50,9 @@ export interface CodeRow {
   k: RowKind;
   gutter: string;
   tokens: Token[];
+  /** Coloured by author: who wrote the line, and its line number, to show its run when clicked. */
+  au: Author | null;
+  ln: number | null;
 }
 export type CardData =
   | { ghost: true; path: string; name: string; x: number; y: number }
@@ -116,6 +122,11 @@ export function computeScene(): SceneData {
     rc = run ? agentOf(run.agent).c : null;
   views = new Map<string, FileView>();
   for (const f of S.FILES.values()) views.set(f.path, viewOf(f));
+  // Coloured by author: who wrote each line of the files as they are now.
+  const byAuthor = st.byAuthor && !run;
+  S.AUTHORS = byAuthor
+    ? authorsOf(S.RUNS, new Map([...views].filter(([, v]) => v.exists).map(([p, v]) => [p, v.lines])))
+    : new Map();
   const out: SceneData = { frames: [], tiles: [], cards: [], wires: [], sels: [] };
   // Import lines: between files as they are in the view on screen.
   const imports = importResolver({
@@ -147,6 +158,7 @@ export function computeScene(): SceneData {
         x: f.x,
         y: f.y,
         ticks: !v.ghost && v.kind ? ticksOf(v) : [],
+        share: byAuthor ? shareOf(S.AUTHORS.get(f.path) ?? []) : null,
       });
       count++;
     }
@@ -231,6 +243,8 @@ export function computeScene(): SceneData {
         k: r.k,
         gutter: r.k === 'add' ? '+' : r.k === 'del' ? '−' : String(r.n),
         tokens: markWords(hl(r.t || ' '), r.wd),
+        au: byAuthor && r.n ? (S.AUTHORS.get(f.path)?.[r.n - 1]?.author ?? null) : null,
+        ln: byAuthor && r.n ? r.n : null,
       })),
       rest,
       empty: !rows.length,

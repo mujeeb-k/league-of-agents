@@ -6,6 +6,7 @@ import {
   Focus,
   FolderOpen,
   LayoutGrid,
+  Users,
   Maximize,
   MessageSquareText,
   Monitor,
@@ -28,7 +29,7 @@ import { fileKind } from '../lib/fileKind';
 import { searchFiles } from '../lib/fileSearch';
 import { existsNow } from '../lib/model';
 import { S, dom, st } from '../state/app';
-import { runAction, selectRun, setMode, tidyLayout } from '../state/actions';
+import { runAction, selectRun, setMode, tidyLayout, toggleByAuthor } from '../state/actions';
 import { panels, setPinned, toggleInsp, toggleSide } from '../state/panels';
 import { bump, renderSel, useRegion } from '../state/render';
 import { setTheme } from '../state/theme';
@@ -140,6 +141,12 @@ function Commands() {
           <Item label="Zoom in" icon={<ZoomIn />} keys="+" onSelect={() => zoom(1.4)} />
           <Item label="Zoom out" icon={<ZoomOut />} keys="−" onSelect={() => zoom(1 / 1.4)} />
           <Item label="Tidy layout" icon={<LayoutGrid />} onSelect={tidyLayout} />
+          <Item
+            label={st.byAuthor ? 'Stop coloring by author' : 'Color by author'}
+            icon={<Users />}
+            keys="C"
+            onSelect={toggleByAuthor}
+          />
           <Item label="Write a prompt" icon={<MessageSquareText />} keys="/" onSelect={() => dom.prompt.focus()} />
         </CommandGroup>
         {r ? (

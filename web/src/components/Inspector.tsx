@@ -15,6 +15,7 @@ import {
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { enableChecks, turnOffCheck } from '../api/live';
 import { flyFile } from '../lib/camera';
+import { shareOf, type Author } from '../lib/attribution';
 import { runsRepoCode } from '../lib/checks';
 import { agentOf, modelOf } from '../lib/constants';
 import { existsNow, fileStat, linesAt, needsYou, runStats, viewOf } from '../lib/model';
@@ -426,6 +427,66 @@ function RunView({ run }: { run: Run }) {
 /** The first changed line of a file in the run on screen, or its first line. */
 const firstChange = (v: ReturnType<typeof viewOf>) => v.rows.find(r => r.k)?.n ?? 1;
 
+const AUTHOR_NAMES: Record<Author, string> = { agent: 'Agent', human: 'Human', mixed: 'Mixed', unknown: 'Unknown' };
+
+/** What the clicked line's label means, in words, given the run that last wrote it, if any. */
+function authorText(author: Author, run: Run | null): string {
+  const who = run ? agentOf(run.agent).name : '';
+  if (author === 'agent') return `${who} wrote it with its edit tools.`;
+  if (author === 'human') return 'Saved in the editor on the map.';
+  if (author === 'mixed') return 'Rewritten in part after an agent wrote it.';
+  return run
+    ? `Changed in run ${run.id}, by ${who}. Who typed it isn't known: the agent didn't write it with its edit tools.`
+    : "No run kept on this computer changed it, so who wrote it isn't known.";
+}
+
+/** Coloured by author: the file's lines by who wrote them, and the clicked line's run and prompt. */
+function Authors({ path }: { path: string }) {
+  const owners = S.AUTHORS.get(path);
+  if (!st.byAuthor || st.run || !owners) return null;
+  const n = shareOf(owners);
+  const line = st.authorLine?.path === path ? st.authorLine.line : null;
+  const o = line ? owners[line - 1] : undefined;
+  const run = o?.run ? (S.RUNS.find(r => r.id === o.run) ?? null) : null;
+  return (
+    <Section>
+      <Label>Authors</Label>
+      <div id="authorShare" className="flex flex-wrap gap-x-3 gap-y-1 text-[13px] tabular-nums">
+        {(['agent', 'mixed', 'human', 'unknown'] as const).map(a => (
+          <span key={a} className={`au-${a} text-[var(--au,var(--ink2))]`}>{`${AUTHOR_NAMES[a]} ${n[a]}`}</span>
+        ))}
+      </div>
+      {o ? (
+        <div id="authorLine" className="mt-3 border-t pt-3">
+          <div className="font-medium">
+            {`Line ${line}: `}
+            <span className={`au-${o.author} text-[var(--au,var(--ink2))]`}>{AUTHOR_NAMES[o.author]}</span>
+          </div>
+          <p className="mt-1 text-ink2 text-pretty">{authorText(o.author, run)}</p>
+          {run ? (
+            <>
+              <div className="mt-2 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                <Dot c={agentOf(run.agent).c} />
+                <span className="min-w-0 truncate">
+                  {[agentOf(run.agent).name, modelOf(run.agent, run.model), `Run ${run.id}`, run.when]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+              </div>
+              {run.prompt ? <p className="mt-2 line-clamp-3 text-pretty">{run.prompt}</p> : null}
+              <Button variant="outline" size="sm" className="mt-3" id="openAuthorRun" onClick={() => selectRun(run)}>
+                Open run
+              </Button>
+            </>
+          ) : null}
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">Click a line to see who wrote it, in which run.</p>
+      )}
+    </Section>
+  );
+}
+
 function FileView({ path }: { path: string }) {
   const f = S.FILES.get(path)!,
     v = viewOf(f),
@@ -459,6 +520,7 @@ function FileView({ path }: { path: string }) {
           </div>
         ) : null}
       </Section>
+      <Authors path={path} />
       <Section>
         <dl className="kv grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-[13px]">
           <dt className="text-muted-foreground">Lines</dt>

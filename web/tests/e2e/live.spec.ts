@@ -945,6 +945,49 @@ test('bridge records the lines Claude Code wrote with its edit tools, and only t
   }
 });
 
+// Colored by author: the line Claude Code wrote with its Edit tool is the agent's; the lines it added another way
+// are unknown, never human. A click on a line shows its run and prompt.
+test('colored by author: agent lines marked, the rest unknown, and a line shows its run and prompt', async ({
+  page,
+}) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo, FAKE_CLAUDE, {}, ['--no-hooks']);
+  try {
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+    await page.locator('#prompt').fill('Name the action and origin in allowlist errors');
+    await page.locator('#prompt').press('Enter');
+    await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('c');
+    await expect(page.locator('#byAuthor')).toHaveAttribute('aria-pressed', 'true');
+    const card = page.locator('.card[data-path="shared/allowlist.ts"]');
+    await card.scrollIntoViewIfNeeded();
+    const agent = card.locator('.ln.au-agent');
+    await expect(agent).toHaveCount(1);
+    await expect(agent).toContainText('ALLOWLIST_VIOLATION: ${action} on ${origin}');
+    // The appended isEmpty: in the run, but by no edit tool. No line is called human.
+    await expect(card.locator('.ln', { hasText: 'isEmpty' })).toHaveClass(/au-unknown/);
+    await expect(page.locator('.ln.au-human')).toHaveCount(0);
+    await agent.click();
+    await expect(page.locator('#authorLine')).toContainText('Agent');
+    await expect(page.locator('#authorLine')).toContainText('Claude Code wrote it with its edit tools.');
+    await expect(page.locator('#authorLine')).toContainText('Claude Code · claude-sonnet-5-5 · Run 1');
+    await expect(page.locator('#authorLine')).toContainText('Name the action and origin in allowlist errors');
+    await page.screenshot({ path: test.info().outputPath('by-author.png') });
+    // Zoomed out, the tile's bar shows the agent's share.
+    await page.keyboard.press('0');
+    await expect(page.locator('.fr[data-path="shared/allowlist.ts"] .au i.au-agent')).toHaveCount(1);
+    await page.locator('#openAuthorRun').click();
+    await expect(page.locator('#runbar b')).toHaveText('Run 1');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('bridge runs Codex with a workspace-write sandbox and resumes by thread id', async () => {
   const repo = makeRepo(),
     argsFile = path.join(path.dirname(repo), 'codex-args.jsonl');

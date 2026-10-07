@@ -112,6 +112,7 @@ export const SAMPLE_RUNS: SampleRunDef[] = [
     id: 14,
     agent: 'claude',
     model: 'claude-sonnet-5-5',
+    toolWritten: true,
     title: 'Back off retries after a failed delivery',
     scope: ['server/delivery/'],
     when: '2 min ago',

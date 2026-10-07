@@ -10,7 +10,7 @@ import { readCss } from '../lib/minimap';
 import { openPalette } from '../components/Palette';
 import { retheme } from '../components/TopBar';
 import { S, dom, st } from './app';
-import { loadDemo, selectRun, setMode, stepReview, toggleReviewed } from './actions';
+import { loadDemo, selectRun, setMode, stepReview, toggleByAuthor, toggleReviewed } from './actions';
 import { closeEditor, ed, openEditor } from './editing';
 import { renderAll, renderSel, renderSide, setConnUI } from './render';
 import { applyPanels, toggleInsp, toggleSide } from './panels';
@@ -61,7 +61,8 @@ function onKey(e: KeyboardEvent) {
   ) {
     e.preventDefault();
     void openEditor([...st.sel][0]!);
-  } else if (k === '0') flyAll();
+  } else if (k === 'c' && S.ROOT) toggleByAuthor();
+  else if (k === '0') flyAll();
   else if (k === 'f') {
     if (st.sel.size) flySelection();
     else if (st.run) flyRun(st.run);

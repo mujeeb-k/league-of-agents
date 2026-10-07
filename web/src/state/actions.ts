@@ -32,6 +32,15 @@ export function selectRun(run: Run | null, fly = true) {
   if (run && fly) flyRun(run);
 }
 
+/** Colours the map by who wrote each line, on the latest state: an open run closes. */
+export function toggleByAuthor() {
+  st.byAuthor = !st.byAuthor;
+  st.authorLine = null;
+  if (st.run) selectRun(null, false);
+  else renderAll();
+  toast(st.byAuthor ? 'Colored by author' : 'Coloring by author off');
+}
+
 export function toggleSel(k: string, add: boolean) {
   if (add) {
     if (st.sel.has(k)) st.sel.delete(k);

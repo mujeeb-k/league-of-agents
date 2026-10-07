@@ -146,7 +146,12 @@ function bindStage(stage: HTMLElement) {
     if (second) return;
     if (fe) {
       const p = fe.dataset.path!;
-      toggleSel(p, d.shift);
+      // Coloured by author, a line on a code card says who wrote it (Inspector, Authors).
+      const ln = fe.classList.contains('card') ? d.target.closest<HTMLElement>('.ln[data-ln]') : null;
+      st.authorLine = ln ? { path: p, line: Number(ln.dataset.ln) } : null;
+      // Another line of the file already selected keeps it selected.
+      if (ln && !d.shift && st.sel.size === 1 && st.sel.has(p)) renderInspector();
+      else toggleSel(p, d.shift);
       if (st.run && st.run.changes.has(p)) {
         st.cur = p;
         renderInspector();

@@ -4,6 +4,7 @@ import { Fragment, memo, useLayoutEffect } from 'react';
 import { CH, CW } from '../lib/constants';
 import type { Token } from '../lib/highlight';
 import { plural } from '../lib/util';
+import type { Author } from '../lib/attribution';
 import { scene, updateEdgeFocus, type CardData, type FrameData, type SelBox, type TileData } from '../lib/scene';
 import { fitLabels } from '../lib/labels';
 import { dom } from '../state/app';
@@ -18,6 +19,19 @@ const box = (x: number, y: number, w: number, h: number) => ({
   height: `${h}px`,
 });
 
+/** Coloured by author, zoomed out: a bar along a tile's foot, split by who wrote its lines; unknown is left empty. */
+const Share = ({ s }: { s: Record<Author, number> }) => {
+  const total = s.agent + s.human + s.mixed + s.unknown;
+  if (!total) return null;
+  return (
+    <span className="au">
+      {(['agent', 'mixed', 'human'] as const).map(a =>
+        s[a] ? <i key={a} className={`au-${a}`} style={{ width: `${(100 * s[a]) / total}%` }} /> : null,
+      )}
+    </span>
+  );
+};
+
 /** A file zoomed out: its name on one line, and its changed rows marked. */
 const Tile = memo(function Tile({ f }: { f: TileData }) {
   return (
@@ -26,6 +40,7 @@ const Tile = memo(function Tile({ f }: { f: TileData }) {
         <FileIcon kind={f.kind} />
         {f.name}
       </span>
+      {f.share ? <Share s={f.share} /> : null}
       {f.ticks.length ? (
         <span className="tk">
           {f.ticks.map(t => (
@@ -94,7 +109,12 @@ const Card = memo(function Card({ c }: { c: CardData }) {
       <div className="code">
         {c.above ? <div className="more">{`${plural(c.above, 'line')} above`}</div> : null}
         {c.rows.map(r => (
-          <div key={r.id} ref={markFresh} className={`ln ${r.k}`}>
+          <div
+            key={r.id}
+            ref={markFresh}
+            className={r.au ? `ln ${r.k} au-${r.au}` : `ln ${r.k}`}
+            data-ln={r.ln ?? undefined}
+          >
             <i>{r.gutter}</i>
             <span>
               <Code tokens={r.tokens} />

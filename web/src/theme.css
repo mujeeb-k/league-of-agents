@@ -73,6 +73,10 @@
   --a-cursor: #2f3440;
   --a-detected: #7f620e;
   --a-hermes: #2a62c9;
+  /* Who wrote a line, when the map is coloured by author (lib/attribution.ts). */
+  --au-agent: #1d4ed8;
+  --au-human: #a21caf;
+  --au-mixed: #475569;
   --e1: 0 0 0 1px rgba(24, 24, 27, 0.07), 0 1px 2px rgba(24, 24, 27, 0.04);
   --e2: 0 0 0 1px rgba(24, 24, 27, 0.08), 0 8px 24px rgba(24, 24, 27, 0.08);
 }
@@ -129,6 +133,10 @@
   --a-cursor: #c9ced6;
   --a-detected: #e3b341;
   --a-hermes: #6f9bf2;
+  /* Who wrote a line, when the map is coloured by author (lib/attribution.ts). */
+  --au-agent: #7aa7ff;
+  --au-human: #e879f9;
+  --au-mixed: #a3b1c6;
   --e1: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.4);
   --e2: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 12px 32px rgba(0, 0, 0, 0.5);
   color-scheme: dark;

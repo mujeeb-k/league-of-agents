@@ -102,9 +102,28 @@ export function buildModel(spec: TreeSpec, code: Record<string, string>, runDefs
         f.createdBy = r.id;
       } else run.changes.set(p, newChange({ hunks: v.map(([at, del, add]) => ({ at, del, add })) }));
     }
+    if (r.toolWritten) run.agentLines = addedRanges(run.changes);
     S.RUNS.push(run);
   }
   layout();
+}
+
+/** Every line a run added, per file, as [from, to] indexes in the file after it: for the demo's agent runs. */
+function addedRanges(changes: Run['changes']): Record<string, [number, number][]> {
+  const out: Record<string, [number, number][]> = {};
+  for (const [p, c] of changes) {
+    if (c.created) {
+      if (c.lines.length) out[p] = [[0, c.lines.length - 1]];
+      continue;
+    }
+    let shift = 0;
+    out[p] = [];
+    for (const h of [...c.hunks].sort((a, b) => a.at - b.at)) {
+      if (h.add.length) out[p].push([h.at + shift, h.at + shift + h.add.length - 1]);
+      shift += h.add.length - h.del;
+    }
+  }
+  return out;
 }
 
 export function applyHunks(L: string[], hunks: Hunk[]): string[] {

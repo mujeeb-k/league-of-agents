@@ -68,6 +68,10 @@ const PAIRS: [string[], string[]][] = [
     ['--a-claude', '--a-codex', '--a-cursor', '--a-detected', '--a-hermes'],
     ['--canvas', '--frame:--canvas', '--panel', '--surface'],
   ],
+  [
+    ['--au-agent', '--au-human', '--au-mixed'],
+    ['--canvas', '--panel', '--surface'],
+  ],
 ];
 
 describe('contrast', () => {

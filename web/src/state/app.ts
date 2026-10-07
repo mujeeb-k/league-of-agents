@@ -2,6 +2,7 @@
 // while rendering; actions change it and then call the render functions in
 // state/render.ts (renderScene(), renderSide() and so on).
 import type { Conn } from '../api/types';
+import type { Owner } from '../lib/attribution';
 import type { SavedLayout } from '../lib/layout';
 import type { AgentMap, Box, Conflict, DirNode, FileNode, Mode, Run, Tab, View } from '../lib/types';
 
@@ -27,6 +28,8 @@ export const S = {
   /** Bumped whenever the layout changes, so routed lines are found again. */
   LAYOUT_REV: 0,
   GRAPH: { out: new Map(), in: new Map() } as Graph,
+  /** Who wrote each line of each file, while the map is coloured by author (lib/attribution.ts). */
+  AUTHORS: new Map<string, Owner[]>(),
   /** Each file's full length when live; the bridge sends only the first 400 lines of each. */
   TOTALS: new Map<string, number>(),
   /** The connected bridge's version, or null when it is too old to say. */
@@ -48,6 +51,10 @@ export const S = {
 
 export const st = {
   run: null as Run | null,
+  /** The map coloured by who wrote each line (lib/attribution.ts), on the latest state. */
+  byAuthor: false,
+  /** The line whose authorship the inspector shows, clicked while coloured by author. */
+  authorLine: null as { path: string; line: number } | null,
   mode: 'after' as Mode,
   sel: new Set<string>(),
   agent: 'claude',

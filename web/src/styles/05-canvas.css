@@ -484,3 +484,38 @@ em.n {
   display: none;
   pointer-events: none;
 }
+/* Coloured by author (lib/attribution.ts). Zoomed out, a bar along a tile's foot, split by who wrote its lines;
+   the rest of the bar, lines whose author isn't known, stays plain. Zoomed in, a mark beside each line. */
+.fr .au {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 10px;
+  height: max(6px, calc(3px / var(--s)));
+  display: flex;
+  overflow: hidden;
+  border-radius: max(3px, calc(1.5px / var(--s)));
+  background: var(--hair);
+}
+.au-agent {
+  --au: var(--au-agent);
+}
+.au-human {
+  --au: var(--au-human);
+}
+.au-mixed {
+  --au: var(--au-mixed);
+}
+.fr .au i {
+  height: 100%;
+  background: var(--au);
+}
+.card .ln[data-ln] {
+  cursor: pointer;
+}
+.card .ln.au-agent > i,
+.card .ln.au-human > i,
+.card .ln.au-mixed > i {
+  box-shadow: inset max(3px, calc(1.5px / var(--s))) 0 var(--au);
+  color: var(--au);
+}
