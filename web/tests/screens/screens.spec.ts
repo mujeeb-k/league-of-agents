@@ -5,7 +5,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { AGENT_FIXTURES, REPLAY_AGENT, SLOW_AGENT, git, makeRepo, startBridge, type Bridge } from '../support/live';
+import {
+  AGENT_FIXTURES,
+  REPLAY_AGENT,
+  SLOW_AGENT,
+  approveChecks,
+  git,
+  makeRepo,
+  startBridge,
+  type Bridge,
+} from '../support/live';
 import { APP } from '../support/targets';
 
 const OUT = path.resolve('test-results/screens');
@@ -42,6 +51,7 @@ const withConfig = (checks: { name: string; run: string }[]) => {
   const repo = makeRepo();
   fs.writeFileSync(path.join(repo, 'loa.config.json'), JSON.stringify({ checks }));
   git(repo, 'commit', '-qam', 'checks');
+  approveChecks(repo);
   return repo;
 };
 const prompt = async (page: Page, text = 'Name the action and origin in allowlist errors') => {

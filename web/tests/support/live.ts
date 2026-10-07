@@ -42,7 +42,21 @@ export const SEED: Record<string, string> = {
 
 export const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' });
 
-/** A fresh repo named `sample-repo` on branch main, seeded and committed. */
+/**
+ * Approves the repo's committed checks in this clone, as the person does once in the Checks panel; the bridge
+ * runs a repo's loa.config.json only after that. "a cloned repo's checks wait for approval" tests the panel.
+ */
+export function approveChecks(repo: string) {
+  const { checks } = JSON.parse(fs.readFileSync(path.join(repo, 'loa.config.json'), 'utf8')) as {
+    checks: { name: string; run: string }[];
+  };
+  fs.mkdirSync(path.join(repo, '.loa'), { recursive: true });
+  fs.writeFileSync(path.join(repo, '.loa/checks-approved.json'), JSON.stringify(checks));
+  // Kept out of git as the bridge keeps .loa/, so a later `git add -A` in a test never commits it.
+  fs.appendFileSync(path.join(repo, '.git/info/exclude'), '\n/.loa/\n');
+}
+
+/** A fresh repo named `sample-repo` on branch main, seeded and committed, its checks approved. */
 export function makeRepo(): string {
   const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'loa-e2e-')), 'sample-repo');
   for (const [p, text] of Object.entries(SEED)) {
@@ -52,6 +66,7 @@ export function makeRepo(): string {
   git(dir, 'init', '-q', '-b', 'main');
   git(dir, 'add', '-A');
   git(dir, '-c', 'user.name=test', '-c', 'user.email=test@example.test', 'commit', '-qm', 'seed');
+  approveChecks(dir);
   return dir;
 }
 

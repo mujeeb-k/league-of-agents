@@ -557,7 +557,9 @@ function ChecksOffer() {
     <Section>
       <Label>Checks</Label>
       <p className="mb-2 text-ink2 text-pretty">
-        No checks are set up. League of Agents found these and can run them after each run:
+        {S.checksFromRepo
+          ? "This repo's loa.config.json asks to run these commands after each run:"
+          : 'No checks are set up. League of Agents found these and can run them after each run:'}
       </p>
       <ul id="suggestedChecks" className="mb-3 flex flex-col gap-1">
         {S.suggestedChecks.map(c => (
@@ -579,18 +581,22 @@ function ChecksOffer() {
         {st.busy === 'checks' ? <Spinner className="text-current" /> : null}
         Run these after each run
       </Button>
-      <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-ink2">
-        <input
-          type="checkbox"
-          id="shareChecks"
-          checked={share}
-          onChange={e => setShare(e.target.checked)}
-          className="mt-px size-3.5 shrink-0 cursor-pointer accent-[var(--sel)]"
-        />
-        <span className="text-pretty">Also save them in loa.config.json, to share with your team</span>
-      </label>
+      {S.checksFromRepo ? null : (
+        <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-ink2">
+          <input
+            type="checkbox"
+            id="shareChecks"
+            checked={share}
+            onChange={e => setShare(e.target.checked)}
+            className="mt-px size-3.5 shrink-0 cursor-pointer accent-[var(--sel)]"
+          />
+          <span className="text-pretty">Also save them in loa.config.json, to share with your team</span>
+        </label>
+      )}
       <p className="mt-2 text-xs text-muted-foreground text-pretty">
-        Nothing runs until you turn them on. Unless you share them, they stay in .loa/, out of your repo.
+        {S.checksFromRepo
+          ? 'Nothing runs until you turn them on here. Read the commands first: they run on your computer.'
+          : 'Nothing runs until you turn them on. Unless you share them, they stay in .loa/, out of your repo.'}
       </p>
     </Section>
   );

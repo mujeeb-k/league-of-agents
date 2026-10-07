@@ -35,6 +35,8 @@ export const S = {
   bridgeVersion: null as string | null,
   /** Checks the bridge found in a repo with none set up, to offer turning on. */
   suggestedChecks: [] as { name: string; run: string }[],
+  /** True when the suggested checks come from the repo's loa.config.json: approved here before they run. */
+  checksFromRepo: false,
   /** The checks set up now, by name: a check that couldn't run can be turned off while it is one. */
   checksOn: [] as string[],
   /** Shown in the top bar crumb. */

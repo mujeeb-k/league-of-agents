@@ -71,8 +71,22 @@ const CHECKS_OFF = path.join(ROOT, '.loa', 'checks-off.json');
  * only when they choose to share the checks with their team; its checks, when it has any, are the ones that run.
  */
 const PRIVATE_CHECKS = path.join(ROOT, '.loa', 'checks.json');
+/**
+ * The committed checks this clone approved. A cloned repo's loa.config.json is the repo's, not the person's: its
+ * checks run only once the person has turned on that exact list, and wait again whenever the list changes.
+ */
+const APPROVED_CHECKS = path.join(ROOT, '.loa', 'checks-approved.json');
+const sameChecks = (a, b) =>
+  JSON.stringify(a.map(c => [c.name, c.run])) === JSON.stringify(b.map(c => [c.name, c.run]));
+/** Committed checks waiting for the person's approval: offered, never run. */
+let repoChecks = [];
 let checksShared = !!CONF.checks?.length;
-if (!checksShared) CONF.checks = readJson(PRIVATE_CHECKS, []);
+if (checksShared && !sameChecks(CONF.checks, readJson(APPROVED_CHECKS, []))) {
+  repoChecks = CONF.checks;
+  CONF.checks = [];
+  checksShared = false;
+}
+if (!checksShared && !repoChecks.length) CONF.checks = readJson(PRIVATE_CHECKS, []);
 /**
  * Checks the repo seems to have, for a repo with none set up: each package's test and typecheck scripts (with
  * the package manager its lockfile names) and pytest, in the repo and in the folders directly inside it. They
@@ -1515,7 +1529,8 @@ const server = http.createServer(async (req, res) => {
           active: active?.run.id ?? null,
           seq,
           version: VERSION,
-          suggestedChecks: CONF.checks?.length ? [] : detectChecks(),
+          suggestedChecks: CONF.checks?.length ? [] : repoChecks.length ? repoChecks : detectChecks(),
+          ...(repoChecks.length ? { suggestedChecksFrom: 'repo' } : {}),
           checksOn: (CONF.checks || []).map(c => c.name),
         },
         cors,
@@ -1625,16 +1640,28 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { path: url.searchParams.get('path'), text, hash: hashOf(text) }, cors);
     }
     // A save from the editor is a run by "You": the same snapshots, history and revert as an agent's.
-    // Turns on checks the bridge found. The page names them; the commands are the bridge's own, so a page can
-    // never put a command of its choosing into loa.config.json.
+    // Turns on checks the bridge found, or approves the ones the repo's loa.config.json asks for (all of them).
+    // The page names them; the commands are the bridge's own or the repo's, so a page can never put a command of
+    // its choosing into loa.config.json.
     if (req.method === 'POST' && p === '/api/checks') {
       const b = await readBody(req);
       const names = new Set(Array.isArray(b.names) ? b.names : []);
+      if (repoChecks.length) {
+        if (!repoChecks.every(c => names.has(c.name)))
+          return send(res, 400, { error: 'No such checks to turn on' }, cors);
+        fs.writeFileSync(APPROVED_CHECKS, JSON.stringify(repoChecks, null, 2));
+        CONF.checks = repoChecks;
+        repoChecks = [];
+        checksShared = true;
+        emit('state');
+        return send(res, 200, { checks: CONF.checks }, cors);
+      }
       const chosen = detectChecks().filter(c => names.has(c.name));
       if (!chosen.length || CONF.checks?.length) return send(res, 400, { error: 'No such checks to turn on' }, cors);
       if (b.share) {
         if (active) return send(res, 409, { error: 'Wait for the run to finish' }, cors);
         await writeConfig({ ...readJson(CONFIG_FILE, {}), checks: chosen });
+        fs.writeFileSync(APPROVED_CHECKS, JSON.stringify(chosen, null, 2));
         checksShared = true;
       } else fs.writeFileSync(PRIVATE_CHECKS, JSON.stringify(chosen, null, 2));
       CONF.checks = chosen;
@@ -1654,6 +1681,7 @@ const server = http.createServer(async (req, res) => {
         file.checks = (file.checks || []).filter(c => c.name !== gone.name);
         if (!file.checks.length) delete file.checks;
         await writeConfig(file);
+        fs.writeFileSync(APPROVED_CHECKS, JSON.stringify(CONF.checks, null, 2));
         checksShared = !!CONF.checks.length;
       } else fs.writeFileSync(PRIVATE_CHECKS, JSON.stringify(CONF.checks, null, 2));
       fs.writeFileSync(CHECKS_OFF, JSON.stringify([...readJson(CHECKS_OFF, []), `${gone.name}\0${gone.run}`]));

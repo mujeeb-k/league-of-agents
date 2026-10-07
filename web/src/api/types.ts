@@ -89,6 +89,8 @@ export interface StateResponse {
   version?: string | null;
   /** Checks found in the repo, offered while none are set up (bridges before 0.1.0 don't send it). */
   suggestedChecks?: { name: string; run: string }[];
+  /** 'repo' when the suggested checks are the repo's own loa.config.json, waiting for approval in this clone. */
+  suggestedChecksFrom?: 'repo';
   /** The checks set up now, by name (bridges before 0.1.0 don't send it). */
   checksOn?: string[];
 }

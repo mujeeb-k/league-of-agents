@@ -23,6 +23,7 @@ Whoever can call its API can do all of this, so the API is the thing to protect.
 - **No form or image tricks.** A request a page makes with no Origin (an image, a link, a form) carries `Sec-Fetch-Site: cross-site`, and gets 403 on the API.
 - **Lockout.** A wrong token is answered more slowly each time: 100 ms, doubling up to 5 s. After 50 wrong tokens the API answers 423 to everyone until the bridge restarts, and its log and `npx leagueofagents-cli@latest status` say so. The token is far too long to guess; the lockout also stops repeated tries from a program on this machine.
 - **The token's folder is private.** `.loa/`, where `bridge.json` and the bridge's log keep the token, is set to be readable by your account only (0700) at every start, so other accounts on the machine can't read it.
+- **A cloned repo's commands don't run by themselves.** Checks committed in a repo's `loa.config.json` run only after you approve that exact list in your copy, and wait for you again whenever it changes.
 - **No secrets in snapshots.** Untracked files with names that usually hold secrets (`.env`, `.env.*`, keys, credentials; the full list is in the README, under Privacy and security) never enter a snapshot.
 
 ## What League of Agents doesn't defend against

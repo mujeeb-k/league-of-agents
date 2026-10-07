@@ -48,6 +48,7 @@ function liveRun(r: RunDTO): Run {
 function applyState(s: StateResponse, first: boolean) {
   S.LIVE_AGENTS = s.agents;
   S.suggestedChecks = s.suggestedChecks ?? [];
+  S.checksFromRepo = s.suggestedChecksFrom === 'repo';
   S.checksOn = s.checksOn ?? [];
   const avail = Object.keys(s.agents).filter(k => s.agents[k]!.available);
   if (!avail.includes(st.agent) && avail[0]) st.agent = avail[0];

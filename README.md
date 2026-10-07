@@ -71,7 +71,7 @@ A rename is recorded as the old file deleted and a new file created, so the file
 
 ### Checks
 
-If your repo has none set up, League of Agents looks for test and typecheck scripts and pytest, and offers to turn them on. They're kept in `.loa/`, out of your repo, unless you choose to share them with your team in `loa.config.json`. A check that can't run on your machine, because something it needs isn't installed, shows as "Couldn't run" instead of failing, and can be turned off in one click. See [`loa.config.example.json`](loa.config.example.json) to write your own.
+If your repo has none set up, League of Agents looks for test and typecheck scripts and pytest, and offers to turn them on. They're kept in `.loa/`, out of your repo, unless you choose to share them with your team in `loa.config.json`. Checks a repo commits in its `loa.config.json` are offered with their commands, and run only once you turn them on in your copy; if the list changes, they wait for you again. A check that can't run on your machine, because something it needs isn't installed, shows as "Couldn't run" instead of failing, and can be turned off in one click. See [`loa.config.example.json`](loa.config.example.json) to write your own.
 
 ### What it writes on your machine
 
@@ -107,7 +107,7 @@ League of Agents never uploads your code anywhere. Your code goes only to the ag
 - **leagueofagents.dev** serves static files: the page, its scripts, fonts and images. It talks to the bridge straight from your browser, so your code, prompts and runs go between your browser and your computer only. It counts page views with Vercel Web Analytics: the page's path, without anything after `?` or `#`; the site that linked to it; country, region and city, worked out from the request; and the operating system, browser and kind of device. No cookies. The app the bridge serves on your computer counts nothing. Details are on the [privacy page](https://leagueofagents.dev/privacy).
 - **Installing** downloads the package from the npm registry.
 - **Your agent** gets your prompt and a list of the selected files or lines, as paths and line numbers. "Update what depends on this" also puts the diff of your change in the prompt. The agent sends what it reads and is given to its own provider, under that provider's terms.
-- **Your checks** run the commands you set up. What they do is up to them.
+- **Your checks** run the commands you turned on. What they do is up to them.
 
 ## How it starts your agent
 

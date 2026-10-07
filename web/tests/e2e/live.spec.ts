@@ -16,6 +16,7 @@ import {
   REPO_ROOT,
   SEED,
   SLOW_AGENT,
+  approveChecks,
   git,
   homeOf,
   makeRepo,
@@ -464,6 +465,7 @@ test('failed checks make Revert the primary action and Keep the secondary one', 
     JSON.stringify({ checks: [{ name: 'tests', run: 'node -e "console.log(\'1 failed\'); process.exit(1)"' }] }),
   );
   git(repo, 'commit', '-qam', 'failing check');
+  approveChecks(repo);
   const b = await startBridge(repo);
   try {
     await page.goto(linkFor(b));
@@ -529,6 +531,7 @@ test("a check that can't run on this machine says so, apart from a real failure,
   fs.writeFileSync(path.join(repo, 'loa.config.json'), JSON.stringify({ checks, keep: 'this setting' }));
   git(repo, 'add', '-A');
   git(repo, 'commit', '-qm', 'checks');
+  approveChecks(repo);
   const b = await startBridge(repo);
   try {
     await page.goto(linkFor(b));
@@ -572,6 +575,7 @@ test("checks that couldn't run are counted, never tagged as passed", async ({ pa
   );
   git(repo, 'add', '-A');
   git(repo, 'commit', '-qm', 'checks');
+  approveChecks(repo);
   const b = await startBridge(repo);
   try {
     await page.goto(linkFor(b));
@@ -2096,6 +2100,68 @@ test('checks for new users: found, offered, turned on in one click, never run be
     expect(runs.map(r => r.changes.map(c => c.path).sort())).toEqual([
       ['shared/allowlist.ts', 'shared/policy-cache.ts'],
     ]);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// A cloned repo's loa.config.json is the repo's, not the person's: its checks are offered with their commands and
+// run only after this clone approves that exact list, again whenever the list changes. Before, the first file saved
+// after the bridge started ran them.
+test("a cloned repo's checks wait for approval, and wait again when they change", async ({ page }) => {
+  const repo = makeRepo();
+  const ran = path.join(path.dirname(repo), 'ran.txt');
+  const times = () => (fs.existsSync(ran) ? fs.readFileSync(ran, 'utf8').split('\n').length - 1 : 0);
+  const commitChecks = (name: string) => {
+    const checks = [{ name, run: `node -e "require('fs').appendFileSync('../ran.txt', '${name}\\n')"` }];
+    fs.writeFileSync(path.join(repo, 'loa.config.json'), JSON.stringify({ checks }));
+    git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qam', 'checks');
+    return checks;
+  };
+  const edit = async (b: Bridge, n: number) => {
+    fs.appendFileSync(path.join(repo, 'shared/log.ts'), `export const n${n} = ${n};\n`);
+    await expect.poll(async () => (await runsOf(b)).length, { timeout: 10_000 }).toBe(n);
+    await settled();
+    return (await runsOf(b))[n - 1]!;
+  };
+  const checks = commitChecks('tests');
+  fs.rmSync(path.join(repo, '.loa'), { recursive: true });
+  let b = await startBridge(repo, undefined, { LOA_QUIET_MS: String(QUIET) }, ['--no-hooks']);
+  try {
+    const state = (await call(b, '/api/state')).body;
+    expect(state.suggestedChecks).toEqual(checks);
+    expect(state.suggestedChecksFrom).toBe('repo');
+    expect(state.checksOn).toEqual([]);
+    // An edit in an editor is a run, and the repo's command doesn't run.
+    expect((await edit(b, 1)).checks).toEqual([]);
+    expect(times()).toBe(0);
+    await page.goto(linkFor(b));
+    await expect(page.locator('#suggestedChecks li')).toHaveCount(1);
+    await expect(page.locator('#suggestedChecks li')).toContainText(checks[0]!.run);
+    await expect(page.locator('#insp')).toContainText("This repo's loa.config.json asks to run these commands");
+    await expect(page.locator('#shareChecks')).toHaveCount(0);
+    await page.screenshot({ path: test.info().outputPath('repo-checks-offer.png') });
+    await page.locator('#enableChecks').click();
+    await expect(page.locator('#suggestedChecks')).toHaveCount(0);
+    expect(JSON.parse(fs.readFileSync(path.join(repo, '.loa/checks-approved.json'), 'utf8'))).toEqual(checks);
+    // Approving changes nothing in the repo: only the edit above shows.
+    expect(git(repo, 'status', '--porcelain')).toBe(' M shared/log.ts\n');
+    // Approved: the next run runs them.
+    await edit(b, 2);
+    await expect
+      .poll(async () => (await runsOf(b))[1]!.checks.map(c => c.name), { timeout: 15_000 })
+      .toEqual(['tests']);
+    expect(times()).toBe(1);
+    // A pull changes the list: it waits for approval again after the next start.
+    b.stop();
+    const changed = commitChecks('lint');
+    b = await startBridge(repo, undefined, { LOA_QUIET_MS: String(QUIET) }, ['--no-hooks']);
+    const again = (await call(b, '/api/state')).body;
+    expect(again.suggestedChecks).toEqual(changed);
+    expect(again.suggestedChecksFrom).toBe('repo');
+    expect((await edit(b, 3)).checks).toEqual([]);
+    expect(times()).toBe(1);
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
