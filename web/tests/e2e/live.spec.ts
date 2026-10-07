@@ -21,6 +21,7 @@ import {
   git,
   homeOf,
   makeRepo,
+  publishedBridge,
   startBridge,
   type Bridge,
 } from '../support/live';
@@ -676,6 +677,72 @@ test('hosted link: the app on another origin connects with #bridge=PORT', async 
       timeout: 30_000,
     });
     await expect(page.locator('#conn')).toHaveText('Offline');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+/** Counts the app's fetches of the whole state. */
+function stateFetches(page: Page) {
+  let n = 0;
+  page.on('request', r => {
+    if (new URL(r.url()).pathname === '/api/state') n++;
+  });
+  return () => n;
+}
+
+// A run that finishes reaches the canvas from its delta: the run and its files, not the whole state again.
+test('run deltas: a finished run reaches the canvas without fetching the whole state', async ({ page }) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo);
+  try {
+    const fetches = stateFetches(page);
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    const before = fetches();
+    await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+    await page.locator('#prompt').fill('Name the action and origin in allowlist errors');
+    await page.locator('#prompt').press('Enter');
+    await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
+    await expect(page.locator('#runbar b')).toHaveText('Run 1');
+    await expect(page.locator('[data-mode="diff"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('.card.k-mod[data-path="shared/allowlist.ts"]')).toHaveCount(1);
+    await expect(page.locator('.card.k-add[data-path="shared/policy-cache.ts"]')).toHaveCount(1);
+    await expect(page.locator('.check .sm')).toHaveText('3 passed', { timeout: 15_000 });
+    // The run's start fetches the state once (the bridge's own state event); its end and its checks don't.
+    expect(fetches() - before).toBeLessThanOrEqual(1);
+    const atEnd = fetches();
+    await page.waitForTimeout(1000);
+    expect(fetches()).toBe(atEnd);
+    // The same events, to an app that doesn't ask for deltas: plain state events, so it fetches as before.
+    const plain = (await call(b, '/api/events?since=0')).body.events as { type: string; delta?: unknown }[];
+    const asked = (await call(b, '/api/events?since=0&delta=1')).body.events as { type: string; delta?: unknown }[];
+    expect(plain.some(e => e.delta)).toBe(false);
+    expect(asked.filter(e => e.delta).length).toBeGreaterThan(0);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// The site ships before the bridge does: this app on the published 0.1.2 bridge, which sends no deltas.
+test('the app on a 0.1.2 bridge: a finished run reaches the canvas through the whole state', async ({ page }) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo, FAKE_CLAUDE, {}, [], publishedBridge('0.1.2'));
+  try {
+    const fetches = stateFetches(page);
+    await page.goto(`${APP}/#bridge=${b.port}&t=${b.token}`);
+    await expect(page.locator('#conn')).toHaveText('Live');
+    const before = fetches();
+    await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+    await page.locator('#prompt').fill('Name the action and origin in allowlist errors');
+    await page.locator('#prompt').press('Enter');
+    await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
+    await expect(page.locator('#runbar b')).toHaveText('Run 1');
+    await expect(page.locator('[data-mode="diff"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('.card.k-mod[data-path="shared/allowlist.ts"]')).toHaveCount(1);
+    expect(fetches() - before).toBeGreaterThan(1);
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });

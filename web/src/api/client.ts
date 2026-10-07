@@ -56,7 +56,7 @@ async function request<T>(
 
 export const bridge = {
   state: (c: Conn) => request<StateResponse>(c, '/api/state'),
-  events: (c: Conn, since: number) => request<EventsResponse>(c, `/api/events?since=${since}`),
+  events: (c: Conn, since: number) => request<EventsResponse>(c, `/api/events?since=${since}&delta=1`),
   startRun: (c: Conn, body: StartRunBody) => request<RunDTO>(c, '/api/runs', { method: 'POST', body }),
   cancel: (c: Conn, id: number) => request<OkResponse>(c, `/api/runs/${id}/cancel`, { method: 'POST' }),
   keep: (c: Conn, id: number) => request<OkResponse>(c, `/api/runs/${id}/keep`, { method: 'POST' }),

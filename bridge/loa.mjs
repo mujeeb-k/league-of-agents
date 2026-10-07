@@ -638,24 +638,24 @@ function listFiles() {
     .sort()
     .slice(0, MAX_FILES);
 }
-function readTree() {
-  const files = [];
-  for (const p of listFiles()) {
-    const abs = path.join(ROOT, p);
-    let st;
-    try {
-      st = fs.statSync(abs);
-    } catch {
-      continue;
-    }
-    if (!st.isFile() || st.size > 400000) continue;
-    const text = fs.readFileSync(abs, 'utf8');
-    if (text.includes('\0')) continue;
-    const lines = text.split('\n');
-    if (lines.length && lines[lines.length - 1] === '') lines.pop();
-    files.push({ path: p, total: lines.length, lines: lines.slice(0, MAX_LINES) });
+/** A file as the map shows it: its length and first lines; null for one the map leaves out. */
+function treeEntry(p) {
+  const abs = path.join(ROOT, p);
+  let st;
+  try {
+    st = fs.statSync(abs);
+  } catch {
+    return null;
   }
-  return files;
+  if (!st.isFile() || st.size > 400000) return null;
+  const text = fs.readFileSync(abs, 'utf8');
+  if (text.includes('\0')) return null;
+  const lines = text.split('\n');
+  if (lines.length && lines[lines.length - 1] === '') lines.pop();
+  return { path: p, total: lines.length, lines: lines.slice(0, MAX_LINES) };
+}
+function readTree() {
+  return listFiles().map(treeEntry).filter(Boolean);
 }
 
 // ---------------------------------------------------------------- snapshots (private index, never touches your branch or staging)
@@ -956,7 +956,7 @@ async function finishRun(run, status = 'done') {
   run.endedAt = Date.now();
   if (active && active.run === run) active = null;
   saveRun(run);
-  emit('state');
+  emitRun(run);
   if (run.changes.length && CONF.checks?.length) {
     run.checksRunning = true;
     emit('progress', run);
@@ -965,7 +965,7 @@ async function finishRun(run, status = 'done') {
       .finally(() => {
         run.checksRunning = false;
         saveRun(run);
-        emit('state');
+        emitRun(run);
       });
   }
 }
@@ -1424,10 +1424,20 @@ await watch();
 let seq = 0;
 const events = [];
 const waiters = new Set();
-function emit(type, run) {
+/**
+ * A run finished or changed: a state event that also carries the run and its files as the map shows them now
+ * (null for one no longer on it), so an app that asks for deltas updates without fetching the whole state.
+ */
+function emitRun(run) {
+  const shown = new Set(listFiles());
+  const files = Object.fromEntries(run.changes.map(c => [c.path, shown.has(c.path) ? treeEntry(c.path) : null]));
+  emit('state', undefined, { run: publicRun(run), files, active: active?.run.id ?? null });
+}
+function emit(type, run, delta) {
   events.push({
     seq: ++seq,
     type,
+    ...(delta ? { delta } : {}),
     run: run
       ? {
           id: run.id,
@@ -1562,7 +1572,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && p === '/api/events') {
       const since = Number(url.searchParams.get('since') || 0);
-      const ready = () => events.filter(e => e.seq > since);
+      // Deltas go only to apps that ask for them; any other app refetches the state, as before.
+      const withDelta = url.searchParams.get('delta') === '1';
+      const ready = () =>
+        events.filter(e => e.seq > since).map(e => (withDelta || !e.delta ? e : { ...e, delta: undefined }));
       if (!ready().length)
         await new Promise(r => {
           const w = () => r();

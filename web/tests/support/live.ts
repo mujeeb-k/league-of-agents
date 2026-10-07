@@ -93,6 +93,22 @@ function freePort(): Promise<number> {
 /** The home folder a test bridge sees, next to its repo, so Cursor's user-level hooks never touch the real one. */
 export const homeOf = (repo: string) => path.join(path.dirname(repo), 'home');
 
+/**
+ * The bridge of a published release, installed once into test-results/bridges/<version>: the app must keep
+ * working with bridges people already run.
+ */
+export function publishedBridge(version: string): string {
+  const dir = path.join(REPO_ROOT, 'web/test-results/bridges', version);
+  const file = path.join(dir, 'node_modules/leagueofagents-cli/bridge/loa.mjs');
+  if (!fs.existsSync(file)) {
+    fs.mkdirSync(dir, { recursive: true });
+    execFileSync('npm', ['install', '--prefix', dir, '--no-audit', '--no-fund', `leagueofagents-cli@${version}`], {
+      stdio: 'ignore',
+    });
+  }
+  return file;
+}
+
 export interface Bridge {
   port: number;
   token: string;
@@ -108,6 +124,7 @@ export async function startBridge(
   agentBin = FAKE_CLAUDE,
   env: Record<string, string> = {},
   args: string[] = [],
+  bridge = BRIDGE,
 ): Promise<Bridge> {
   // A given --port is kept, to bring a bridge back where it was.
   const given = args.indexOf('--port');
@@ -117,7 +134,7 @@ export async function startBridge(
   // In the foreground (serve), so the test owns the process; users run it in the background (start).
   const proc = spawn(
     process.execPath,
-    [BRIDGE, 'serve', ...(given >= 0 ? [] : ['--port', String(port)]), ...consent, ...args.filter(a => a !== '--ask')],
+    [bridge, 'serve', ...(given >= 0 ? [] : ['--port', String(port)]), ...consent, ...args.filter(a => a !== '--ask')],
     {
       cwd: repo,
       // The test app (APP) stands in for the hosted app, the one other origin the bridge accepts.

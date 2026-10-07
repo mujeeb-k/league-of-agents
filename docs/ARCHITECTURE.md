@@ -60,7 +60,7 @@ CORS echoes only allowed origins and sends `Access-Control-Allow-Private-Network
 |---|---|
 | `GET /` and other non-API paths | Serves the built app from `web/dist` (`LOA_WEB_DIR`), or one file with `LOA_WEB_FILE` |
 | `GET /api/state` | Repo name, branch and absolute root (for opening files in another editor), agents, file tree with first 400 lines per file, all runs, active run id, event seq, the bridge version (`package.json`; the app shows an update banner below `MIN_BRIDGE`) |
-| `GET /api/events?since=N` | Long poll, up to 25s. Events: `state` (refetch), `progress` (run stream, status, checks) |
+| `GET /api/events?since=N[&delta=1]` | Long poll, up to 25s. Events: `state` (refetch), `progress` (run stream, status, checks). With `delta=1`, a `state` event for a finished or checked run carries `delta`: the run and its files as the map shows them (`emitRun()`), and the app applies it without refetching; other apps get the plain event |
 | `POST /api/runs` | `{ agent, prompt, scope[], resumeFrom, lines?, context? }`. Starts an agent run. A scope entry is a folder (`src/`), a file, or lines of a file (`src/main.py:12-18`). For lines, `lines` holds their text and `context` the lines around them; the bridge finds them again (Selections, below) or answers 409 with `{ error, stale }` |
 | `GET /api/file?path=` | A file's full text and its hash, for the editor |
 | `POST /api/save` | `{ path, text, base }`. Writes the file as a run by `you`. 409 with the current `text` and `hash` if the file changed on disk since `base` |

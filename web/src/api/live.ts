@@ -12,7 +12,7 @@ import { bridge } from './client';
 import { explain } from './errors';
 import { showConflict } from '../components/ConflictDialog';
 import { clearConn, saveConn } from './conn';
-import type { Conn, RunDTO, StateResponse } from './types';
+import type { Conn, RunDTO, StateDelta, StateResponse } from './types';
 
 export const live = { pendingSelect: null as number | null };
 let refreshTimer = 0,
@@ -45,7 +45,24 @@ function liveRun(r: RunDTO): Run {
   };
 }
 
+/** The last state applied, which run deltas are applied to. */
+let last: StateResponse | null = null;
+
+/** The state with run deltas applied: each run and its files replaced, in the bridge's order. */
+function withDeltas(s: StateResponse, deltas: StateDelta[], seq: number): StateResponse {
+  for (const d of deltas) {
+    const tree = s.tree.filter(f => !(f.path in d.files));
+    for (const f of Object.values(d.files)) if (f) tree.push(f);
+    tree.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    const runs = s.runs.filter(r => r.id !== d.run.id).concat(d.run);
+    runs.sort((a, b) => a.id - b.id);
+    s = { ...s, tree, runs, active: d.active, seq };
+  }
+  return s;
+}
+
 function applyState(s: StateResponse, first: boolean) {
+  last = s;
   S.LIVE_AGENTS = s.agents;
   S.suggestedChecks = s.suggestedChecks ?? [];
   S.checksFromRepo = s.suggestedChecksFrom === 'repo';
@@ -125,8 +142,10 @@ async function poll() {
       const r = await bridge.events(conn(), S.EVSEQ);
       S.EVSEQ = r.seq;
       let needState = false;
+      const deltas: StateDelta[] = [];
       for (const e of r.events) {
-        if (e.type === 'state') needState = true;
+        if (e.type === 'state' && e.delta) deltas.push(e.delta);
+        else if (e.type === 'state') needState = true;
         else if (e.type === 'progress' && e.run) {
           const p = e.run,
             run = S.RUNS.find(x => x.id === p.id);
@@ -142,14 +161,17 @@ async function poll() {
               cost: p.cost,
               turn: p.turn,
             });
-            if (wasRunning && run.status !== 'running') needState = true;
+            // A run that just ended needs the whole state, unless its delta came with it.
+            if (wasRunning && run.status !== 'running' && !deltas.some(d => d.run.id === run.id)) needState = true;
             if (st.run === run) renderInspector();
           } else needState = true;
         }
       }
-      if (needState) {
+      // Runs alone changed: their deltas update the state already here. Anything else fetches it whole.
+      if (deltas.length && !last) needState = true;
+      if (needState || deltas.length) {
         const prevActive = S.ACTIVE && S.ACTIVE.id;
-        const s = await bridge.state(conn());
+        const s = needState ? await bridge.state(conn()) : withDeltas(last!, deltas, r.seq);
         // A run started elsewhere is opened, and flown to when it finishes; a save from the editor is not,
         // so the person keeps their place.
         const follow = (id: number) => s.runs.find(r => r.id === id)?.agent !== 'you';

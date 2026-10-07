@@ -76,12 +76,19 @@ export interface TurnSummary {
   needs: string;
 }
 
+/** A file on the map: its length and first 400 lines. */
+export interface TreeFile {
+  path: string;
+  total: number;
+  lines: string[];
+}
+
 /** GET /api/state. `tree` lists files with their first 400 lines. */
 export interface StateResponse {
   /** root: the repository's absolute path on this computer, for opening files in another editor. */
   repo: { name: string; branch: string; root: string };
   agents: Record<string, AgentInfo>;
-  tree: { path: string; total: number; lines: string[] }[];
+  tree: TreeFile[];
   runs: RunDTO[];
   active: number | null;
   seq: number;
@@ -112,6 +119,15 @@ export interface BridgeEvent {
   seq: number;
   type: 'state' | 'progress';
   run?: RunProgress;
+  /** On a state event for a run, to apps that ask (`delta=1`; bridges before 0.2.0 never send it). */
+  delta?: StateDelta;
+}
+
+/** A run that finished or changed, and its files as the map shows them now (null: no longer on the map). */
+export interface StateDelta {
+  run: RunDTO;
+  files: Record<string, TreeFile | null>;
+  active: number | null;
 }
 
 /** GET /api/events?since=N */
