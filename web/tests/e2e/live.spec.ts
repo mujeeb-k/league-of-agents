@@ -471,7 +471,7 @@ test('failed checks make Revert the primary action and Keep the secondary one', 
     path.join(repo, 'loa.config.json'),
     JSON.stringify({ checks: [{ name: 'tests', run: 'node -e "console.log(\'1 failed\'); process.exit(1)"' }] }),
   );
-  git(repo, 'commit', '-qam', 'failing check');
+  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qam', 'failing check');
   approveChecks(repo);
   const b = await startBridge(repo);
   try {
@@ -537,7 +537,7 @@ test("a check that can't run on this machine says so, apart from a real failure,
   ];
   fs.writeFileSync(path.join(repo, 'loa.config.json'), JSON.stringify({ checks, keep: 'this setting' }));
   git(repo, 'add', '-A');
-  git(repo, 'commit', '-qm', 'checks');
+  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'checks');
   approveChecks(repo);
   const b = await startBridge(repo);
   try {
@@ -581,7 +581,7 @@ test("checks that couldn't run are counted, never tagged as passed", async ({ pa
     }),
   );
   git(repo, 'add', '-A');
-  git(repo, 'commit', '-qm', 'checks');
+  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'checks');
   approveChecks(repo);
   const b = await startBridge(repo);
   try {

@@ -50,7 +50,7 @@ function hold(page: Page, pattern: string, method = 'POST') {
 const withConfig = (checks: { name: string; run: string }[]) => {
   const repo = makeRepo();
   fs.writeFileSync(path.join(repo, 'loa.config.json'), JSON.stringify({ checks }));
-  git(repo, 'commit', '-qam', 'checks');
+  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qam', 'checks');
   approveChecks(repo);
   return repo;
 };
