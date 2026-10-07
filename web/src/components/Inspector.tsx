@@ -33,7 +33,7 @@ import { Markdown } from './Markdown';
 import { ScopeChip } from './ScopeChip';
 import { BetaTag, Dot, Spinner, Stat } from './bits';
 import { IntroSection } from './Intro';
-import { t, tn } from '../i18n';
+import { locale, t, tn } from '../i18n';
 
 const Section = ({ children, className }: { children: React.ReactNode; className?: string }) => (
   <section className={cn('border-b p-4', className)}>{children}</section>
@@ -563,7 +563,7 @@ function FileView({ path }: { path: string }) {
         <dl className="kv grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-[13px]">
           <dt className="text-muted-foreground">{t('Lines')}</dt>
           <dd className="tabular-nums">
-            {(st.run ? v.lines.length : (S.TOTALS.get(f.path) ?? v.lines.length)).toLocaleString()}
+            {(st.run ? v.lines.length : (S.TOTALS.get(f.path) ?? v.lines.length)).toLocaleString(locale())}
           </dd>
           <dt className="text-muted-foreground">{t('Imports')}</dt>
           <dd className="tabular-nums">{outs.length}</dd>

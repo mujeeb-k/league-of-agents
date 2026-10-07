@@ -12,6 +12,9 @@ const current = 'en',
 const fill = (s: string, vars?: Record<string, string | number>) =>
   vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s;
 
+/** The language words, numbers and dates are shown in. */
+export const locale = () => current;
+
 /** A UI string in the person's language; `{name}` in it takes `vars.name`. */
 export function t(en: string, vars?: Record<string, string | number>): string {
   const e = catalogue[en];
