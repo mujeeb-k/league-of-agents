@@ -428,3 +428,157 @@ test('first paint on the hosted site is under 1.5 s', async ({ browser }) => {
   report(runs);
   for (const r of runs) expect(r.fcp, `${r.label}, run ${r.run}`).toBeLessThan(1500);
 });
+
+// A real repo inside the 1,500-file cap: remix-run/react-router at a fixed commit, 1,139 files on the map. Fetched
+// once into test-results/perf-repos/ (needs the network the first time). Each measurement is the median of 3
+// fresh page loads, at 1440 × 900.
+const REACT_ROUTER = {
+  url: 'https://github.com/remix-run/react-router.git',
+  sha: '246ddbeced9c2a02bd1de6ae87c5b6ce17225755',
+};
+
+function reactRouter(): string {
+  const dir = path.resolve('test-results/perf-repos/react-router');
+  if (!fs.existsSync(path.join(dir, '.git'))) {
+    fs.mkdirSync(dir, { recursive: true });
+    git(dir, 'init', '-q');
+    git(dir, 'fetch', '-q', '--depth', '1', REACT_ROUTER.url, REACT_ROUTER.sha);
+    git(dir, 'checkout', '-q', 'FETCH_HEAD');
+  }
+  // As fetched: no edits left from an earlier run, and no bridge state.
+  git(dir, 'checkout', '-q', '--', '.');
+  fs.rmSync(path.join(dir, '.loa'), { recursive: true, force: true });
+  return dir;
+}
+
+const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!;
+
+interface Measured {
+  mapVisible: number;
+  panDropped: number;
+  zoomDropped: number;
+  selection: number;
+  stateEvent: number;
+}
+
+/** One fresh page load on react-router: map visible, pan and zoom, a click, and an edit made outside the app. */
+async function measureReactRouter(page: Page, base: string, repo: string, file: string): Promise<Measured> {
+  await page.addInitScript(() => {
+    const w = window as unknown as { mapVisible: number | null; stateEvents: number[] };
+    w.mapVisible = null;
+    w.stateEvents = [];
+    // The map is visible on the first frame that shows its folders.
+    const look = () =>
+      document.querySelector('#world .frame') ? (w.mapVisible = performance.now()) : requestAnimationFrame(look);
+    requestAnimationFrame(look);
+    // When a state event arrives from the bridge.
+    const fetch0 = window.fetch;
+    window.fetch = async (...args) => {
+      const res = await fetch0(...args);
+      // Timed as the response arrives, before the app reads it.
+      const t = performance.now();
+      if (String(args[0]).includes('/api/events'))
+        void res
+          .clone()
+          .json()
+          .then((b: { events: { type: string }[] }) => {
+            if (b.events.some(e => e.type === 'state')) w.stateEvents.push(t);
+          });
+      return res;
+    };
+  });
+  await page.goto(base);
+  await page.waitForFunction(() => (window as unknown as { mapVisible: number | null }).mapVisible !== null);
+  const mapVisible = await page.evaluate(() => (window as unknown as { mapVisible: number }).mapVisible);
+  await page.waitForTimeout(1500);
+  await page.keyboard.press('0');
+  await page.waitForTimeout(400);
+  const dropped = (times: number[]) => (100 * stats('', times).dropped) / times.length;
+  const panDropped = dropped(await drive(page, 120, { deltaX: 8, deltaY: 6 }));
+  const zoomDropped = dropped([
+    ...(await drive(page, 120, { deltaY: -6, ctrlKey: true })),
+    ...(await drive(page, 120, { deltaY: 6, ctrlKey: true })),
+  ]);
+  // A click on a file nothing covers, to the first frame that shows its selection box.
+  await page.keyboard.press('0');
+  await page.waitForTimeout(500);
+  const spot = await page.evaluate(() => {
+    for (const el of document.querySelectorAll<HTMLElement>('#world .fr, #world .card')) {
+      const b = el.getBoundingClientRect();
+      if (!b.width || !b.height) continue;
+      const x = b.left + Math.min(40, b.width / 2),
+        y = b.top + Math.min(8, b.height / 2);
+      if (el.contains(document.elementFromPoint(x, y))) return { x, y };
+    }
+    return null;
+  });
+  expect(spot, 'a file to click').not.toBeNull();
+  const selected = page.evaluate(
+    () =>
+      new Promise<number>(resolve =>
+        document.addEventListener(
+          'pointerdown',
+          e => {
+            const look = () =>
+              document.querySelector('.selbox')
+                ? requestAnimationFrame(() => resolve(performance.now() - e.timeStamp))
+                : requestAnimationFrame(look);
+            requestAnimationFrame(look);
+          },
+          { once: true, capture: true },
+        ),
+      ),
+  );
+  await page.mouse.click(spot!.x, spot!.y);
+  const selection = await selected;
+  // An edit outside the app: from its state event to the first frame that shows the new run.
+  const runs = await page.locator('#sideList .run').count();
+  const events = await page.evaluate(() => (window as unknown as { stateEvents: number[] }).stateEvents.length);
+  fs.appendFileSync(path.join(repo, file), `\n// perf ${Date.now()}\n`);
+  const shown = await page.evaluate(
+    n =>
+      new Promise<number>(resolve => {
+        const look = () =>
+          document.querySelectorAll('#sideList .run').length > n
+            ? requestAnimationFrame(() => resolve(performance.now()))
+            : requestAnimationFrame(look);
+        requestAnimationFrame(look);
+      }),
+    runs,
+  );
+  const event = await page.evaluate(n => (window as unknown as { stateEvents: number[] }).stateEvents[n]!, events);
+  return { mapVisible, panDropped, zoomDropped, selection, stateEvent: shown - event };
+}
+
+test.describe('react-router at 246ddbe (1,139 files)', () => {
+  const runs: Measured[] = [];
+  test.beforeAll(async ({ browser }) => {
+    test.setTimeout(600_000);
+    const repo = reactRouter();
+    const file = 'packages/react-router/index.ts';
+    const b = await startBridge(repo, undefined, { LOA_QUIET_MS: '300' }, ['--no-hooks']);
+    try {
+      for (let i = 0; i < 3; i++) {
+        const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+        runs.push(
+          await measureReactRouter(await ctx.newPage(), `http://127.0.0.1:${b.port}/#t=${b.token}`, repo, file),
+        );
+        await ctx.close();
+      }
+    } finally {
+      b.stop();
+      git(repo, 'checkout', '-q', '--', '.');
+    }
+    fs.writeFileSync(path.join(OUT, 'react-router.json'), JSON.stringify(runs, null, 2));
+    report(runs);
+  });
+  const of = (k: keyof Measured) => median(runs.map(r => r[k]));
+  test('react-router: map visible under 2 s', () => expect(of('mapVisible')).toBeLessThan(2000));
+  test('react-router: pan and zoom at 60 fps (at most 2% of frames dropped)', () => {
+    expect(of('panDropped'), 'pan').toBeLessThanOrEqual(2);
+    expect(of('zoomDropped'), 'zoom').toBeLessThanOrEqual(2);
+  });
+  test('react-router: selection visible under 100 ms', () => expect(of('selection')).toBeLessThan(100));
+  test('react-router: canvas updated under 200 ms after a state event', () =>
+    expect(of('stateEvent')).toBeLessThan(200));
+});
