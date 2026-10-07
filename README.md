@@ -170,6 +170,15 @@ Snapshots stay on your computer unless you send them: `git push`, `git push --al
 | `LOA_CODEX_BIN` | `codex` | Codex command |
 | `LOA_CURSOR_BIN` | `cursor-agent` | Cursor command (newer installs may call it `agent`) |
 
+## For teams
+
+- **Pin a version.** `@latest` fetches the newest release each time. To run the same version everywhere, name it: `npx leagueofagents-cli@0.1.2`. Releases are listed on [npm](https://www.npmjs.com/package/leagueofagents-cli?activeTab=versions) and in this repo's tags.
+- **An internal registry.** The package has no dependencies, so a mirror needs only `leagueofagents-cli` itself: `npx --registry https://npm.example.internal leagueofagents-cli@0.1.2`, or set `registry` in your `.npmrc`.
+- **No website.** `--local` uses only the app League of Agents serves on 127.0.0.1, in every browser, and lets no website connect. Nothing is fetched from leagueofagents.dev.
+- **Checks in a shared repo.** Checks committed in `loa.config.json` run on a computer only after the person there approves that exact list, and again after any change to it. Approvals are kept in each person's home folder, never in the repo.
+- **Hook files in git.** A hook file that's in git is never edited, so that agent's terminal sessions aren't recorded.
+- **What stays on each computer.** Runs and snapshots are kept per repo, per computer: the newest 500 runs and every run from the last 30 days. Snapshots leave out files git ignores and untracked files that usually hold secrets ([list](#privacy-and-security)). `git push --mirror` would send them; plain pushes never do.
+
 ## How it works
 
 League of Agents has two parts:
