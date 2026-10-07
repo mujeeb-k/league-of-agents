@@ -2049,6 +2049,12 @@ test('analytics: only on leagueofagents.dev, and never with the connect token', 
   await page.goto(`${APP}/privacy.html`);
   await expect(page.locator('h1')).toHaveText('Privacy');
   await expect(page.locator('main')).toContainText('never sent');
+  // The privacy pair as written, in the page and in its description.
+  const pair = 'League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized.';
+  await expect(page.locator('main p').filter({ hasText: 'never uploads' })).toHaveText(pair);
+  expect(await page.locator('meta[name="description"]').getAttribute('content')).toBe(
+    `What League of Agents collects. ${pair}`,
+  );
   for (const theme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: theme });
     await page.screenshot({ path: test.info().outputPath(`privacy-${theme}.png`), fullPage: true });
