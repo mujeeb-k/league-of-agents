@@ -7,7 +7,7 @@
 // - mixed: someone else rewrote part of a line an agent had written.
 // - unknown: everything else: lines from before the first run kept, edits outside a run, lines a Codex or Cursor
 //   run changed, lines a Claude Code run changed some other way (a shell command), and lines whose run was pruned.
-import { changedBlock } from './textdiff';
+import type { RecordedLine } from '../api/types';
 import type { Run } from './types';
 
 export type Author = 'agent' | 'human' | 'mixed' | 'unknown';
@@ -15,6 +15,10 @@ export interface Owner {
   author: Author;
   /** The run that last wrote the line; null for a line no kept run wrote. */
   run: number | null;
+  /** For a line no kept run wrote: what git records about it (a Git AI note, or a co-author trailer). */
+  source?: 'git-ai' | 'trailer';
+  by?: string;
+  commit?: string;
 }
 interface Tracked {
   lines: string[];
@@ -33,15 +37,33 @@ function overlap(a: string, b: string): number {
   return shared / Math.max(wa.size, wb.size);
 }
 
+/** How far ahead a line is looked for when the two versions of a file are matched. */
+const LOOKAHEAD = 200;
+/**
+ * The lines of `b` that are lines of `a`, in order: for each index in `b`, its index in `a`, or -1 for a line that
+ * changed. Each line of `a` is matched once, to the next equal line of `b` within LOOKAHEAD; a line too short to
+ * tell apart (a blank line, a brace) only to one within a few lines, so it can't pull the match far ahead.
+ */
+function matchLines(a: string[], b: string[]): number[] {
+  const out = b.map(() => -1);
+  let j = 0;
+  for (let i = 0; i < a.length && j < b.length; i++) {
+    const end = Math.min(b.length, j + (a[i]!.trim().length < 3 ? 3 : LOOKAHEAD));
+    for (let k = j; k < end; k++)
+      if (b[k] === a[i]) {
+        out[k] = i;
+        j = k + 1;
+        break;
+      }
+  }
+  return out;
+}
+
 /** A file as tracked so far, brought to the text a run or the disk shows: lines that differ lose their owner. */
 function align(t: Tracked | undefined, lines: string[]): Tracked {
   if (!t) return { lines, owners: lines.map(() => UNKNOWN) };
-  const b = changedBlock(t.lines, lines);
-  if (!b) return t;
-  return {
-    lines,
-    owners: [...t.owners.slice(0, b.at), ...b.add.map(() => UNKNOWN), ...t.owners.slice(b.at + b.del)],
-  };
+  if (t.lines.length === lines.length && t.lines.every((l, i) => l === lines[i])) return t;
+  return { lines, owners: matchLines(t.lines, lines).map(i => (i < 0 ? UNKNOWN : t.owners[i]!)) };
 }
 
 /** Who wrote a line a run added, at index `at` in the file the run left, given the lines its hunk replaced. */
@@ -60,7 +82,11 @@ function authorOf(run: Run, path: string, at: number, text: string, replaced: Tr
  * order; a reverted run is skipped, its lines being put back. Where the file a run found differs from the one
  * the walk reached (a commit, edits while the bridge was stopped, a pruned run), the lines that differ are unknown.
  */
-export function authorsOf(runs: Run[], now: Map<string, string[]>): Map<string, Owner[]> {
+export function authorsOf(
+  runs: Run[],
+  now: Map<string, string[]>,
+  recorded: Map<string, RecordedLine[]> = new Map(),
+): Map<string, Owner[]> {
   const files = new Map<string, Tracked>();
   for (const run of [...runs].sort((a, b) => a.id - b.id)) {
     if (run.reverted) continue;
@@ -97,8 +123,26 @@ export function authorsOf(runs: Run[], now: Map<string, string[]>): Map<string, 
     }
   }
   const out = new Map<string, Owner[]>();
-  for (const [path, lines] of now) out.set(path, align(files.get(path), lines).owners);
+  for (const [path, lines] of now) {
+    const owners = align(files.get(path), lines).owners;
+    const rec = recorded.get(path);
+    out.set(path, rec ? withRecorded(owners, lines, rec) : owners);
+  }
   return out;
+}
+
+/** Lines no kept run wrote take what git records for them at HEAD, where the line is still as HEAD has it. */
+function withRecorded(owners: Owner[], lines: string[], rec: RecordedLine[]): Owner[] {
+  const at = matchLines(
+    rec.map(r => r.text),
+    lines,
+  );
+  return owners.map((o, i) => {
+    if (o.run !== null) return o;
+    const r = rec[at[i]!];
+    if (!r?.source) return o;
+    return { author: r.author, run: null, source: r.source, by: r.by, commit: r.commit };
+  });
 }
 
 /** A file's lines by author, for its share bar when zoomed out. */

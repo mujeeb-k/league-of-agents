@@ -1,7 +1,7 @@
 // The app's mutable state, as plain module-level objects. React components read it
 // while rendering; actions change it and then call the render functions in
 // state/render.ts (renderScene(), renderSide() and so on).
-import type { Conn } from '../api/types';
+import type { Conn, RecordedLine } from '../api/types';
 import type { Owner } from '../lib/attribution';
 import type { SavedLayout } from '../lib/layout';
 import type { AgentMap, Box, Conflict, DirNode, FileNode, Mode, Run, Tab, View } from '../lib/types';
@@ -30,6 +30,8 @@ export const S = {
   GRAPH: { out: new Map(), in: new Map() } as Graph,
   /** Who wrote each line of each file, while the map is coloured by author (lib/attribution.ts). */
   AUTHORS: new Map<string, Owner[]>(),
+  /** What git records about who wrote each line at HEAD, for files looked at while coloured by author. */
+  RECORDED: new Map<string, RecordedLine[]>(),
   /** Each file's full length when live; the bridge sends only the first 400 lines of each. */
   TOTALS: new Map<string, number>(),
   /** The connected bridge's version, or null when it is too old to say. */

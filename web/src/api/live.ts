@@ -135,6 +135,8 @@ function applyState(s: StateResponse, first: boolean) {
   S.checksFromRepo = s.suggestedChecksFrom === 'repo';
   S.checksOn = s.checksOn ?? [];
   S.watchOff = s.watchOff ?? null;
+  // HEAD may have moved: what git records is read again when a file is looked at.
+  S.RECORDED.clear();
   const avail = Object.keys(s.agents).filter(k => s.agents[k]!.available);
   if (!avail.includes(st.agent) && avail[0]) st.agent = avail[0];
   const code: Record<string, string> = {},

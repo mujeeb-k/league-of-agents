@@ -125,7 +125,7 @@ export function computeScene(): SceneData {
   // Coloured by author: who wrote each line of the files as they are now.
   const byAuthor = st.byAuthor && !run;
   S.AUTHORS = byAuthor
-    ? authorsOf(S.RUNS, new Map([...views].filter(([, v]) => v.exists).map(([p, v]) => [p, v.lines])))
+    ? authorsOf(S.RUNS, new Map([...views].filter(([, v]) => v.exists).map(([p, v]) => [p, v.lines])), S.RECORDED)
     : new Map();
   const out: SceneData = { frames: [], tiles: [], cards: [], wires: [], sels: [] };
   // Import lines: between files as they are in the view on screen.

@@ -143,12 +143,15 @@ function bindStage(stage: HTMLElement) {
       now = performance.now(),
       second = key !== null && lastClick?.key === key && now - lastClick.t < 400;
     lastClick = key === null ? null : { key, t: now };
-    if (second) return;
+    // Coloured by author, a line on a code card says who wrote it (Inspector, Authors), however quick the click.
+    const ln = fe?.classList.contains('card') ? d.target.closest<HTMLElement>('.ln[data-ln]') : null;
+    st.authorLine = ln ? { path: fe!.dataset.path!, line: Number(ln.dataset.ln) } : null;
+    if (second) {
+      if (ln) renderInspector();
+      return;
+    }
     if (fe) {
       const p = fe.dataset.path!;
-      // Coloured by author, a line on a code card says who wrote it (Inspector, Authors).
-      const ln = fe.classList.contains('card') ? d.target.closest<HTMLElement>('.ln[data-ln]') : null;
-      st.authorLine = ln ? { path: p, line: Number(ln.dataset.ln) } : null;
       // Another line of the file already selected keeps it selected.
       if (ln && !d.shift && st.sel.size === 1 && st.sel.has(p)) renderInspector();
       else toggleSel(p, d.shift);

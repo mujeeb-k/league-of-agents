@@ -83,6 +83,17 @@ export interface TurnSummary {
   needs: string;
 }
 
+/** GET /api/authors: a line of a file at HEAD, and who wrote it as git records it (bridges from 0.2.0). */
+export interface RecordedLine {
+  text: string;
+  author: 'agent' | 'human' | 'mixed' | 'unknown';
+  /** A Git AI note on the commit, or a Co-authored-by trailer naming an agent. */
+  source?: 'git-ai' | 'trailer';
+  /** The agent and model, the person, or the co-author named. */
+  by?: string;
+  commit: string;
+}
+
 /** A file on the map: its length and first 400 lines. */
 export interface TreeFile {
   path: string;

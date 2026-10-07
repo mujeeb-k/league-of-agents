@@ -821,6 +821,86 @@ const hashOf = text => crypto.createHash('sha1').update(text).digest('hex');
  * which leaves out .env files, .git, .loa and the skip list), whose real path is inside the repo, and that
  * is text under 400 KB.
  */
+// ---------------------------------------------------------------- authorship recorded in git (read only)
+/**
+ * A Git AI authorship log (Git AI Standard v3.0.0, refs/notes/ai): for each file, its lines by author key, and
+ * what each key stands for. Lines are 1-based, in the file as the commit has it.
+ */
+function parseGitAiNote(text) {
+  const [attest, meta = '{}'] = text.split(/\n---\n/);
+  let m = {};
+  try {
+    m = JSON.parse(meta);
+  } catch {}
+  const files = new Map();
+  let file = null;
+  for (const line of attest.split('\n')) {
+    if (!line.trim()) continue;
+    if (!line.startsWith('  ')) {
+      file = line.replace(/^"(.*)"$/, '$1');
+      files.set(file, []);
+      continue;
+    }
+    const [key, spec] = line.trim().split(' ');
+    const lines = [];
+    for (const part of (spec || '').split(',')) {
+      const [a, b] = part.split('-').map(Number);
+      for (let n = a; n <= (b || a); n++) lines.push(n);
+    }
+    let who;
+    if (key.startsWith('h_')) who = { author: 'human', by: m.humans?.[key]?.author ?? '' };
+    else {
+      // s_<session>::t_<trace> names a session; a bare hash, a legacy prompt record.
+      const rec = key.startsWith('s_') ? m.sessions?.[key.split('::')[0]] : m.prompts?.[key];
+      who = { author: 'agent', by: [rec?.agent_id?.tool, rec?.agent_id?.model].filter(Boolean).join(' · ') };
+    }
+    if (file) files.get(file).push({ ...who, lines });
+  }
+  return files;
+}
+/** Agents that sign commits with a co-author trailer, by the name or address they use. */
+const AGENT_COAUTHOR = /anthropic\.com|\bclaude\b|openai|\bcodex\b|cursor|copilot|gemini|\bjules\b|devin/i;
+/**
+ * Who wrote each line of a file as HEAD has it, from what git records: Git AI notes (refs/notes/ai), and
+ * Co-authored-by trailers naming an agent, which cover a whole commit, so its lines are only mixed. Read only.
+ */
+async function recordedAuthors(rel) {
+  let out;
+  try {
+    out = await gitAsync(['blame', '--porcelain', 'HEAD', '--', rel]);
+  } catch {
+    return null;
+  }
+  const commits = new Map(),
+    lines = [];
+  let cur = null;
+  for (const l of out.split('\n')) {
+    const head = /^([0-9a-f]{40}) (\d+) \d+/.exec(l);
+    if (head) {
+      cur = { sha: head[1], orig: Number(head[2]) };
+      if (!commits.has(cur.sha)) commits.set(cur.sha, { file: rel });
+    } else if (l.startsWith('filename ')) commits.get(cur.sha).file = l.slice(9);
+    else if (l.startsWith('\t')) lines.push({ ...cur, text: l.slice(1) });
+  }
+  for (const [sha, c] of commits) {
+    try {
+      c.note = parseGitAiNote(await gitAsync(['notes', '--ref=ai', 'show', sha]));
+    } catch {}
+    const body = await gitAsync(['log', '-1', '--format=%B', sha]).catch(() => '');
+    c.coauthor = [...body.matchAll(/^co-authored-by:\s*(.+)$/gim)]
+      .map(m => m[1].trim())
+      .find(n => AGENT_COAUTHOR.test(n));
+  }
+  return lines.map(({ sha, orig, text }) => {
+    const c = commits.get(sha);
+    const hit = c.note?.get(c.file)?.find(e => e.lines.includes(orig));
+    const commit = sha.slice(0, 8);
+    if (hit) return { text, author: hit.author, source: 'git-ai', by: hit.by, commit };
+    if (c.coauthor) return { text, author: 'mixed', source: 'trailer', by: c.coauthor, commit };
+    return { text, author: 'unknown', commit };
+  });
+}
+
 function repoFile(rel) {
   if (typeof rel !== 'string' || !listFiles().includes(rel)) return null;
   const abs = path.join(ROOT, rel);
@@ -1781,6 +1861,12 @@ const server = http.createServer(async (req, res) => {
       }
     }
     // The map's layout, kept per repo so a reload, another window size or the other app opens it as it was.
+    // Authorship git records for a file at HEAD: Git AI notes and co-author trailers (recordedAuthors).
+    if (req.method === 'GET' && p === '/api/authors') {
+      const rel = url.searchParams.get('path');
+      if (!repoFile(rel)) return send(res, 404, { error: 'Not a file on the map' }, cors);
+      return send(res, 200, { lines: (await recordedAuthors(rel)) ?? [] }, cors);
+    }
     if (req.method === 'GET' && p === '/api/layout')
       return send(res, 200, { layout: readJson(LAYOUT_FILE, null) }, cors);
     if (req.method === 'POST' && p === '/api/layout') {

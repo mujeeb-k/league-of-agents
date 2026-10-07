@@ -988,6 +988,74 @@ test('colored by author: agent lines marked, the rest unknown, and a line shows 
   }
 });
 
+// What git records, read only, for lines no kept run wrote: a Git AI note (Git AI Standard v3.0.0, written here
+// by hand to its spec) gives lines to an agent session or a person; a Co-authored-by trailer naming an agent covers
+// a whole commit, so its lines are only mixed.
+test('colored by author: Git AI notes and co-author trailers label lines no run wrote', async ({ page }) => {
+  const repo = makeRepo();
+  const commit = (msg: string) =>
+    git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', msg);
+  fs.writeFileSync(
+    path.join(repo, 'shared/noted.ts'),
+    'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n',
+  );
+  git(repo, 'add', '-A');
+  commit('noted');
+  const note = [
+    'shared/noted.ts',
+    '  s_0123456789abcd::t_0123456789abcd 1-2',
+    '  h_0123456789abcd 3',
+    '---',
+    JSON.stringify({
+      schema_version: 'authorship/3.0.0',
+      base_commit_sha: git(repo, 'rev-parse', 'HEAD').trim(),
+      prompts: {},
+      sessions: { s_0123456789abcd: { agent_id: { tool: 'cursor', id: 'conv-1', model: 'gpt-5' } } },
+      humans: { h_0123456789abcd: { author: 'Ana <ana@example.test>' } },
+    }),
+  ].join('\n');
+  git(repo, 'notes', '--ref=ai', 'add', '-m', note, 'HEAD');
+  fs.writeFileSync(path.join(repo, 'shared/paired.ts'), 'export const d = 4;\n');
+  git(repo, 'add', '-A');
+  commit('paired\n\nCo-authored-by: Claude <noreply@anthropic.com>');
+  const b = await startBridge(repo, FAKE_CLAUDE, {}, ['--no-hooks']);
+  try {
+    const lines = (await call(b, '/api/authors?path=shared/noted.ts')).body.lines as {
+      author: string;
+      source?: string;
+    }[];
+    expect(lines.map(l => `${l.author}/${l.source}`)).toEqual(['agent/git-ai', 'agent/git-ai', 'human/git-ai']);
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.keyboard.press('c');
+    const open = async (q: string) => {
+      await page.keyboard.press('ControlOrMeta+p');
+      await page.keyboard.type(q);
+      await page.keyboard.press('Enter');
+    };
+    await open('noted.ts');
+    const noted = page.locator('.card[data-path="shared/noted.ts"]');
+    await expect(noted.locator('.ln.au-agent')).toHaveCount(2);
+    await expect(noted.locator('.ln.au-human')).toHaveCount(1);
+    await noted.locator('.ln.au-human').click();
+    await expect(page.locator('#authorLine')).toContainText('says Ana <ana@example.test> wrote it.');
+    await noted.locator('.ln.au-agent').first().click();
+    await expect(page.locator('#authorLine')).toContainText('says an agent wrote it: cursor · gpt-5.');
+    await open('paired.ts');
+    const paired = page.locator('.card[data-path="shared/paired.ts"]');
+    await expect(paired.locator('.ln.au-mixed')).toHaveCount(1);
+    await paired.locator('.ln.au-mixed').click();
+    await expect(page.locator('#authorLine')).toContainText(
+      'names an agent as co-author (Claude <noreply@anthropic.com>)',
+    );
+    // Read only: no note or ref was written.
+    expect(git(repo, 'for-each-ref', 'refs/notes/').trim().split('\n')).toHaveLength(1);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('bridge runs Codex with a workspace-write sandbox and resumes by thread id', async () => {
   const repo = makeRepo(),
     argsFile = path.join(path.dirname(repo), 'codex-args.jsonl');

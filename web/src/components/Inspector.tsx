@@ -15,7 +15,7 @@ import {
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { enableChecks, turnOffCheck } from '../api/live';
 import { flyFile } from '../lib/camera';
-import { shareOf, type Author } from '../lib/attribution';
+import { shareOf, type Author, type Owner } from '../lib/attribution';
 import { runsRepoCode } from '../lib/checks';
 import { agentOf, modelOf } from '../lib/constants';
 import { existsNow, fileStat, linesAt, needsYou, runStats, viewOf } from '../lib/model';
@@ -24,7 +24,8 @@ import { plural } from '../lib/util';
 import { S, dom, st } from '../state/app';
 import { panels } from '../state/panels';
 import { isOffline, propagate, runAction, selectRun, toggleReviewed, viewFile } from '../state/actions';
-import { bump, renderSel, useRegion } from '../state/render';
+import { bump, renderInspector, renderScene, renderSel, useRegion } from '../state/render';
+import { bridge } from '../api/client';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { CopyCommand, SETUP_PROMPT, setConnectOpen } from './ConnectDialog';
@@ -430,8 +431,15 @@ const firstChange = (v: ReturnType<typeof viewOf>) => v.rows.find(r => r.k)?.n ?
 const AUTHOR_NAMES: Record<Author, string> = { agent: 'Agent', human: 'Human', mixed: 'Mixed', unknown: 'Unknown' };
 
 /** What the clicked line's label means, in words, given the run that last wrote it, if any. */
-function authorText(author: Author, run: Run | null): string {
-  const who = run ? agentOf(run.agent).name : '';
+function authorText(o: Owner, run: Run | null): string {
+  const { author } = o,
+    who = run ? agentOf(run.agent).name : '';
+  if (o.source === 'git-ai')
+    return author === 'human'
+      ? `Git AI's note on commit ${o.commit} says ${o.by || 'a person'} wrote it.`
+      : `Git AI's note on commit ${o.commit} says an agent wrote it${o.by ? `: ${o.by}` : ''}.`;
+  if (o.source === 'trailer')
+    return `Commit ${o.commit} names an agent as co-author (${o.by}). It covers the whole commit, not lines, so this line is at most partly the agent's.`;
   if (author === 'agent') return `${who} wrote it with its edit tools.`;
   if (author === 'human') return 'Saved in the editor on the map.';
   if (author === 'mixed') return 'Rewritten in part after an agent wrote it.';
@@ -442,6 +450,20 @@ function authorText(author: Author, run: Run | null): string {
 
 /** Coloured by author: the file's lines by who wrote them, and the clicked line's run and prompt. */
 function Authors({ path }: { path: string }) {
+  // What git records about the file, read once it's looked at (bridges before 0.2.0 have no route: nothing).
+  useEffect(() => {
+    const c = S.CONN;
+    if (!c || !st.byAuthor || st.run || S.RECORDED.has(path)) return;
+    S.RECORDED.set(path, []);
+    void bridge
+      .authors(c, path)
+      .then(r => {
+        S.RECORDED.set(path, r.lines);
+        renderScene();
+        renderInspector();
+      })
+      .catch(() => {});
+  });
   const owners = S.AUTHORS.get(path);
   if (!st.byAuthor || st.run || !owners) return null;
   const n = shareOf(owners);
@@ -462,7 +484,7 @@ function Authors({ path }: { path: string }) {
             {`Line ${line}: `}
             <span className={`au-${o.author} text-[var(--au,var(--ink2))]`}>{AUTHOR_NAMES[o.author]}</span>
           </div>
-          <p className="mt-1 text-ink2 text-pretty">{authorText(o.author, run)}</p>
+          <p className="mt-1 text-ink2 text-pretty">{authorText(o, run)}</p>
           {run ? (
             <>
               <div className="mt-2 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">

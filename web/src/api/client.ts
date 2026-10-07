@@ -5,6 +5,7 @@ import type {
   EventsResponse,
   FileResponse,
   OkResponse,
+  RecordedLine,
   RevertResponse,
   RunDTO,
   SaveBody,
@@ -57,6 +58,8 @@ async function request<T>(
 
 export const bridge = {
   state: (c: Conn) => request<StateResponse>(c, '/api/state'),
+  authors: (c: Conn, path: string) =>
+    request<{ lines: RecordedLine[] }>(c, `/api/authors?path=${encodeURIComponent(path)}`),
   /** Bridges before 0.2.0 answer 404: the app keeps the layout in the browser instead. */
   layout: (c: Conn) => request<{ layout: SavedLayout | null }>(c, '/api/layout'),
   saveLayout: (c: Conn, layout: SavedLayout) =>
