@@ -6,6 +6,7 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { git, startBridge } from '../support/live';
 import { APP } from '../support/targets';
+import fr from '../../src/i18n/fr';
 
 const OUT = path.resolve('test-results/perf');
 const FRAME = 1000 / 60;
@@ -271,26 +272,33 @@ const respondTo = (page: Page, t: Trigger) =>
     t,
   );
 
-test('responses in the demo stay under 100 ms', async ({ page }) => {
-  await page.goto(APP);
-  await page.locator('#insp section').first().waitFor();
-  const rows: { action: string; ms: number }[] = [];
-  const add = async (action: string, t: Trigger) => rows.push({ action, ms: await respondTo(page, t) });
-  await add('show diff (D)', { key: 'd', until: '[data-mode="diff"]', attr: 'aria-checked', value: 'true' });
-  await add('show before (B)', { key: 'b', until: '[data-mode="before"]', attr: 'aria-checked', value: 'true' });
-  await add('step to the next file (J)', { key: 'j', until: '.flist li.cur' });
-  await add('mark reviewed (R)', { key: 'r', until: '.flist .chk.on' });
-  await add('keep the run', { click: '[data-act="keep"]', until: '#insp .outcome', text: 'Kept' });
-  await add('close the run (Esc)', { key: 'Escape', until: '#runbar .quiet' });
-  if (await page.locator('#side').evaluate(el => el.hasAttribute('inert'))) await page.keyboard.press('[');
-  await page.locator('[data-tab="runs"]').click();
-  await add('open a run from its card', { click: '#sideList [data-run="13"]', until: '#runbar b', text: 'Run 13' });
-  await add('switch the theme', { click: '#themeBtn', until: 'html', attr: 'data-theme', value: 'dark' });
-  await add('open the agent menu', { pointer: '#agentBtn', until: '#agentMenu' });
-  fs.writeFileSync(path.join(OUT, 'responses-demo.json'), JSON.stringify(rows, null, 2));
-  report(rows);
-  for (const r of rows) expect(r.ms, r.action).toBeLessThan(100);
-});
+// In English, and in French, the longest language, from its own page.
+for (const lang of ['en', 'fr'] as const)
+  test(`responses in the demo stay under 100 ms: ${lang}`, async ({ page }) => {
+    const word = (en: string) => (lang === 'en' ? en : (fr[en] as string));
+    await page.goto(lang === 'en' ? APP : `${APP}/fr/`);
+    await page.locator('#insp section').first().waitFor();
+    const rows: { action: string; ms: number }[] = [];
+    const add = async (action: string, t: Trigger) => rows.push({ action, ms: await respondTo(page, t) });
+    await add('show diff (D)', { key: 'd', until: '[data-mode="diff"]', attr: 'aria-checked', value: 'true' });
+    await add('show before (B)', { key: 'b', until: '[data-mode="before"]', attr: 'aria-checked', value: 'true' });
+    await add('step to the next file (J)', { key: 'j', until: '.flist li.cur' });
+    await add('mark reviewed (R)', { key: 'r', until: '.flist .chk.on' });
+    await add('keep the run', { click: '[data-act="keep"]', until: '#insp .outcome', text: word('Kept') });
+    await add('close the run (Esc)', { key: 'Escape', until: '#runbar .quiet' });
+    if (await page.locator('#side').evaluate(el => el.hasAttribute('inert'))) await page.keyboard.press('[');
+    await page.locator('[data-tab="runs"]').click();
+    await add('open a run from its card', {
+      click: '#sideList [data-run="13"]',
+      until: '#runbar b',
+      text: word('Run {id}').replace('{id}', '13'),
+    });
+    await add('switch the theme', { click: '#themeBtn', until: 'html', attr: 'data-theme', value: 'dark' });
+    await add('open the agent menu', { pointer: '#agentBtn', until: '#agentMenu' });
+    fs.writeFileSync(path.join(OUT, `responses-demo-${lang}.json`), JSON.stringify(rows, null, 2));
+    report(rows);
+    for (const r of rows) expect(r.ms, r.action).toBeLessThan(100);
+  });
 
 // The editor on a 1,000-line file. The expand animates transform and opacity only, at 60 fps, and a
 // keystroke shows on screen within 100 ms.

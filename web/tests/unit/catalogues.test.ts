@@ -5,13 +5,13 @@ import es from '../../src/i18n/es';
 import fr from '../../src/i18n/fr';
 import ptBR from '../../src/i18n/pt-BR';
 import zhCN from '../../src/i18n/zh-CN';
-import type { Catalogue } from '../../src/i18n';
+import { setLang, tn, type Catalogue, type Lang } from '../../src/i18n';
 import { usedKeys } from './keys';
 
 // state/editing registers a page listener when it loads, through the sources the key list reads.
 vi.hoisted(() => Object.assign(globalThis, { addEventListener: () => {} }));
 
-const CATALOGUES: [string, Catalogue][] = [
+const CATALOGUES: [Exclude<Lang, 'en'>, Catalogue][] = [
   ['zh-CN', zhCN],
   ['fr', fr],
   ['pt-BR', ptBR],
@@ -40,5 +40,34 @@ describe('catalogues', () => {
       }
       for (const key of Object.keys(cat)) if (!keys.has(key)) problems.push(`unused: ${key}`);
       expect(problems).toEqual([]);
+    });
+
+  for (const [code, cat] of CATALOGUES)
+    it(`${code} counts read right for 0, 1, 2 and 5`, async () => {
+      vi.stubGlobal('document', { documentElement: {} });
+      await setLang(code);
+      const rules = new Intl.PluralRules(code);
+      for (const [key, { plural }] of keys) {
+        if (!plural) continue;
+        const e = cat[key] as Partial<Record<Intl.LDMLPluralRule, string>>;
+        for (const n of [0, 1, 2, 5]) {
+          const s = tn(
+            n,
+            key,
+            key,
+            Object.fromEntries(
+              holes(key)
+                .filter(h => h !== 'n')
+                .map(h => [h!, 'x']),
+            ),
+          );
+          expect(s, `${key}, ${n}`).not.toMatch(/\{\w+\}/);
+          if (key.includes('{n}')) expect(s, `${key}, ${n}`).toContain(String(n));
+          // A singular form where the language has one: French and Portuguese say "0 fichier", "1 arquivo".
+          if (rules.select(n) === 'one') expect(e.one, `${key}: no one form`).toBeTruthy();
+        }
+      }
+      await setLang('en');
+      vi.unstubAllGlobals();
     });
 });
