@@ -71,15 +71,19 @@ A rename is recorded as the old file deleted and a new file created, so the file
 
 ### Checks
 
-If your repo has none set up, League of Agents looks for test and typecheck scripts and pytest, and offers to turn them on. They're kept in `.loa/`, out of your repo, unless you choose to share them with your team in `loa.config.json`. Checks a repo commits in its `loa.config.json` are offered with their commands, and run only once you turn them on in your copy; if the list changes, they wait for you again. A check that can't run on your machine, because something it needs isn't installed, shows as "Couldn't run" instead of failing, and can be turned off in one click. See [`loa.config.example.json`](loa.config.example.json) to write your own.
+If your repo has none set up, League of Agents looks for test and typecheck scripts and pytest, and offers to turn them on. They're kept in your home folder, outside your repo, unless you choose to share them with your team in `loa.config.json`. Checks a repo commits in its `loa.config.json` are offered with their commands, and run only once you turn them on in your copy; if the list changes, they wait for you again. A check that can't run on your machine, because something it needs isn't installed, shows as "Couldn't run" instead of failing, and can be turned off in one click. See [`loa.config.example.json`](loa.config.example.json) to write your own.
 
 ### What it writes on your machine
 
 In your repo:
 
-- `.loa/`: run records, the bridge's port and token, a private snapshot index, a copy of the bridge the hooks run, your private check list, and a log. It's kept out of git through `.git/info/exclude`.
+- `.loa/`: run records, the bridge's port and token, a private snapshot index, a copy of the bridge the hooks run, and a log. It's kept out of git through `.git/info/exclude`, and the bridge won't start in a repo that commits it.
 - Snapshots: git commits under private `refs/loa/` refs, stored in `.git/objects`. They never touch your branch or staging area.
 - `loa.config.json`, only if you choose to share your checks with your team.
+
+In your home folder:
+
+- `~/.config/league-of-agents/repos/`: one file per repo with the checks you turned on or approved there. It's outside the repo, so nothing a repo contains can allow its own commands.
 
 In agent settings, only after you say yes to the hooks:
 
@@ -94,7 +98,7 @@ To remove it:
 | What | How |
 |---|---|
 | Hooks, in all three files | `npx leagueofagents-cli@latest hooks remove`. A file League of Agents created is deleted; a file you had is put back as it was. |
-| Everything in the repo: hooks, `refs/loa/`, `.loa/` and its lines in `.git/info/exclude` | `npx leagueofagents-cli@latest uninstall` |
+| Everything in the repo: hooks, `refs/loa/`, `.loa/` and its lines in `.git/info/exclude`, and the checks you allowed for it | `npx leagueofagents-cli@latest uninstall` |
 | Snapshot objects in `.git/objects` | Unreferenced after `uninstall`. Git prunes them on its own after two weeks, or right away with `git gc --prune=now`. |
 | `loa.config.json` | Delete it, if you created it. |
 | What your browser keeps | Click Disconnect, or clear the site's data for leagueofagents.dev. |
@@ -129,7 +133,9 @@ A follow-up adds `--resume <session>` for Claude Code and Cursor, and `resume <s
 
 League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized. What it sends, and to where, is [above](#what-it-sends). Who can reach League of Agents on your computer, and how it's protected, is in [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md). Report security issues privately, as [SECURITY.md](SECURITY.md) explains.
 
-Snapshots leave out files git ignores, and any file not yet committed with one of these names, in any folder: `.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.kdbx`, `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `.npmrc`, `.pypirc`, `.netrc`, `.git-credentials`, `.htpasswd`, `credentials.json`, `secrets.json`, `secrets.yaml`, `secrets.yml`, `service-account*.json`, `*.tfvars`. A secret with another name is snapshotted like any file, so keep secrets in files git ignores. A file already committed is in your repo's history, and snapshots include it.
+Snapshots leave out files git ignores, and any file not yet committed with one of these names, in any folder: `.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.kdbx`, `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `.npmrc`, `.pypirc`, `.netrc`, `.git-credentials`, `.htpasswd`, `credentials.json`, `secrets.json`, `secrets.yaml`, `secrets.yml`, `service-account*.json`, `*.tfvars`. This list is not complete: a secret with any other name is snapshotted like any file, so keep secrets in files git ignores. A file already committed is in your repo's history, and snapshots include it.
+
+Snapshots stay on your computer unless you send them: `git push`, `git push --all` and `git push --tags` never include `refs/loa/`, but `git push --mirror` sends every ref, `refs/loa/` included, and so does copying the `.git` folder. Run `uninstall` first if you mirror a repo.
 
 ## Limits
 

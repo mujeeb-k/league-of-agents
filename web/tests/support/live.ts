@@ -1,5 +1,6 @@
 // Temp git repos and bridge processes for the live tests.
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -42,18 +43,24 @@ export const SEED: Record<string, string> = {
 
 export const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' });
 
+/** Where the bridge keeps the checks the person allowed for a repo: in their home folder (bridge CHECKS_FILE). */
+export const allowedChecksFile = (repo: string) =>
+  path.join(
+    homeOf(repo),
+    '.config/league-of-agents/repos',
+    crypto.createHash('sha256').update(fs.realpathSync(repo)).digest('hex').slice(0, 32) + '.json',
+  );
+
 /**
- * Approves the repo's committed checks in this clone, as the person does once in the Checks panel; the bridge
- * runs a repo's loa.config.json only after that. "a cloned repo's checks wait for approval" tests the panel.
+ * Approves the repo's committed checks, as the person does once in the Checks panel; the bridge runs a repo's
+ * loa.config.json only after that. "a cloned repo's checks wait for approval" tests the panel.
  */
 export function approveChecks(repo: string) {
   const { checks } = JSON.parse(fs.readFileSync(path.join(repo, 'loa.config.json'), 'utf8')) as {
     checks: { name: string; run: string }[];
   };
-  fs.mkdirSync(path.join(repo, '.loa'), { recursive: true });
-  fs.writeFileSync(path.join(repo, '.loa/checks-approved.json'), JSON.stringify(checks));
-  // Kept out of git as the bridge keeps .loa/, so a later `git add -A` in a test never commits it.
-  fs.appendFileSync(path.join(repo, '.git/info/exclude'), '\n/.loa/\n');
+  fs.mkdirSync(path.dirname(allowedChecksFile(repo)), { recursive: true });
+  fs.writeFileSync(allowedChecksFile(repo), JSON.stringify({ private: [], approved: checks }));
 }
 
 /** A fresh repo named `sample-repo` on branch main, seeded and committed, its checks approved. */

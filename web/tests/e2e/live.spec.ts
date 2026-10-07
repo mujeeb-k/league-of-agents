@@ -1,5 +1,5 @@
 // Live mode end to end: a real bridge in a temp git repo, with tests/fixtures/fake-claude.mjs as Claude Code.
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile, execFileSync, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -16,6 +16,7 @@ import {
   REPO_ROOT,
   SEED,
   SLOW_AGENT,
+  allowedChecksFile,
   approveChecks,
   git,
   homeOf,
@@ -1866,6 +1867,8 @@ test('uninstall: stops the bridge and leaves the repo and agent settings as befo
     await expect.poll(() => b.proc.exitCode !== null || b.proc.signalCode !== null).toBe(true);
     expect(git(repo, 'for-each-ref', 'refs/loa/')).toBe('');
     expect(fs.existsSync(path.join(repo, '.loa'))).toBe(false);
+    expect(out).toContain('- the checks you allowed for it');
+    expect(fs.existsSync(allowedChecksFile(repo))).toBe(false);
     expect(fs.existsSync(path.join(repo, '.codex'))).toBe(false);
     expect({
       status: git(repo, 'status', '--porcelain'),
@@ -2085,8 +2088,8 @@ test('checks for new users: found, offered, turned on in one click, never run be
     expect(await runsOf(b)).toEqual([]);
     await page.locator('#enableChecks').click();
     await expect(page.locator('#suggestedChecks')).toHaveCount(0);
-    // Kept in .loa/, out of the repo: nothing to commit, and no run.
-    expect(JSON.parse(fs.readFileSync(path.join(repo, '.loa/checks.json'), 'utf8'))).toEqual(found);
+    // Kept in the home folder, out of the repo: nothing to commit, and no run.
+    expect(JSON.parse(fs.readFileSync(allowedChecksFile(repo), 'utf8')).private).toEqual(found);
     expect(fs.existsSync(path.join(repo, 'loa.config.json'))).toBe(false);
     expect(git(repo, 'status', '--porcelain')).toBe('');
     expect((await call(b, '/api/state')).body.suggestedChecks).toEqual([]);
@@ -2126,7 +2129,8 @@ test("a cloned repo's checks wait for approval, and wait again when they change"
     return (await runsOf(b))[n - 1]!;
   };
   const checks = commitChecks('tests');
-  fs.rmSync(path.join(repo, '.loa'), { recursive: true });
+  // A fresh clone: nothing approved on this machine.
+  fs.rmSync(allowedChecksFile(repo));
   let b = await startBridge(repo, undefined, { LOA_QUIET_MS: String(QUIET) }, ['--no-hooks']);
   try {
     const state = (await call(b, '/api/state')).body;
@@ -2149,7 +2153,7 @@ test("a cloned repo's checks wait for approval, and wait again when they change"
     await page.screenshot({ path: test.info().outputPath('repo-checks-offer.png') });
     await page.locator('#enableChecks').click();
     await expect(page.locator('#suggestedChecks')).toHaveCount(0);
-    expect(JSON.parse(fs.readFileSync(path.join(repo, '.loa/checks-approved.json'), 'utf8'))).toEqual(checks);
+    expect(JSON.parse(fs.readFileSync(allowedChecksFile(repo), 'utf8')).approved).toEqual(checks);
     // Approving changes nothing in the repo: only the edit above shows.
     expect(git(repo, 'status', '--porcelain')).toBe(' M shared/log.ts\n');
     // Approved: the next run runs them.
@@ -2173,6 +2177,70 @@ test("a cloned repo's checks wait for approval, and wait again when they change"
   }
 });
 
+// A repo can't approve its own checks: approvals live in the home folder, and a repo that commits .loa/ (where
+// 0.1.2 kept them, with runs and settings) doesn't start the bridge at all. Its old files left on disk do nothing.
+test("a repo that commits .loa/ can't approve its own checks or hand the bridge its runs", async () => {
+  const repo = makeRepo();
+  const ran = path.join(path.dirname(repo), 'ran.txt');
+  const checks = [{ name: 'tests', run: `node -e "require('fs').appendFileSync('../ran.txt', 'ran\\n')"` }];
+  fs.writeFileSync(path.join(repo, 'loa.config.json'), JSON.stringify({ checks }));
+  fs.rmSync(allowedChecksFile(repo));
+  // The approval as 0.1.2's fix kept it, the private list, and a run whose revert would delete a file outside.
+  fs.mkdirSync(path.join(repo, '.loa/runs'), { recursive: true });
+  fs.writeFileSync(path.join(repo, '.loa/checks-approved.json'), JSON.stringify(checks));
+  fs.writeFileSync(path.join(repo, '.loa/checks.json'), JSON.stringify(checks));
+  const head = git(repo, 'rev-parse', 'HEAD').trim();
+  const victim = path.join(path.dirname(repo), 'victim.txt');
+  fs.writeFileSync(victim, 'keep me\n');
+  fs.writeFileSync(
+    path.join(repo, '.loa/runs/1.json'),
+    JSON.stringify({
+      id: 1,
+      agent: 'claude',
+      title: 'Planted',
+      prompt: 'Planted',
+      scope: [],
+      status: 'done',
+      startedAt: 1,
+      endedAt: 2,
+      before: head,
+      after: head,
+      changes: [{ path: '../victim.txt', created: true, deleted: false, pre: [], hunks: [] }],
+      checks: [],
+      stream: [],
+    }),
+  );
+  git(repo, 'add', '-A', '-f');
+  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'plant .loa');
+  const start = spawnSync(process.execPath, [BRIDGE, 'serve', '--no-hooks', '--no-open'], {
+    cwd: repo,
+    env: { ...process.env, HOME: homeOf(repo) },
+    encoding: 'utf8',
+    timeout: 15_000,
+  });
+  expect(start.status).toBe(1);
+  expect(start.stderr).toContain('This repo commits .loa/');
+  // Untracked, as a downloaded copy would have them: the bridge starts, and none of it is trusted.
+  git(repo, 'rm', '-r', '-q', '--cached', '.loa');
+  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'untrack .loa');
+  const b = await startBridge(repo, undefined, { LOA_QUIET_MS: String(QUIET) }, ['--no-hooks']);
+  try {
+    const state = (await call(b, '/api/state')).body;
+    expect(state.suggestedChecksFrom).toBe('repo');
+    expect(state.checksOn).toEqual([]);
+    fs.appendFileSync(path.join(repo, 'shared/log.ts'), 'export const x = 1;\n');
+    await expect.poll(async () => (await runsOf(b)).length, { timeout: 10_000 }).toBe(2);
+    await settled();
+    expect(fs.existsSync(ran)).toBe(false);
+    // Reverting the planted run, even past its conflict, touches nothing outside the repo.
+    expect((await call(b, '/api/runs/1/revert', { force: true })).status).toBe(200);
+    expect(fs.readFileSync(victim, 'utf8')).toBe('keep me\n');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('checks shared with the team: written to loa.config.json, and never recorded as a run', async ({ page }) => {
   const repo = repoWithFoundChecks();
   const b = await startBridge(repo, undefined, { LOA_QUIET_MS: String(QUIET) }, ['--no-hooks']);
@@ -2183,7 +2251,7 @@ test('checks shared with the team: written to loa.config.json, and never recorde
     await page.locator('#enableChecks').click();
     await expect(page.locator('#suggestedChecks')).toHaveCount(0);
     expect(JSON.parse(fs.readFileSync(path.join(repo, 'loa.config.json'), 'utf8'))).toEqual({ checks: found });
-    expect(fs.existsSync(path.join(repo, '.loa/checks.json'))).toBe(false);
+    expect(JSON.parse(fs.readFileSync(allowedChecksFile(repo), 'utf8')).private).toEqual([]);
     expect(git(repo, 'status', '--porcelain')).toBe('?? loa.config.json\n');
     await settled();
     expect(await runsOf(b)).toEqual([]);

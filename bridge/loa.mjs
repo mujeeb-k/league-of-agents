@@ -38,6 +38,15 @@ try {
   process.exit(1);
 }
 const LOA = path.join(ROOT, '.loa');
+// .loa/ is this machine's own state. A repo that commits it could hand the bridge runs, settings or approvals of
+// its choosing, so the bridge doesn't start on one.
+if (execFileSync('git', ['ls-files', '--', '.loa'], { cwd: ROOT, encoding: 'utf8' }).trim()) {
+  console.error(
+    'This repo commits .loa/, which League of Agents keeps private to each machine. Take it out of git first:\n' +
+      '  git rm -r --cached .loa && git commit -m "Stop tracking .loa"',
+  );
+  process.exit(1);
+}
 const RUNS_DIR = path.join(LOA, 'runs');
 fs.mkdirSync(RUNS_DIR, { recursive: true });
 // .loa/ holds the token (bridge.json, and the links in bridge.log): only this user may open it.
@@ -67,26 +76,35 @@ const CONF = readJson(CONFIG_FILE, {});
 /** Found checks the person turned off: never offered again (`name\0command`). */
 const CHECKS_OFF = path.join(ROOT, '.loa', 'checks-off.json');
 /**
- * Found checks the person turned on, kept in .loa/ so nothing is added to the repo. loa.config.json is written
- * only when they choose to share the checks with their team; its checks, when it has any, are the ones that run.
+ * The checks this person allowed for this repo, kept outside it, in their home folder, so nothing in a repo can
+ * allow its own commands. `private`: found checks they turned on (loa.config.json is written only when they share
+ * them with their team). `approved`: the committed loa.config.json list they approved. A cloned repo's
+ * loa.config.json is the repo's, not the person's: its checks run only once that exact list is approved, and
+ * wait again whenever any of it changes.
  */
-const PRIVATE_CHECKS = path.join(ROOT, '.loa', 'checks.json');
-/**
- * The committed checks this clone approved. A cloned repo's loa.config.json is the repo's, not the person's: its
- * checks run only once the person has turned on that exact list, and wait again whenever the list changes.
- */
-const APPROVED_CHECKS = path.join(ROOT, '.loa', 'checks-approved.json');
-const sameChecks = (a, b) =>
-  JSON.stringify(a.map(c => [c.name, c.run])) === JSON.stringify(b.map(c => [c.name, c.run]));
+const CHECKS_FILE = path.join(
+  os.homedir(),
+  '.config',
+  'league-of-agents',
+  'repos',
+  crypto.createHash('sha256').update(ROOT).digest('hex').slice(0, 32) + '.json',
+);
+const allowed = { private: [], approved: [], ...readJson(CHECKS_FILE, {}) };
+function saveAllowed(change) {
+  Object.assign(allowed, change);
+  fs.mkdirSync(path.dirname(CHECKS_FILE), { recursive: true });
+  fs.writeFileSync(CHECKS_FILE, JSON.stringify({ ...allowed, root: ROOT }, null, 2));
+}
+const sameChecks = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 /** Committed checks waiting for the person's approval: offered, never run. */
 let repoChecks = [];
 let checksShared = !!CONF.checks?.length;
-if (checksShared && !sameChecks(CONF.checks, readJson(APPROVED_CHECKS, []))) {
+if (checksShared && !sameChecks(CONF.checks, allowed.approved)) {
   repoChecks = CONF.checks;
   CONF.checks = [];
   checksShared = false;
 }
-if (!checksShared && !repoChecks.length) CONF.checks = readJson(PRIVATE_CHECKS, []);
+if (!checksShared && !repoChecks.length) CONF.checks = allowed.private;
 /**
  * Checks the repo seems to have, for a repo with none set up: each package's test and typecheck scripts (with
  * the package manager its lockfile names) and pytest, in the repo and in the folders directly inside it. They
@@ -547,6 +565,10 @@ async function uninstall() {
   }
   fs.rmSync(LOA, { recursive: true, force: true });
   removed.push('.loa/');
+  if (fs.existsSync(CHECKS_FILE)) {
+    fs.rmSync(CHECKS_FILE);
+    removed.push(`the checks you allowed for it (${CHECKS_FILE.replace(os.homedir(), '~')})`);
+  }
   console.log(
     `Removed League of Agents from ${path.basename(ROOT)}:\n${removed.map(r => `  - ${r}`).join('\n')}\n` +
       'If you added the Claude Code plugin, remove it in Claude Code: /plugin uninstall league-of-agents',
@@ -1255,7 +1277,9 @@ async function revertRun(run, force) {
   }
   if (drift.length && !force) return { conflict: drift };
   for (const c of run.changes) {
-    const abs = path.join(ROOT, c.path);
+    const abs = path.resolve(ROOT, c.path);
+    // A run names only files inside the repo; anything else in a run file is never touched.
+    if (!abs.startsWith(ROOT + path.sep)) continue;
     if (c.created) {
       try {
         fs.rmSync(abs);
@@ -1649,7 +1673,7 @@ const server = http.createServer(async (req, res) => {
       if (repoChecks.length) {
         if (!repoChecks.every(c => names.has(c.name)))
           return send(res, 400, { error: 'No such checks to turn on' }, cors);
-        fs.writeFileSync(APPROVED_CHECKS, JSON.stringify(repoChecks, null, 2));
+        saveAllowed({ approved: repoChecks });
         CONF.checks = repoChecks;
         repoChecks = [];
         checksShared = true;
@@ -1661,9 +1685,9 @@ const server = http.createServer(async (req, res) => {
       if (b.share) {
         if (active) return send(res, 409, { error: 'Wait for the run to finish' }, cors);
         await writeConfig({ ...readJson(CONFIG_FILE, {}), checks: chosen });
-        fs.writeFileSync(APPROVED_CHECKS, JSON.stringify(chosen, null, 2));
+        saveAllowed({ approved: chosen });
         checksShared = true;
-      } else fs.writeFileSync(PRIVATE_CHECKS, JSON.stringify(chosen, null, 2));
+      } else saveAllowed({ private: chosen });
       CONF.checks = chosen;
       emit('state');
       return send(res, 200, { checks: chosen }, cors);
@@ -1681,9 +1705,9 @@ const server = http.createServer(async (req, res) => {
         file.checks = (file.checks || []).filter(c => c.name !== gone.name);
         if (!file.checks.length) delete file.checks;
         await writeConfig(file);
-        fs.writeFileSync(APPROVED_CHECKS, JSON.stringify(CONF.checks, null, 2));
+        saveAllowed({ approved: file.checks || [] });
         checksShared = !!CONF.checks.length;
-      } else fs.writeFileSync(PRIVATE_CHECKS, JSON.stringify(CONF.checks, null, 2));
+      } else saveAllowed({ private: CONF.checks });
       fs.writeFileSync(CHECKS_OFF, JSON.stringify([...readJson(CHECKS_OFF, []), `${gone.name}\0${gone.run}`]));
       emit('state');
       return send(res, 200, { ok: true }, cors);
