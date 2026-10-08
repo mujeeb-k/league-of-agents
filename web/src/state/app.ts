@@ -16,7 +16,8 @@ export const S = {
   CONN: null as Conn | null,
   LIVE_AGENTS: null as AgentMap | null,
   EVSEQ: 0,
-  ACTIVE: null as Run | null,
+  /** The runs at work on the bridge, by id: several at once on sections apart (state/sessions.ts). */
+  WORKING: [] as number[],
   REVIEWED: new Map<number, Set<string>>(),
   ROOT: null as DirNode | null,
   FILES: new Map<string, FileNode>(),

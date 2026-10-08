@@ -5,7 +5,15 @@ import { CH, CW } from '../lib/constants';
 import type { Token } from '../lib/highlight';
 import { t, tn } from '../i18n';
 import type { Author } from '../lib/attribution';
-import { scene, updateEdgeFocus, type CardData, type FrameData, type SelBox, type TileData } from '../lib/scene';
+import {
+  scene,
+  updateEdgeFocus,
+  type CardData,
+  type FrameData,
+  type SelBox,
+  type TileData,
+  type ZoneBox,
+} from '../lib/scene';
 import { fitLabels } from '../lib/labels';
 import { dom } from '../state/app';
 import { useRegion } from '../state/render';
@@ -145,6 +153,17 @@ const Sel = ({ s }: { s: SelBox }) => (
   </div>
 );
 
+/** A session's section, outlined in its colour. */
+const Zone = ({ z }: { z: ZoneBox }) => (
+  <div
+    className={z.file ? 'zone f' : 'zone'}
+    data-run={z.run}
+    style={{ ...box(z.x, z.y, z.w, z.h), '--zone': z.colour } as React.CSSProperties}
+  >
+    {z.label ? <b>{z.label}</b> : null}
+  </div>
+);
+
 /**
  * Content of #wires, #nodes, #links and #sels. Elements are keyed by what they show (folder, file, import),
  * so a render updates them in place: switching views or selecting does not rebuild or re-fade the canvas.
@@ -178,6 +197,15 @@ export function useScene() {
         ))}
       </>
     ),
-    sels: sc?.sels.map((s, i) => <Sel key={i} s={s} />),
+    sels: (
+      <>
+        {sc?.zones.map((z, i) => (
+          <Zone key={`${z.run}:${i}`} z={z} />
+        ))}
+        {sc?.sels.map((s, i) => (
+          <Sel key={i} s={s} />
+        ))}
+      </>
+    ),
   };
 }

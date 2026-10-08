@@ -477,6 +477,37 @@ em.n {
   font-variant-numeric: tabular-nums;
 }
 
+/* A section a session works on (lib/scene.ts zonesOf): dashed in the session's colour, apart from the selection. */
+.zone {
+  position: absolute;
+  pointer-events: none;
+  outline: calc(2px / var(--s)) dashed var(--zone);
+  outline-offset: calc(6px / var(--s));
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--zone) 5%, transparent);
+}
+/* Above the top right corner: folder names sit at the top left, and the selection's size below. */
+.zone b {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: calc(12px / var(--s));
+  font:
+    500 calc(11px / var(--s))/1.5 'IBM Plex Sans',
+    sans-serif;
+  padding: 0 calc(6px / var(--s));
+  border-radius: calc(4px / var(--s));
+  background: var(--zone);
+  color: var(--on-sel);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* A file's box is narrow: its label starts at its left edge instead. */
+.zone.f b {
+  left: 0;
+  right: auto;
+}
+
 #marquee {
   position: absolute;
   box-shadow: 0 0 0 1px var(--sel);

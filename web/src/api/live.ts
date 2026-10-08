@@ -10,6 +10,7 @@ import type { Run } from '../lib/types';
 import { t, tn } from '../i18n';
 import { fmtDur, relTime } from '../lib/util';
 import { S, st } from '../state/app';
+import { opensOnFinish } from '../state/sessions';
 import { loadDemo } from '../state/actions';
 import { refreshEditor } from '../state/editing';
 import { renderAll, renderCrumb, renderInspector, renderSide, setConnUI } from '../state/render';
@@ -150,9 +151,26 @@ function withDeltas(s: StateResponse, deltas: StateDelta[], seq: number): StateR
     tree.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
     const runs = s.runs.filter(r => r.id !== d.run.id).concat(d.run);
     runs.sort((a, b) => a.id - b.id);
-    s = { ...s, tree, runs, active: d.active, seq };
+    s = { ...s, tree, runs, active: d.active, working: d.working, seq };
   }
   return s;
+}
+
+/** The runs at work. A bridge before 0.2.0 runs one at a time and names only that one. */
+const workingOf = (s: StateResponse) => s.working ?? (s.active ? [s.active] : []);
+
+/**
+ * A run started elsewhere is opened, and flown to when it finishes; a save from the editor is not, so the person
+ * keeps their place. Nor is a session that ends while the person reviews another that worked beside it.
+ */
+function followSessions(before: number[], now: number[], s: StateResponse) {
+  const follow = (id: number) => s.runs.find(r => r.id === id)?.agent !== 'you';
+  const ended = s.runs.find(r => before.includes(r.id) && !now.includes(r.id) && follow(r.id));
+  const started = before.length ? undefined : now.find(follow);
+  if (ended && opensOnFinish(ended)) {
+    justFinished.add(ended.id);
+    live.pendingSelect = ended.id;
+  } else if (started !== undefined) live.pendingSelect = started;
 }
 
 function applyState(s: StateResponse, first: boolean) {
@@ -197,7 +215,7 @@ function applyState(s: StateResponse, first: boolean) {
     if (f) f.gone = true;
   }
   S.RUNS = runs;
-  S.ACTIVE = S.RUNS.find(r => r.id === s.active) || null;
+  S.WORKING = workingOf(s);
   st.run = S.RUNS.find(r => r.id === (live.pendingSelect || keepRun)) || null;
   if (live.pendingSelect && st.run) live.pendingSelect = null;
   st.sel = new Set(keepSel.filter(k => (k.startsWith('d:') ? S.DIRMAP.has(k.slice(2)) : S.FILES.has(k))));
@@ -216,7 +234,6 @@ function applyState(s: StateResponse, first: boolean) {
     st.run.status !== 'running' &&
     st.run._flewTo !== true &&
     st.run.changes.size &&
-    st.run === S.RUNS[S.RUNS.length - 1] &&
     justFinished.has(st.run.id)
   ) {
     st.run._flewTo = true;
@@ -275,16 +292,8 @@ async function poll() {
       // Runs alone changed: their deltas update the state already here. Anything else fetches it whole.
       if (deltas.length && !last) needState = true;
       if (needState || deltas.length) {
-        const prevActive = S.ACTIVE && S.ACTIVE.id;
         const s = needState ? await bridge.state(conn()) : withDeltas(last!, deltas, r.seq);
-        // A run started elsewhere is opened, and flown to when it finishes; a save from the editor is not,
-        // so the person keeps their place.
-        const follow = (id: number) => s.runs.find(r => r.id === id)?.agent !== 'you';
-        if (prevActive && s.active !== prevActive && follow(prevActive)) {
-          justFinished.add(prevActive);
-          live.pendingSelect = prevActive;
-        }
-        if (!prevActive && s.active && follow(s.active)) live.pendingSelect = s.active;
+        followSessions(S.WORKING, workingOf(s), s);
         applyState(s, false);
         S.EVSEQ = Math.max(S.EVSEQ, s.seq || 0);
       } else renderSide();

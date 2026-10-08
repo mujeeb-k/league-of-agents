@@ -77,6 +77,12 @@
   --au-agent: #1d4ed8;
   --au-human: #a21caf;
   --au-mixed: #475569;
+  /* Sessions at work at the same time, one colour each (lib/sessions.ts): apart from change, agent and author colours. */
+  --session-1: #c2185b;
+  --session-2: #5c6a00;
+  --session-3: #00668f;
+  --session-4: #8a4b9e;
+  --session-5: #6e3b1e;
   --e1: 0 0 0 1px rgba(24, 24, 27, 0.07), 0 1px 2px rgba(24, 24, 27, 0.04);
   --e2: 0 0 0 1px rgba(24, 24, 27, 0.08), 0 8px 24px rgba(24, 24, 27, 0.08);
 }
@@ -137,6 +143,11 @@
   --au-agent: #7aa7ff;
   --au-human: #e879f9;
   --au-mixed: #a3b1c6;
+  --session-1: #f06292;
+  --session-2: #b5c43a;
+  --session-3: #4fc3f7;
+  --session-4: #cf8be0;
+  --session-5: #d7b49e;
   --e1: 0 0 0 1px rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.4);
   --e2: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 12px 32px rgba(0, 0, 0, 0.5);
   color-scheme: dark;

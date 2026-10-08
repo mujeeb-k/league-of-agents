@@ -172,3 +172,13 @@ export async function startBridge(
     },
   };
 }
+
+/** Calls the bridge's API as the app does: GET, or POST with a JSON body. */
+export async function call(b: Bridge, route: string, body?: object) {
+  const res = await fetch(`http://127.0.0.1:${b.port}${route}`, {
+    method: body ? 'POST' : 'GET',
+    headers: { authorization: 'Bearer ' + b.token, 'content-type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+}

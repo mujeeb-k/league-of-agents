@@ -12,6 +12,7 @@ import { drafts, openEditor } from '../state/editing';
 import { panels, setPinned, sideVisibleAt } from '../state/panels';
 import { selectRun, toggleSel } from '../state/actions';
 import { renderSel, renderSide, useRegion } from '../state/render';
+import { sessionColour, workingRuns } from '../state/sessions';
 import { cn } from '@/lib/utils';
 import { BetaTag, CheckBadge, Dot, Stat } from './bits';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -153,9 +154,12 @@ function RunRow({ r }: { r: Run }) {
           : r.kept
             ? 'Kept'
             : null;
+  // A session at work is marked in the colour its section has on the map.
+  const zone = running && workingRuns().includes(r) ? sessionColour(r) : null;
   return (
     <div
       data-run={r.id}
+      style={zone ? ({ '--zone': zone } as React.CSSProperties) : undefined}
       role="button"
       tabIndex={running ? -1 : 0}
       aria-disabled={running || undefined}
@@ -168,6 +172,7 @@ function RunRow({ r }: { r: Run }) {
       }}
       className={cn(
         'run grid cursor-pointer grid-cols-[64px_minmax(0,1fr)] gap-3 border-b px-3 py-2 transition-colors outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset active:bg-accent aria-disabled:cursor-default',
+        zone && 'shadow-[inset_3px_0_0_var(--zone)]',
         st.run === r && 'sel bg-sel-soft shadow-[inset_2px_0_0_var(--sel)] hover:bg-sel-soft',
         running && 'running',
       )}

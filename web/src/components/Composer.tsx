@@ -1,11 +1,11 @@
 // Floating composer: scope chips, agent picker, prompt. Built on shadcn/ui.
 import { ArrowUp, ChevronDown } from 'lucide-react';
-import { useEffect, useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { agentOf } from '../lib/constants';
 import { examplePrompt } from '../lib/examplePrompt';
 import { DEMO_AGENTS } from '../demo/sample';
 import { S, dom, st } from '../state/app';
-import { followTarget, isOffline, send } from '../state/actions';
+import { eachSection, followTarget, isOffline, send, sendEach } from '../state/actions';
 import { clearLines, ed, rangeScope, staleSelection } from '../state/editing';
 import { renderComposer, renderSel, useRegion } from '../state/render';
 import { Button } from './ui/button';
@@ -210,18 +210,22 @@ function FirstRun() {
 export function Composer() {
   useRegion('composer');
   useRegion('conn');
+  // Written with the send button's state, which the input handler sets without a render.
+  const eachBtn = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const prompt = dom.prompt,
       sendBtn = dom.sendBtn;
     const onInput = () => {
       sendBtn.disabled = !prompt.value.trim() || (!!rangeScope() && !!ed.stale);
+      if (eachBtn.current) eachBtn.current.disabled = sendBtn.disabled;
       prompt.style.height = 'auto';
       prompt.style.height = Math.min(120, prompt.scrollHeight) + 'px';
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        void send();
+        // ⌘↵ with several sections selected: a session on each.
+        void ((e.metaKey || e.ctrlKey) && eachSection() ? sendEach() : send());
       }
     };
     prompt.addEventListener('input', onInput);
@@ -255,7 +259,9 @@ export function Composer() {
   const stale = !!rangeScope() && ed.stale && ed.path ? staleSelection(ed.path) : null;
   useLayoutEffect(() => {
     dom.sendBtn.disabled = !!blocked || !!stale || st.busy === 'send' || !dom.prompt.value.trim();
+    if (eachBtn.current) eachBtn.current.disabled = dom.sendBtn.disabled;
   });
+  const each = !blocked && eachSection();
   return (
     <div
       id="composer"
@@ -292,6 +298,13 @@ export function Composer() {
             if (el) dom.prompt = el;
           }}
         />
+        {each ? (
+          <Tip label={t('Start a session on each of the {n} sections', { n: each.length })} keys="⌘↵">
+            <Button variant="ghost" size="sm" id="eachBtn" ref={eachBtn} onClick={() => void sendEach()}>
+              {t('A session each')}
+            </Button>
+          </Tip>
+        ) : null}
         <Tip label={t('Run')} keys="↵">
           <Button
             size="icon-sm"

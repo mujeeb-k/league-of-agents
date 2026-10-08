@@ -8,9 +8,12 @@ import { fileKind, type FileKind } from './fileKind';
 import { importResolver } from './imports';
 import { LABEL } from './layout';
 import { drafts } from '../state/editing';
+import { union } from './camera';
+import { area } from './sections';
+import { sessionColour, workingRuns } from '../state/sessions';
 import { obstacles, pathOf, route, type Rect } from './route';
 import { allDirs, dirStat, filesUnder, linesAt, viewOf } from './model';
-import type { FileView, RowKind } from './types';
+import type { DirNode, FileView, RowKind } from './types';
 import { authorsOf, shareOf, type Author } from './attribution';
 import { t, tn } from '../i18n';
 
@@ -87,12 +90,25 @@ export interface SelBox {
   label: string;
 }
 
+/** A section a session works on, in the session's colour; the first of a session's sections names it. */
+export interface ZoneBox {
+  run: number;
+  file: boolean;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  colour: string;
+  label: string | null;
+}
+
 export interface SceneData {
   frames: FrameData[];
   tiles: TileData[];
   cards: CardData[];
   wires: WireData[];
   sels: SelBox[];
+  zones: ZoneBox[];
 }
 
 export let scene: SceneData | null = null;
@@ -132,7 +148,7 @@ export function computeScene(): SceneData {
         (r, p) => linesAt(S.FILES.get(p)!, S.RUNS.indexOf(r)).L,
       )
     : new Map();
-  const out: SceneData = { frames: [], tiles: [], cards: [], wires: [], sels: [] };
+  const out: SceneData = { frames: [], tiles: [], cards: [], wires: [], sels: [], zones: zonesOf() };
   // Import lines: between files as they are in the view on screen.
   const imports = importResolver({
     has: p => !!views.get(p)?.exists,
@@ -301,6 +317,28 @@ function selsOf(): SelBox[] {
         ? t('not created yet')
         : tn((v.rows.filter(r => r.k !== 'del').length || v.rows.length) + beyondOf(k, v), '{n} line', '{n} lines'),
     });
+  }
+  return out;
+}
+
+/** Around a folder and every folder in it that has files: all a session on the folder may change. */
+const folderBox = (d: DirNode) =>
+  union(allDirs().filter(x => x === d || (x.files.length && (!d.path || x.path.startsWith(d.path + '/')))));
+
+/** The sections of the sessions at work: a box around each folder or file, the whole map for the repository. */
+function zonesOf(): ZoneBox[] {
+  const out: ZoneBox[] = [];
+  for (const run of workingRuns()) {
+    const colour = sessionColour(run);
+    let label: string | null = t('Run {id} · {agent}', { id: run.id, agent: agentOf(run.agent).name });
+    for (const entry of run.scope?.length ? run.scope : ['/']) {
+      const p = area(entry);
+      const at = p.endsWith('/') ? S.DIRMAP.get(p.slice(0, -1)) : S.FILES.get(p);
+      if (!at) continue;
+      const file = at.type !== 'dir';
+      out.push({ run: run.id, file, colour, label, ...(file ? { x: at.x, y: at.y, w: CW, h: CH } : folderBox(at)) });
+      label = null;
+    }
   }
   return out;
 }

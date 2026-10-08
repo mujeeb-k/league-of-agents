@@ -19,6 +19,7 @@ import {
   SLOW_AGENT,
   allowedChecksFile,
   approveChecks,
+  call,
   git,
   homeOf,
   makeRepo,
@@ -646,7 +647,9 @@ test('cancel a running agent', async ({ page }) => {
     await expect(page.locator('#insp .acts li')).toHaveCount(0);
     await page.locator('#prompt').fill('Another');
     await page.locator('#prompt').press('Enter');
-    await expect(page.locator(TOAST)).toHaveText('Run 1 is still active');
+    await expect(page.locator(TOAST)).toHaveText(
+      'A run on the whole repository works alone. Wait for run 1 to finish.',
+    );
     // The bridge refuses one too, with a code the app words in the person's language (api/errors.ts).
     expect(await call(b, '/api/runs', { agent: 'claude', prompt: 'Another', scope: [] })).toEqual({
       status: 409,
@@ -1396,6 +1399,140 @@ test.describe('sessions at once', () => {
     }));
 });
 
+test.describe('sessions at once, in the app', () => {
+  /** The app on a repo whose stand-in Hermes edits what each prompt names, holding its turn until told to go. */
+  async function withHermes(page: Page, fn: (repo: string, b: Bridge) => Promise<void>) {
+    const repo = makeRepo();
+    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP });
+    try {
+      await page.goto(linkFor(b));
+      await expect(page.locator('#conn')).toHaveText('Live');
+      await page.locator('#agentBtn').click();
+      await page.locator('#agentMenu [data-agent="hermes"]').click();
+      await fn(repo, b);
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+    }
+  }
+  const go = (repo: string, name: string) => fs.writeFileSync(path.join(repo, `.loa/go-${name}`), '');
+  const folder = (page: Page, dir: string) => page.locator(`.frame[data-dir="${dir}"] > .flabel b`);
+  const run = async (page: Page, prompt: string) => {
+    await page.locator('#prompt').fill(prompt);
+    await page.locator('#prompt').press('Enter');
+  };
+  const running = (page: Page) => page.locator('#sideList .run.running');
+
+  test('a second session starts while one works, each section drawn in its own colour', async ({ page }) =>
+    withHermes(page, async repo => {
+      await folder(page, 'shared').click();
+      await run(page, 'Edit the log. edit:shared/log.ts wait:a');
+      await expect(page.locator(TOAST)).toHaveText('Hermes started run 1');
+      await folder(page, 'apps').click();
+      await run(page, 'Edit the app. edit:apps/console/main.ts wait:c');
+      await expect(page.locator(TOAST)).toHaveText('Hermes started run 2');
+      await expect(running(page)).toHaveCount(2);
+      // Each session's section is drawn, labelled with its run, in a colour of its own.
+      const zones = page.locator('#sels .zone');
+      await expect(zones).toHaveCount(2);
+      await expect(zones.locator('b')).toHaveText(['Run 1 · Hermes', 'Run 2 · Hermes']);
+      const colours = await zones.evaluateAll(els => els.map(el => getComputedStyle(el).outlineColor));
+      expect(new Set(colours).size).toBe(2);
+      // A section inside one at work is refused before it starts, saying whose it is.
+      await page.locator('.fr[data-path="shared/log.ts"]').click();
+      await run(page, 'edit:shared/log.ts');
+      await expect(page.locator(TOAST)).toHaveText(
+        'Run 1 is working on shared/. Pick a section outside it, or wait for it to finish.',
+      );
+      await expect(running(page)).toHaveCount(2);
+      go(repo, 'a');
+      go(repo, 'c');
+      await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+      await expect(zones).toHaveCount(0);
+    }));
+
+  test('a session finishing while another is reviewed leaves the view where it is', async ({ page }) =>
+    withHermes(page, async repo => {
+      await folder(page, 'shared').click();
+      await run(page, 'edit:shared/log.ts wait:a');
+      await expect(running(page)).toHaveCount(1);
+      await folder(page, 'apps').click();
+      await run(page, 'edit:apps/console/main.ts wait:c');
+      await expect(running(page)).toHaveCount(2);
+      // The first to finish opens, and the map flies to it.
+      go(repo, 'a');
+      await expect(page.locator('#runbar b')).toHaveText('Run 1', { timeout: 15_000 });
+      await expect(page.locator('[data-mode="diff"]')).toHaveAttribute('aria-checked', 'true');
+      const view = page.locator('#world');
+      await expect(async () => {
+        const at = await view.getAttribute('style');
+        await page.waitForTimeout(300);
+        expect(await view.getAttribute('style')).toBe(at);
+      }).toPass();
+      const at = await view.getAttribute('style');
+      // The second finishing while run 1 is reviewed: listed as done, and nothing moves.
+      go(repo, 'c');
+      await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+      await expect(page.locator('#sideList [data-run="2"]')).toBeVisible();
+      await expect(page.locator('#runbar b')).toHaveText('Run 1');
+      expect(await view.getAttribute('style')).toBe(at);
+    }));
+
+  test('while a session works, files outside its section stay editable and files inside it wait', async ({ page }) =>
+    withHermes(page, async repo => {
+      await folder(page, 'shared').click();
+      await run(page, 'edit:shared/log.ts wait:a');
+      await expect(running(page)).toHaveCount(1);
+      const open = async (file: string) => {
+        await page.keyboard.press('Escape');
+        await page.locator(`.fr[data-path="${file}"]`).click();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('#editor .cm-content')).toBeFocused();
+      };
+      await open('shared/allowlist.ts');
+      await expect(page.locator('#editorBlocked')).toHaveText('Run 1 is working. Editing waits until it finishes.');
+      await expect(page.locator('#editor .cm-content')).toHaveAttribute('aria-readonly', 'true');
+      await page.keyboard.press('Escape');
+      await open('apps/console/main.ts');
+      await expect(page.locator('#editorBlocked')).toHaveCount(0);
+      await page.keyboard.press('ControlOrMeta+End');
+      await page.keyboard.type('// saved beside the session');
+      await page.keyboard.press('ControlOrMeta+s');
+      await expect(page.locator(TOAST)).toHaveText(/^Saved as run \d+$/);
+      expect(fs.readFileSync(path.join(repo, 'apps/console/main.ts'), 'utf8')).toContain('// saved beside the session');
+      go(repo, 'a');
+      await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+    }));
+
+  test('several sections and one prompt start a session on each; sections that overlap start none', async ({ page }) =>
+    withHermes(page, async (repo, b) => {
+      await folder(page, 'shared').click();
+      await folder(page, 'apps').click({ modifiers: ['Shift'] });
+      await expect(page.locator('#scopeRow .chip:not(.all) > span')).toHaveText(['shared/', 'apps/']);
+      // One prompt for the sections together stays one run; "a session each" splits it.
+      await page.locator('#prompt').fill('Add a header comment. wait:a');
+      await page.locator('#eachBtn').click();
+      await expect(page.locator(TOAST)).toHaveText('Hermes started runs 1 and 2');
+      await expect(running(page)).toHaveCount(2);
+      const runs = ((await call(b, '/api/state')).body as unknown as StateResponse).runs;
+      expect(runs.map(r => r.scope)).toEqual([['shared/'], ['apps/']]);
+      go(repo, 'a');
+      await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+      // A file inside a folder also picked: refused, nothing started. (Closing the run that opened, back to the map.)
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('0');
+      await folder(page, 'shared').click();
+      await page.locator('.fr[data-path="shared/log.ts"]').click({ modifiers: ['Shift'] });
+      await page.locator('#prompt').fill('edit:shared/log.ts');
+      await page.keyboard.press('ControlOrMeta+Enter');
+      await expect(page.locator(TOAST)).toHaveText(
+        "shared/log.ts is inside shared/. Pick sections that don't overlap.",
+      );
+      await expect(page.locator('#sideList .run')).toHaveCount(2);
+    }));
+});
+
 test('harnesses the person adds in their own settings are listed by name and run from the map, with their model', async ({
   page,
 }) => {
@@ -1793,16 +1930,6 @@ test('zoom levels on averroes-public: labels never overlap, names never wrap, ev
     fs.rmSync(path.dirname(dir), { recursive: true, force: true });
   }
 });
-
-// The editor's file routes. A save is a run by "You".
-async function call(b: Bridge, route: string, body?: object) {
-  const res = await fetch(`http://127.0.0.1:${b.port}${route}`, {
-    method: body ? 'POST' : 'GET',
-    headers: { authorization: 'Bearer ' + b.token, 'content-type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  return { status: res.status, body: (await res.json()) as Record<string, unknown> };
-}
 
 test('file routes serve only files on the map, inside the repo', () =>
   watching(async (repo, b) => {

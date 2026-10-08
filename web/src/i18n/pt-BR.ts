@@ -449,5 +449,16 @@ const catalogue: Catalogue = {
   'Edit file': 'Edit file',
   'Run {id} is working on {path}. Pick a section outside it, or wait for it to finish.':
     'Run {id} is working on {path}. Pick a section outside it, or wait for it to finish.',
+  'Start a session on each of the {n} sections': 'Start a session on each of the {n} sections',
+  'A session each': 'A session each',
+  'Run {id} · {agent}': 'Run {id} · {agent}',
+  "{path} is inside {inside}. Pick sections that don't overlap.":
+    "{path} is inside {inside}. Pick sections that don't overlap.",
+  'A run on the whole repository works alone. Wait for run {id} to finish.':
+    'A run on the whole repository works alone. Wait for run {id} to finish.',
+  'Run {id} is working on the whole repository. Wait for it to finish.':
+    'Run {id} is working on the whole repository. Wait for it to finish.',
+  'Pick up to {n} sections to start a session on each.': 'Pick up to {n} sections to start a session on each.',
+  '{agent} started runs {ids}': '{agent} started runs {ids}',
 };
 export default catalogue;

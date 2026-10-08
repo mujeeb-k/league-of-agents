@@ -674,6 +674,40 @@ test('prompt: slash focuses, Shift+Enter adds a line, Enter runs, Escape blurs',
   );
 });
 
+test('several sections and ⌘↵ start a session on each, drawn in its own colour; overlapping sections start none', async ({
+  page,
+}) => {
+  await showSidebar(page);
+  await page.keyboard.press('Escape'); // close the run
+  await page.locator('#sideList .ti[data-dir="server/delivery/pipeline"]').click();
+  await page.locator('#sideList .ti[data-dir="server/api"]').click({ modifiers: ['Shift'] });
+  await expect(page.locator('#eachBtn')).toHaveText('A session each');
+  await expect(page.locator('#eachBtn')).toBeDisabled();
+  await page.locator('#prompt').fill('Log every attempt');
+  await expect(page.locator('#eachBtn')).toBeEnabled();
+  await page.locator('#prompt').press('ControlOrMeta+Enter');
+  await expect(page.locator(TOAST)).toHaveText('Claude Code started runs 15 and 16');
+  await expect(page.locator('#sideList .run.running')).toHaveCount(2);
+  await expect(page.locator('#sels .zone b')).toHaveText(['Run 15 · Claude Code', 'Run 16 · Claude Code']);
+  const colours = await page
+    .locator('#sels .zone')
+    .evaluateAll(els => els.map(el => getComputedStyle(el).outlineColor));
+  expect(new Set(colours).size).toBe(2);
+  // The first to finish opens; the second, beside it, leaves the view on it.
+  await expect(page.locator('#sideList .run.running')).toHaveCount(0, { timeout: 5000 });
+  await expect(page.locator('#runbar b')).toHaveText('Run 15');
+  await expect(page.locator('#sels .zone')).toHaveCount(0);
+  await page.locator('[data-tab="files"]').click();
+  await page.locator('#sideList .ti[data-dir="server/api"]').click();
+  await page.locator('#sideList .ti[data-dir="server/api/routes"]').click({ modifiers: ['Shift'] });
+  await page.locator('#prompt').fill('Log every attempt');
+  await page.locator('#eachBtn').click();
+  await expect(page.locator(TOAST)).toHaveText(
+    "server/api/routes/ is inside server/api/. Pick sections that don't overlap.",
+  );
+  await expect(page.locator('#sideList .run.running')).toHaveCount(0);
+});
+
 test('open a run, close it with the button and with Escape', async ({ page }) => {
   await showSidebar(page);
   await page.locator('[data-tab="runs"]').click();
@@ -1373,6 +1407,13 @@ for (const home of ['/', '/zh-CN/', '/fr/', '/pt-BR/', '/es/'])
       await page.keyboard.press('Escape');
       await expect(page.locator('#palette')).toHaveCount(0);
     }
+    // ⌘↵ with two files selected: a session on each.
+    await page.keyboard.press('0');
+    await page.locator('.fr[data-path="server/delivery/endpoint-health.ts"]').click();
+    await page.locator('.fr[data-path="server/delivery/dead-letter.ts"]').click({ modifiers: ['Shift'] });
+    await page.locator('#prompt').fill('Log every attempt');
+    await page.keyboard.press('ControlOrMeta+Enter');
+    await expect(page.locator('#sels .zone')).toHaveCount(2);
     await page.keyboard.press('Escape');
     await expect(page.locator('#stage')).toBeVisible();
     expect(errors).toEqual([]);

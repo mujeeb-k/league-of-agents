@@ -6,11 +6,13 @@ import { anchorAt, grown, relocate, toLines, type Anchor } from '../lib/anchor';
 import { explain } from '../api/errors';
 import type { InlineDiff } from '../lib/editor';
 import { applyHunks, diffRows, linesAt } from '../lib/model';
+import { covers } from '../lib/sections';
 import { changedBlock } from '../lib/textdiff';
 import type { Change, Mode, Run } from '../lib/types';
 import { toast } from '../ui/toast';
 import { S, dom, st } from './app';
 import { applyPanels } from './panels';
+import { workingRuns } from './sessions';
 import { bump, renderAll, renderComposer, renderSel } from './render';
 import { t } from '../i18n';
 
@@ -233,11 +235,9 @@ export function discardDraft() {
   bump('editor');
 }
 
-/** An agent is working; the editor waits until it finishes. A save's own run never blocks it. */
-export const editingBlocked = (): Run | null => {
-  const r = S.CONN ? S.ACTIVE : S.RUNS.find(x => x.status === 'running');
-  return r && r.agent !== 'you' ? r : null;
-};
+/** An agent is working on the open file's section; the editor waits until it finishes. A save never blocks it. */
+export const editingBlocked = (): Run | null =>
+  workingRuns().find(r => r.agent !== 'you' && (!ed.path || covers(r.scope, ed.path))) ?? null;
 
 export async function saveEditor(force = false) {
   const path = ed.path,

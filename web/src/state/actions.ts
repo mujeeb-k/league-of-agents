@@ -1,11 +1,12 @@
 // User actions.
 import { bridge } from '../api/client';
-import { explain } from '../api/errors';
+import { BY_CODE, explain } from '../api/errors';
 import { showConflict } from '../components/ConflictDialog';
 import { live, liveAction, saveLayoutSoon } from '../api/live';
 import { applyView, flyAll, flyFile, flyRun, openingView } from '../lib/camera';
 import { agentOf } from '../lib/constants';
 import { buildModel, diffRows, existsNow, filesUnder, layout, linesAt, parseSample } from '../lib/model';
+import { area, clashOf, type Clash } from '../lib/sections';
 import type { FileNode, Mode, Run } from '../lib/types';
 import { clamp } from '../lib/util';
 import { DEMO_AGENTS, SAMPLE_BRANCH, SAMPLE_REPO, SAMPLE_RUNS, SAMPLE_TREE } from '../demo/sample';
@@ -13,6 +14,7 @@ import { SAMPLE_TEXT } from '../demo/sampleText';
 import { toast } from '../ui/toast';
 import { S, dom, st } from './app';
 import { checkSelection, ed, rangeScope, sending } from './editing';
+import { MAX_SESSIONS, opensOnFinish, workingRuns } from './sessions';
 import {
   renderAll,
   renderComposer,
@@ -23,7 +25,7 @@ import {
   renderSide,
   renderTop,
 } from './render';
-import { t, tn } from '../i18n';
+import { locale, t, tn } from '../i18n';
 
 export function selectRun(run: Run | null, fly = true) {
   st.run = run;
@@ -109,13 +111,15 @@ export function scopeFromSelection(): string[] {
   return [...st.sel].map(k => (k.startsWith('d:') ? (k.slice(2) ? k.slice(2) + '/' : '/') : k)).filter(s => s !== '/');
 }
 
-export function simulateRun(prompt: string) {
-  const scoped = st.sel.size > 0;
+/** A demo run on the scope, finishing after 1.4 s. Null when the demo has no file to change. */
+export function simulateRun(prompt: string, scope = scopeFromSelection()): Run | null {
+  const scoped = scope.length > 0;
   let targets: FileNode[] = [];
-  for (const k of st.sel) {
-    if (k.startsWith('d:')) targets.push(...filesUnder(S.DIRMAP.get(k.slice(2))!).slice(0, 3));
+  for (const entry of scope) {
+    const p = area(entry);
+    if (p.endsWith('/')) targets.push(...filesUnder(S.DIRMAP.get(p.slice(0, -1))!).slice(0, 3));
     else {
-      const f = S.FILES.get(k);
+      const f = S.FILES.get(p);
       if (f) targets.push(f);
     }
   }
@@ -131,7 +135,7 @@ export function simulateRun(prompt: string) {
   if (range) targets = [S.FILES.get(ed.path!)!];
   if (!targets.length) {
     toast(t('Open a folder with code first.'));
-    return;
+    return null;
   }
   const last = S.RUNS[S.RUNS.length - 1];
   const id = (last ? last.id : 0) + 1,
@@ -142,17 +146,19 @@ export function simulateRun(prompt: string) {
     title: prompt.length > 64 ? prompt.slice(0, 62) + '…' : prompt,
     prompt,
     summary: '',
-    scope: scopeFromSelection(),
+    scope,
     when: t('Just now'),
     dur: '',
     status: 'running',
+    startedAt: Date.now(),
+    endedAt: null,
     changes: new Map(),
     reviewed: new Set(),
   };
   S.RUNS.push(run);
   st.tab = 'runs';
   renderSide();
-  toast(t('{agent} started run {id}', { agent: agentOf(run.agent).name, id }));
+  renderScene();
   const words = (prompt.toLowerCase().match(/[a-z]+/g) || []).filter(w => w.length > 2).slice(0, 3);
   const fn = words.map((w, i) => (i ? w[0]!.toUpperCase() + w.slice(1) : w)).join('') || 'change';
   setTimeout(() => {
@@ -186,6 +192,7 @@ export function simulateRun(prompt: string) {
       });
     }
     run.status = 'done';
+    run.endedAt = Date.now();
     run.dur = '1.4s';
     const names = [...run.changes.keys()].map(p => p.split('/').pop()).join(', ');
     run.summary = scoped
@@ -196,10 +203,13 @@ export function simulateRun(prompt: string) {
           { names },
         )
       : tn(run.changes.size, 'Changed {n} file: {names}.', 'Changed {n} files: {names}.', { names });
-    st.mode = 'diff';
-    selectRun(run);
+    if (opensOnFinish(run)) {
+      st.mode = 'diff';
+      selectRun(run);
+    } else renderAll();
     toast(t('Run {id} finished', { id }));
   }, 1400);
+  return run;
 }
 
 /**
@@ -244,13 +254,14 @@ export async function send() {
     toast(t(OFFLINE));
     return;
   }
+  if (!v) return;
+  const refused = clashOf(scopeFromSelection(), workingRuns());
+  if (refused) {
+    toast(clashText(refused));
+    return;
+  }
   if (S.LIVE && S.CONN) {
     const conn = S.CONN;
-    if (S.ACTIVE) {
-      toast(t('Run {id} is still active', { id: S.ACTIVE.id }));
-      return;
-    }
-    if (!v) return;
     const fu = followTarget();
     if (st.busy === 'send') return;
     st.busy = 'send';
@@ -292,17 +303,86 @@ export async function send() {
     }
     return;
   }
-  if (!v) return;
-  simulateRun(v);
+  const run = simulateRun(v);
+  if (!run) return;
+  toast(t('{agent} started run {id}', { agent: agentOf(run.agent).name, id: run.id }));
   clearPrompt();
   dom.sendBtn.disabled = true;
   dom.prompt.blur();
 }
 
+/** Sections that can't run now, in words: whose they are, or which other picked section holds them. */
+function clashText(c: Clash): string {
+  if (c.run === undefined)
+    return t("{path} is inside {inside}. Pick sections that don't overlap.", { path: c.path, inside: c.inside });
+  if (c.path === '/')
+    return t('A run on the whole repository works alone. Wait for run {id} to finish.', { id: c.run });
+  if (c.inside === '/') return t('Run {id} is working on the whole repository. Wait for it to finish.', { id: c.run });
+  return t(BY_CODE['sections-overlap']!, { id: c.run, path: c.inside });
+}
+
+/** The selected sections, each a scope of its own, when there are several to start a session on each. */
+export function eachSection(): string[] | null {
+  const scope = scopeFromSelection();
+  return scope.length > 1 && !rangeScope() ? scope : null;
+}
+
+/**
+ * One prompt, a session on each selected section, at the same time. Nothing starts unless every section can: none
+ * overlaps another picked with it or a session at work.
+ */
+export async function sendEach() {
+  const v = dom.prompt.value.trim(),
+    sections = eachSection();
+  if (!v || !sections || isOffline()) return;
+  if (sections.length > MAX_SESSIONS) {
+    toast(t('Pick up to {n} sections to start a session on each.', { n: MAX_SESSIONS }));
+    return;
+  }
+  const refused = clashOf(sections, workingRuns());
+  if (refused) {
+    toast(clashText(refused));
+    return;
+  }
+  const agent = agentOf(st.agent).name;
+  if (!S.LIVE || !S.CONN) {
+    const ids = sections.map(s => simulateRun(v, [s])?.id).filter(id => id !== undefined);
+    toast(t('{agent} started runs {ids}', { agent, ids: listOf(ids) }));
+    clearPrompt();
+    dom.prompt.blur();
+    return;
+  }
+  if (st.busy === 'send') return;
+  const conn = S.CONN;
+  st.busy = 'send';
+  renderComposer();
+  const ids: number[] = [];
+  try {
+    for (const s of sections)
+      ids.push((await bridge.startRun(conn, { agent: st.agent, prompt: v, scope: [s], resumeFrom: null })).id);
+    toast(t('{agent} started runs {ids}', { agent, ids: listOf(ids) }));
+  } catch (e) {
+    // Started one by one: say which did, and why the rest didn't.
+    toast(ids.length ? t('{agent} started runs {ids}', { agent, ids: listOf(ids) }) + ' ' + explain(e) : explain(e));
+  } finally {
+    if (ids.length) {
+      clearPrompt();
+      dom.prompt.blur();
+      live.pendingSelect = ids[0]!;
+      st.tab = 'runs';
+    }
+    st.busy = null;
+    renderComposer();
+  }
+}
+
+/** Run numbers as a list in the person's language: "1, 2 and 3". */
+const listOf = (ids: number[]) => new Intl.ListFormat(locale(), { type: 'conjunction' }).format(ids.map(String));
+
 export function loadDemo() {
   st.unreachable = null;
   S.REVIEWED.clear();
-  S.ACTIVE = null;
+  S.WORKING = [];
   S.LIVE_AGENTS = null;
   if (!DEMO_AGENTS.includes(st.agent)) st.agent = 'claude';
   S.LAYOUT = null; // a new repository is laid out afresh
