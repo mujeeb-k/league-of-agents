@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // A stand-in harness that speaks the Agent Client Protocol over stdio, as Hermes does (`hermes acp`): it reports
 // its model as a config option, asks before each edit with the diff, resumes a session it started (replaying it
-// first, as Hermes does), and stops a
-// turn on session/cancel. With `acp --check` it exits 0, as Hermes does when its ACP extra is installed.
-// The prompt steers it: "outside" also asks to edit outside.txt; "slow" waits to be cancelled.
+// first, as Hermes does), and stops a turn on session/cancel. With `acp --check` it exits 0, as Hermes does when its
+// ACP extra is installed. With FAKE_ACP_STYLE=dsh it asks as DeepSeek Harness does in its read-only mode: its edit
+// tool call is kind "other", titled "edit", with the edit's arguments as rawInput, and its permission request names
+// only the call. The prompt steers it: "outside" also asks to edit outside.txt; "command" asks to run one; "slow" waits to be
+// cancelled.
 import fs from 'node:fs';
 import readline from 'node:readline';
 
@@ -48,22 +50,38 @@ async function turn(sessionId, text) {
     await new Promise(r => (cancelled = r));
     return 'cancelled';
   }
+  const dsh = process.env.FAKE_ACP_STYLE === 'dsh';
   const permit = async (toolCallId, path, oldText, newText) => {
-    update(sessionId, {
-      sessionUpdate: 'tool_call',
-      toolCallId,
-      title: `patch: ${path}`,
-      kind: 'edit',
-      locations: [{ path }],
-    });
+    update(
+      sessionId,
+      dsh
+        ? {
+            sessionUpdate: 'tool_call',
+            toolCallId,
+            title: 'edit',
+            kind: 'other',
+            rawInput: { file_path: `${process.cwd()}/${path}`, old_string: oldText, new_string: newText },
+          }
+        : { sessionUpdate: 'tool_call', toolCallId, title: `patch: ${path}`, kind: 'edit', locations: [{ path }] },
+    );
+    // DeepSeek Harness's sandbox denies the write first, and the model then asks to escalate.
+    if (dsh)
+      update(sessionId, {
+        sessionUpdate: 'tool_call_update',
+        toolCallId,
+        status: 'failed',
+        content: [
+          {
+            type: 'content',
+            content: { type: 'text', text: 'Error: [sandbox: file access denied under read-only mode]' },
+          },
+        ],
+      });
     const r = await ask('session/request_permission', {
       sessionId,
-      toolCall: {
-        toolCallId,
-        title: `patch: ${path}`,
-        kind: 'edit',
-        content: [{ type: 'diff', path, oldText, newText }],
-      },
+      toolCall: dsh
+        ? { toolCallId }
+        : { toolCallId, title: `patch: ${path}`, kind: 'edit', content: [{ type: 'diff', path, oldText, newText }] },
       options: [
         { optionId: 'yes', name: 'Allow edit', kind: 'allow_once' },
         { optionId: 'no', name: 'Deny', kind: 'reject_once' },
@@ -71,6 +89,16 @@ async function turn(sessionId, text) {
     });
     return r.outcome?.optionId === 'yes';
   };
+  // Asked to run a command, as Hermes does for one it deems dangerous and DeepSeek Harness for one that writes.
+  if (/command/.test(text))
+    await ask('session/request_permission', {
+      sessionId,
+      toolCall: { toolCallId: 'cmd-1', title: 'bash', kind: 'execute', rawInput: { command: 'rm -rf build' } },
+      options: [
+        { optionId: 'yes', name: 'Allow once', kind: 'allow_once' },
+        { optionId: 'no', name: 'Deny', kind: 'reject_once' },
+      ],
+    });
   if (/outside/.test(text) && (await permit('edit-out', 'outside.txt', '', 'written outside the scope\n')))
     fs.writeFileSync('outside.txt', 'written outside the scope\n');
   const before = fs.readFileSync(FILE, 'utf8');
@@ -97,7 +125,7 @@ readline.createInterface({ input: process.stdin }).on('line', async l => {
   else if (m.method === 'session/new') {
     const sessionId = `fake-session-${process.pid}`;
     sessions.add(sessionId);
-    fs.appendFileSync('.loa/fake-acp.log', `new ${sessionId}\n`);
+    fs.appendFileSync('.loa/fake-acp.log', `new ${sessionId} mode=${process.env.DSH_PERMISSION_MODE}\n`);
     reply({ sessionId, configOptions: [model] });
   } else if (m.method === 'session/resume') {
     fs.appendFileSync('.loa/fake-acp.log', `resume ${m.params.sessionId}\n`);

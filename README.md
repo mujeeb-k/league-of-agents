@@ -61,7 +61,7 @@ Any other harness that speaks the Agent Client Protocol can be added in your own
 [{ "id": "goose", "name": "Goose", "command": ["goose", "acp"] }]
 ```
 
-Save it as `~/.config/league-of-agents/agents.json` and restart League of Agents. Keys, providers and models stay in each harness's own settings. A harness that asks before it edits, as Hermes does, is refused any edit outside your selection. Edits by one that doesn't ask, such as DeepSeek Harness, are flagged after the run.
+Save it as `~/.config/league-of-agents/agents.json` and restart League of Agents. Keys, providers and models stay in each harness's own settings. Hermes asks before it edits, and DeepSeek Harness runs in its read-only mode, so it asks too: an edit outside your selection is refused. An added harness that doesn't ask has those edits flagged after the run.
 
 <sub>Built and tested with Claude Code, Hermes Agent and DeepSeek Harness. Codex and Cursor support follows their published formats and passes tests against them, but hasn't been fully verified with real runs yet.</sub>
 
@@ -157,6 +157,7 @@ Snapshots stay on your computer unless you send them: `git push`, `git push --al
 - Non-code files, such as images, are in snapshots and undo, but not on the map.
 - Files git ignores and new files that usually hold secrets are never recorded.
 - One run at a time in a repo.
+- Shell commands. Hermes runs them without asking, except ones it judges dangerous, which League of Agents refuses. DeepSeek Harness runs them read-only, so a command that writes is refused. Whatever a command changes in the repo is part of the run, flagged if it's outside your selection, and undone by Revert.
 - It keeps the newest 500 runs, and every run from the last 30 days. Older runs are deleted, with their snapshots.
 - The website needs Chrome, Edge, Brave or Arc. Safari and Firefox use the local app instead.
 

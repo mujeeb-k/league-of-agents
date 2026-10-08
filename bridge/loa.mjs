@@ -204,7 +204,13 @@ const ACP = {
     command: [process.env.LOA_HERMES_BIN || 'hermes', 'acp'],
     check: [process.env.LOA_HERMES_BIN || 'hermes', 'acp', '--check'],
   },
-  dsh: { name: 'DeepSeek Harness', command: [process.env.LOA_DSH_BIN || 'dsh', '--profile', 'acp'] },
+  // In its read-only mode DeepSeek Harness asks before every write (its sandbox denies the write, and it asks to
+  // escalate), so its edits outside the scope can be refused. Without it, it writes without asking.
+  dsh: {
+    name: 'DeepSeek Harness',
+    command: [process.env.LOA_DSH_BIN || 'dsh', '--profile', 'acp'],
+    env: { DSH_PERMISSION_MODE: 'read-only' },
+  },
 };
 for (const a of [readJson(AGENTS_FILE, [])].flat())
   if (
@@ -1466,16 +1472,18 @@ function onAgentLine(run, line) {
  * session. What it asks before doing is answered by permitAcp. When the turn ends, the harness is stopped.
  */
 function startAcp(run, prompt, scopeFile) {
-  const { name, command } = ACP[run.agent];
+  const { name, command, env } = ACP[run.agent];
   const child = spawn(command[0], command.slice(1), {
     cwd: ROOT,
-    env: { ...process.env, LOA_MANAGED: '1' },
+    env: { ...process.env, LOA_MANAGED: '1', ...env },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   active.child = child;
   const rawOut = fs.createWriteStream(path.join(RUNS_DIR, `${run.id}.stream.jsonl`));
   const rawErr = fs.createWriteStream(path.join(RUNS_DIR, `${run.id}.stderr.log`));
+  // Each tool call as told so far: a permission request may name only the call (DeepSeek Harness does).
   const waiting = new Map(),
+    calls = new Map(),
     diffsSeen = new Set();
   let next = 1,
     buf = '',
@@ -1498,13 +1506,18 @@ function startAcp(run, prompt, scopeFile) {
     push(run, { t: 'text', text });
     run.summary = text;
   };
-  // Each file's diff once per tool call: harnesses show one in the request to edit and again as it completes.
-  const noteDiffs = (id, content) => {
-    for (const c of content || [])
-      if (c?.type === 'diff' && typeof c.path === 'string' && typeof c.newText === 'string') {
-        if (diffsSeen.has(`${id} ${c.path}`)) continue;
-        diffsSeen.add(`${id} ${c.path}`);
-        noteLines(run, c.path, [c.newText]);
+  // The lines a tool call writes, once per call and file: from the diffs it shows (Hermes, in the request to edit
+  // and again as it completes), or from an edit's own arguments (DeepSeek Harness's edit and write).
+  const noteEdit = (id, tool) => {
+    const raw = tool?.rawInput || {};
+    const texts = [
+      ...(tool?.content || []).filter(c => c?.type === 'diff').map(c => [c.path, c.newText]),
+      [raw.file_path, raw.new_string ?? raw.content],
+    ];
+    for (const [file, text] of texts)
+      if (typeof file === 'string' && typeof text === 'string' && !diffsSeen.has(`${id} ${file}`)) {
+        diffsSeen.add(`${id} ${file}`);
+        noteLines(run, file, [text]);
       }
   };
   const onUpdate = u => {
@@ -1514,11 +1527,23 @@ function startAcp(run, prompt, scopeFile) {
     }
     if (u.sessionUpdate === 'tool_call') {
       flush();
+      calls.set(u.toolCallId, u);
       push(run, { t: 'tool', text: acpToolLabel(u) });
-      noteDiffs(u.toolCallId, u.content);
+      if (u.kind === 'edit') noteEdit(u.toolCallId, { content: u.content });
     } else if (u.sessionUpdate === 'tool_call_update') {
-      noteDiffs(u.toolCallId, u.content);
-      if (u.status === 'failed') push(run, { t: 'err', text: `${acpToolLabel(u)} failed` });
+      const tool = { ...calls.get(u.toolCallId), ...u };
+      calls.set(u.toolCallId, tool);
+      if (tool.kind === 'edit') noteEdit(u.toolCallId, { content: u.content });
+      if (u.status === 'failed') {
+        const said = (u.content || []).map(c => c?.content?.text || '').join(' ');
+        // DeepSeek Harness's read-only mode denies each write until it asks (dsh-sandbox-policy): expected.
+        push(
+          run,
+          /\[sandbox: file access denied/.test(said)
+            ? { t: 'warn', text: `Needs permission: ${acpToolLabel(tool)}` }
+            : { t: 'err', text: `${acpToolLabel(tool)} failed` },
+        );
+      }
     } else if (u.sessionUpdate === 'config_option_update') {
       run.model = acpModel(u) ?? run.model;
       emit('progress', run);
@@ -1534,10 +1559,12 @@ function startAcp(run, prompt, scopeFile) {
       const u = m.params?.update || {};
       if (prompted || u.sessionUpdate === 'config_option_update') onUpdate(u);
     } else if (m.method === 'session/request_permission') {
-      const req = m.params || {};
-      const answer = permitAcp(run, req);
+      const req = m.params || {},
+        id = req.toolCall?.toolCallId;
+      const tool = { ...calls.get(id), ...req.toolCall };
+      const answer = permitAcp(run, tool, req.options || []);
       if (answer.optionId && /^allow/.test(req.options.find(o => o.optionId === answer.optionId)?.kind))
-        noteDiffs(req.toolCall?.toolCallId, req.toolCall?.content);
+        noteEdit(id, tool);
       send({ id: m.id, result: { outcome: answer } });
     } else if (m.id !== undefined) send({ id: m.id, error: { code: -32601, message: 'Not offered' } });
   };
@@ -1613,33 +1640,37 @@ function startAcp(run, prompt, scopeFile) {
   });
 }
 /**
- * What an ACP harness asks before doing it: an edit is allowed when every file it names is in the repo (not its
- * .git or .loa) and in the run's scope, if it has one. Anything else is refused, and the run says what.
+ * What an ACP harness asks before doing it (the tool call, as told so far): an edit is allowed when every file it
+ * names is in the repo (not its .git or .loa) and in the run's scope, if it has one. Anything else is refused, and
+ * the run says what. An edit is a call of kind "edit" (Hermes), or DeepSeek Harness's edit or write tool, which it
+ * sends as kind "other" with the file in its arguments.
  */
-function permitAcp(run, req) {
-  const tool = req.toolCall || {};
+function permitAcp(run, tool, options) {
   const files = [
     ...(tool.locations || []).map(l => l?.path),
     ...(tool.content || []).filter(c => c?.type === 'diff').map(c => c.path),
+    tool.rawInput?.file_path,
   ].filter(f => typeof f === 'string');
   const rel = files.map(f => repoRelative(f).split(path.sep).join('/'));
   const inRepo = rel.every(
     r => r && !r.startsWith('../') && r !== '..' && !path.isAbsolute(r) && !/^\.(git|loa)\//.test(r),
   );
-  const ok =
-    tool.kind === 'edit' && rel.length > 0 && inRepo && (!run.scope?.length || rel.every(r => inScope(run.scope, r)));
-  const option = (req.options || []).find(o => (ok ? /^allow/ : /^reject/).test(o.kind));
+  const edit = tool.kind === 'edit' || (tool.kind === 'other' && ['edit', 'write'].includes(tool.title));
+  const ok = edit && rel.length > 0 && inRepo && (!run.scope?.length || rel.every(r => inScope(run.scope, r)));
+  const option = options.find(o => (ok ? /^allow/ : /^reject/).test(o.kind));
   if (!ok) {
-    const what = relPaths(String(tool.title || tool.kind || 'a request')).slice(0, 120);
+    const what = acpToolLabel({ title: 'a request', ...tool });
     push(run, { t: 'deny', text: rel.length && inRepo ? `Refused, outside the scope: ${what}` : `Refused: ${what}` });
   }
   return option ? { outcome: 'selected', optionId: option.optionId } : { outcome: 'cancelled' };
 }
-/** A tool call as an activity entry: its title, with the file it names when the title doesn't. */
+/** A tool call as an activity entry: its title, with the file or command it names when the title doesn't. */
 function acpToolLabel(u) {
   const title = relPaths(String(u.title || u.kind || 'tool')).slice(0, 120);
   const f = u.locations?.[0]?.path || u.rawInput?.file_path || u.rawInput?.path;
-  return typeof f === 'string' && !title.includes(path.basename(f)) ? `${title} ${repoRelative(f)}` : title;
+  if (typeof f === 'string') return title.includes(path.basename(f)) ? title : `${title} ${repoRelative(f)}`;
+  const cmd = u.rawInput?.command;
+  return typeof cmd === 'string' && !title.includes(cmd) ? `${title} ${relPaths(cmd).slice(0, 80)}` : title;
 }
 /**
  * The model an ACP session runs, by the name its harness gives it: its "model" config option (DeepSeek Harness),

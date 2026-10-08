@@ -66,7 +66,7 @@ Qualquer outro harness que fale o Agent Client Protocol pode ser adicionado nas 
 [{ "id": "goose", "name": "Goose", "command": ["goose", "acp"] }]
 ```
 
-Salve como `~/.config/league-of-agents/agents.json` e reinicie o League of Agents. Chaves, provedores e modelos ficam nas configurações de cada harness. Um harness que pergunta antes de editar, como o Hermes, tem recusada qualquer edição fora da sua seleção. As edições de um que não pergunta, como o DeepSeek Harness, são sinalizadas depois da execução.
+Salve como `~/.config/league-of-agents/agents.json` e reinicie o League of Agents. Chaves, provedores e modelos ficam nas configurações de cada harness. O Hermes pergunta antes de editar, e o DeepSeek Harness roda no modo somente leitura, então também pergunta: uma edição fora da sua seleção é recusada. Um harness adicionado que não pergunta tem essas edições sinalizadas depois da execução.
 
 <sub>Construído e testado com Claude Code, Hermes Agent e DeepSeek Harness. O suporte a Codex e Cursor segue os formatos publicados por eles e passa em testes contra esses formatos, mas ainda não foi totalmente verificado com execuções reais.</sub>
 
@@ -164,6 +164,7 @@ Os snapshots ficam no seu computador a menos que você os envie: `git push`, `gi
 - Arquivos que não são de código, como imagens, entram nos snapshots e no desfazer, mas não aparecem no mapa.
 - Arquivos que o git ignora e arquivos novos que costumam guardar segredos nunca são registrados.
 - Uma execução por vez em um repositório.
+- Comandos de shell. O Hermes os roda sem perguntar, exceto os que considera perigosos, que o League of Agents recusa. O DeepSeek Harness os roda em modo somente leitura, então um comando que grava é recusado. Tudo o que um comando muda no repositório faz parte da execução: é sinalizado se estiver fora da sua seleção, e desfeito ao reverter a execução.
 - Ele guarda as 500 execuções mais recentes, e todas as execuções dos últimos 30 dias. Execuções mais antigas são apagadas, junto com seus snapshots.
 - O site precisa do Chrome, Edge, Brave ou Arc. O Safari e o Firefox usam o app local.
 

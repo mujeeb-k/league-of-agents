@@ -66,7 +66,7 @@ Tout autre harness qui parle l’Agent Client Protocol peut être ajouté dans v
 [{ "id": "goose", "name": "Goose", "command": ["goose", "acp"] }]
 ```
 
-Enregistrez-le sous `~/.config/league-of-agents/agents.json`, puis redémarrez League of Agents. Les clés, fournisseurs et modèles restent dans les réglages de chaque harness. Un harness qui demande avant de modifier, comme Hermes, se voit refuser toute modification hors de votre sélection. Les modifications d’un harness qui ne demande pas, comme DeepSeek Harness, sont signalées après l’exécution.
+Enregistrez-le sous `~/.config/league-of-agents/agents.json`, puis redémarrez League of Agents. Les clés, fournisseurs et modèles restent dans les réglages de chaque harness. Hermes demande avant de modifier, et DeepSeek Harness tourne dans son mode lecture seule, donc il demande aussi : une modification hors de votre sélection est refusée. Un harness ajouté qui ne demande pas voit ces modifications signalées après l’exécution.
 
 <sub>Construit et testé avec Claude Code, Hermes Agent et DeepSeek Harness. La prise en charge de Codex et de Cursor suit leurs formats publiés et passe des tests sur ces formats, mais n’a pas encore été entièrement vérifiée avec de vraies exécutions.</sub>
 
@@ -164,6 +164,7 @@ Les instantanés restent sur votre ordinateur sauf si vous les envoyez : `git pu
 - Les fichiers qui ne sont pas du code, comme les images, sont dans les instantanés et dans l’annulation, mais pas sur la carte.
 - Les fichiers ignorés par git et les nouveaux fichiers qui contiennent habituellement des secrets ne sont jamais enregistrés.
 - Une seule exécution à la fois dans un dépôt.
+- Les commandes shell. Hermes les lance sans demander, sauf celles qu’il juge dangereuses, que League of Agents refuse. DeepSeek Harness les lance en lecture seule, donc une commande qui écrit est refusée. Tout ce qu’une commande change dans le dépôt fait partie de l’exécution : c’est signalé si c’est hors de votre sélection, et annulé par l’annulation de l’exécution.
 - Il conserve les 500 exécutions les plus récentes, et toutes celles des 30 derniers jours. Les exécutions plus anciennes sont supprimées, avec leurs instantanés.
 - Le site web nécessite Chrome, Edge, Brave ou Arc. Safari et Firefox utilisent l’application locale à la place.
 

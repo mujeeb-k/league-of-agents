@@ -66,7 +66,7 @@ Cualquier otro harness que hable el Agent Client Protocol se puede añadir en tu
 [{ "id": "goose", "name": "Goose", "command": ["goose", "acp"] }]
 ```
 
-Guárdalo como `~/.config/league-of-agents/agents.json` y reinicia League of Agents. Las claves, los proveedores y los modelos se quedan en los ajustes de cada harness. A un harness que pregunta antes de editar, como Hermes, se le rechaza cualquier edición fuera de tu selección. Las ediciones de uno que no pregunta, como DeepSeek Harness, se señalan después de la ejecución.
+Guárdalo como `~/.config/league-of-agents/agents.json` y reinicia League of Agents. Las claves, los proveedores y los modelos se quedan en los ajustes de cada harness. Hermes pregunta antes de editar, y DeepSeek Harness se ejecuta en su modo de solo lectura, así que también pregunta: una edición fuera de tu selección se rechaza. Un harness añadido que no pregunta tiene esas ediciones señaladas después de la ejecución.
 
 <sub>Creado y probado con Claude Code, Hermes Agent y DeepSeek Harness. La compatibilidad con Codex y Cursor sigue sus formatos publicados y supera pruebas contra ellos, pero aún no se ha verificado del todo con ejecuciones reales.</sub>
 
@@ -157,11 +157,12 @@ Las instantáneas se quedan en tu computadora salvo que las envíes: `git push`,
 ## Límites
 
 - macOS. Linux supera todo el conjunto de pruebas en CI, pero aún no se ha probado con un agente real; allí abre la app local. Windows aún no es compatible.
-- No son compatibles las máquinas remotas, SSH ni los dev containers. League of Agents debe ejecutarse en el misma computadora que tu navegador.
+- No son compatibles las máquinas remotas, SSH ni los dev containers. League of Agents debe ejecutarse en la misma computadora que tu navegador.
 - El mapa muestra hasta 1500 archivos de código, y las primeras 400 líneas de cada uno. Los archivos de más de 400 KB no aparecen en el mapa. Los diffs conservan las primeras 4000 líneas de un archivo.
 - Los archivos que no son de código, como las imágenes, están en las instantáneas y en el deshacer, pero no en el mapa.
 - Los archivos que git ignora y los archivos nuevos que suelen contener secretos nunca se registran.
 - Una sola ejecución a la vez en un repositorio.
+- Comandos de shell. Hermes los ejecuta sin preguntar, salvo los que considera peligrosos, que League of Agents rechaza. DeepSeek Harness los ejecuta en solo lectura, así que un comando que escribe se rechaza. Todo lo que un comando cambia en el repositorio forma parte de la ejecución: se señala si está fuera de tu selección y se deshace al revertir la ejecución.
 - Conserva las 500 ejecuciones más recientes, y todas las ejecuciones de los últimos 30 días. Las ejecuciones más antiguas se eliminan, junto con sus instantáneas.
 - El sitio web necesita Chrome, Edge, Brave o Arc. Safari y Firefox usan la app local en su lugar.
 

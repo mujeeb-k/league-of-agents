@@ -66,7 +66,7 @@ Claude Code，可以从地图或终端使用。Hermes Agent 和 DeepSeek Harness
 [{ "id": "goose", "name": "Goose", "command": ["goose", "acp"] }]
 ```
 
-把它保存为 `~/.config/league-of-agents/agents.json`，然后重启 League of Agents。密钥、服务商和模型都保留在各个 harness 自己的设置中。会在编辑前询问的 harness（例如 Hermes）在你的选择范围之外的任何编辑都会被拒绝。不询问的 harness（例如 DeepSeek Harness）所做的这类编辑会在运行结束后标出。
+把它保存为 `~/.config/league-of-agents/agents.json`，然后重启 League of Agents。密钥、服务商和模型都保留在各个 harness 自己的设置中。Hermes 会在编辑前询问；DeepSeek Harness 以它的只读模式运行，所以也会询问：你的选择范围之外的编辑会被拒绝。你添加的 harness 如果不询问，这类编辑会在运行结束后标出。
 
 <sub>使用 Claude Code、Hermes Agent 和 DeepSeek Harness 构建和测试。对 Codex 和 Cursor 的支持遵循它们公开的格式，并通过了针对这些格式的测试，但还没有用真实的运行完全验证。</sub>
 
@@ -164,6 +164,7 @@ League of Agents 从不把你的代码上传到任何地方。你的代码只会
 - 非代码文件（比如图片）包含在快照和撤销中，但不会出现在地图上。
 - git 忽略的文件，以及通常存放密钥的新文件，永远不会被记录。
 - 一个仓库中同一时间只进行一次运行。
+- Shell 命令。Hermes 运行命令时不会询问，只有它认为危险的命令会询问，而 League of Agents 会拒绝这些命令。DeepSeek Harness 以只读方式运行命令，所以会写入的命令会被拒绝。命令在仓库中改动的任何内容都属于这次运行：如果在你的选择范围之外会被标出，并且可以用撤销运行撤回。
 - 它保留最新的 500 次运行，以及最近 30 天内的所有运行。更早的运行会连同其快照一起删除。
 - 网站需要 Chrome、Edge、Brave 或 Arc。Safari 和 Firefox 则使用本地应用。
 

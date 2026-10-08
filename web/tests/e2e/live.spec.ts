@@ -1226,6 +1226,35 @@ test('an ACP harness (Hermes): asks before editing, reports its model, is refuse
   }
 });
 
+test("DeepSeek Harness runs in its read-only mode, so each edit asks: in the scope allowed and the agent's lines, outside refused", async () => {
+  const repo = makeRepo(),
+    FILE = 'shared/allowlist.ts';
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_DSH_BIN: FAKE_ACP, FAKE_ACP_STYLE: 'dsh' });
+  try {
+    const run = await runToEnd(b, {
+      agent: 'dsh',
+      prompt: 'Record it outside too, and run a command',
+      scope: ['shared/'],
+      resumeFrom: null,
+    });
+    expect(fs.readFileSync(path.join(repo, '.loa/fake-acp.log'), 'utf8')).toMatch(/^new \S+ mode=read-only$/m);
+    expect(run.changes.map(c => c.path)).toEqual([FILE]);
+    const at = SEED[FILE]!.split('\n').length - 1;
+    expect(run.agentLines).toEqual({ [FILE]: [[at, at]] });
+    expect(fs.existsSync(path.join(repo, 'outside.txt'))).toBe(false);
+    const entries = run.stream.map(e => `${e.t} ${e.text}`);
+    expect(entries).toContain('deny Refused, outside the scope: edit outside.txt');
+    // A command it asks to run is refused, by what it would run.
+    expect(entries).toContain('deny Refused: bash rm -rf build');
+    // Its sandbox holds each write until it asks: said as that, not as a failure.
+    expect(entries).toContain(`warn Needs permission: edit ${FILE}`);
+    expect(entries.filter(e => e.startsWith('err'))).toEqual([]);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('harnesses the person adds in their own settings are listed by name and run from the map, with their model', async ({
   page,
 }) => {
