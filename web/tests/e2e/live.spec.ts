@@ -10,6 +10,7 @@ import type { RunDTO, StateResponse } from '../../src/api/types';
 import {
   AGENT_FIXTURES,
   BRIDGE,
+  FAKE_ACP,
   FAKE_CLAUDE,
   FAKE_CODEX,
   REPLAY_AGENT,
@@ -1155,6 +1156,106 @@ test('bridge runs Codex with a workspace-write sandbox and resumes by thread id'
       .map(l => JSON.parse(l) as string[]);
     expect(calls[0]).toEqual(['exec', '--json', '--sandbox', 'workspace-write', 'Change the log prefix']);
     expect(calls[1]).toEqual(['exec', '--json', '--sandbox', 'workspace-write', 'resume', 'thr-fake-1', 'Again']);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test('an ACP harness (Hermes): asks before editing, reports its model, is refused outside the scope, resumes, cancels', async () => {
+  const repo = makeRepo(),
+    FILE = 'shared/allowlist.ts';
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP });
+  const api = (p: string, body?: object) => call(b, p, body);
+  try {
+    // Found once `hermes acp --check` passes; the state names it and says nothing of its command.
+    await expect
+      .poll(async () => ((await api('/api/state')).body as unknown as StateResponse).agents.hermes)
+      .toEqual({ name: 'Hermes', available: true });
+    const first = await runToEnd(b, {
+      agent: 'hermes',
+      prompt: 'Record who reviewed it',
+      scope: ['shared/'],
+      resumeFrom: null,
+    });
+    expect(first.model).toBe('fake-model-1');
+    expect(first.sessionId).toMatch(/^fake-session-/);
+    expect(first.summary).toBe(`Added reviewedBy to ${FILE}.`);
+    expect(first.changes.map(c => c.path)).toEqual([FILE]);
+    expect(first.stream.map(e => e.text)).toEqual(
+      expect.arrayContaining(['Reading the policy module.', `read: ${FILE}`, `patch: ${FILE}`]),
+    );
+    // The line it showed as a diff before writing it counts as the agent's (attribution).
+    const at = SEED[FILE]!.split('\n').length - 1;
+    expect(first.agentLines).toEqual({ [FILE]: [[at, at]] });
+    const log = () => fs.readFileSync(path.join(repo, '.loa/fake-acp.log'), 'utf8');
+    expect(log()).toContain('Scope for this task:\\n- shared/');
+    // A follow-up resumes the same session. Asked to edit outside the scope, it is refused, and the run says so.
+    const second = await runToEnd(b, {
+      agent: 'hermes',
+      prompt: 'Note it outside too',
+      scope: ['shared/'],
+      resumeFrom: first.id,
+    });
+    expect(second.sessionId).toBe(first.sessionId);
+    expect(log()).toContain(`resume ${first.sessionId}`);
+    // What the harness replays on resuming is the earlier run's, not this one's.
+    expect(second.stream.map(e => e.text)).not.toContain('replayed: an earlier call');
+    expect(second.stream.map(e => e.text)).not.toContain('Replayed from before.');
+    expect(fs.existsSync(path.join(repo, 'outside.txt'))).toBe(false);
+    expect(second.stream.map(e => `${e.t} ${e.text}`)).toContain('deny Refused, outside the scope: patch: outside.txt');
+    // Cancel asks the harness to stop its turn.
+    const slow = (await api('/api/runs', { agent: 'hermes', prompt: 'Take it slow', scope: [], resumeFrom: null }))
+      .body;
+    await expect
+      .poll(
+        async () =>
+          ((await api('/api/state')).body as unknown as StateResponse).runs.find(r => r.id === slow.id)?.stream.length,
+      )
+      .toBeGreaterThan(1);
+    await api(`/api/runs/${slow.id}/cancel`, {});
+    await expect
+      .poll(
+        async () =>
+          ((await api('/api/state')).body as unknown as StateResponse).runs.find(r => r.id === slow.id)?.status,
+      )
+      .toBe('cancelled');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test('harnesses the person adds in their own settings are listed by name and run from the map, with their model', async ({
+  page,
+}) => {
+  const repo = makeRepo(),
+    settings = path.join(homeOf(repo), '.config/league-of-agents/agents.json');
+  fs.mkdirSync(path.dirname(settings), { recursive: true });
+  fs.writeFileSync(
+    settings,
+    JSON.stringify([
+      { id: 'goose', name: 'Goose', command: [process.execPath, FAKE_ACP] },
+      // Not taken: a built-in agent's id, and an id that isn't one.
+      { id: 'claude', name: 'Mine', command: [process.execPath, FAKE_ACP] },
+      { id: 'Not an id', command: [process.execPath, FAKE_ACP] },
+    ]),
+  );
+  const b = await startBridge(repo);
+  try {
+    const agents = ((await call(b, '/api/state')).body as unknown as StateResponse).agents;
+    expect(agents.goose).toEqual({ name: 'Goose', available: true });
+    expect(agents.claude!.name).toBe('Claude Code');
+    expect(Object.keys(agents)).not.toContain('Not an id');
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.locator('#agentBtn').click();
+    await page.locator('#agentMenu [data-agent="goose"]').click();
+    await expect(page.locator('#agentBtn')).toHaveText('Goose');
+    await page.locator('#prompt').fill('Record who reviewed it');
+    await page.locator('#prompt').press('Enter');
+    await expect(page.locator('#runAgent')).toContainText('Goose · fake-model-1', { timeout: 15_000 });
+    await expect(page.locator('#insp .bubble.md').last()).toHaveText('Added reviewedBy to shared/allowlist.ts.');
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });

@@ -190,6 +190,32 @@ const AGENTS = {
   'codex-terminal': { name: 'Codex (terminal)', available: false },
   'cursor-editor': { name: 'Cursor (editor)', available: false },
 };
+/**
+ * Harnesses that speak the Agent Client Protocol (agentclientprotocol.com), run by startAcp: Hermes Agent and
+ * DeepSeek Harness when found, and any the person adds in their own ~/.config/league-of-agents/agents.json, as
+ * [{ "id": "goose", "name": "Goose", "command": ["goose", "acp"] }]. Never from the repo, so a cloned repo can't
+ * name a command to run. Keys, providers and models stay in each harness's own settings.
+ */
+const AGENTS_FILE = path.join(os.homedir(), '.config', 'league-of-agents', 'agents.json');
+const ACP = {
+  // Hermes speaks ACP only with its optional extra installed: it counts as found once `hermes acp --check` passes.
+  hermes: {
+    name: 'Hermes',
+    command: [process.env.LOA_HERMES_BIN || 'hermes', 'acp'],
+    check: [process.env.LOA_HERMES_BIN || 'hermes', 'acp', '--check'],
+  },
+  dsh: { name: 'DeepSeek Harness', command: [process.env.LOA_DSH_BIN || 'dsh', '--profile', 'acp'] },
+};
+for (const a of [readJson(AGENTS_FILE, [])].flat())
+  if (
+    /^[a-z0-9-]+$/.test(a?.id) &&
+    !AGENTS[a.id] &&
+    Array.isArray(a.command) &&
+    a.command.length &&
+    a.command.every(s => typeof s === 'string' && s)
+  )
+    ACP[a.id] = { name: typeof a.name === 'string' && a.name ? a.name : a.id, command: a.command };
+for (const [id, a] of Object.entries(ACP)) AGENTS[id] = { name: a.name, available: !a.check && onPath(a.command[0]) };
 
 // ---------------------------------------------------------------- utils
 function readJson(p, d) {
@@ -1085,7 +1111,7 @@ for (const f of fs.readdirSync(RUNS_DIR))
     const r = readJson(path.join(RUNS_DIR, f));
     if (r) runs.set(r.id, r);
   }
-let active = null; // { run, child }
+let active = null; // { run, child, cancel }: cancel, for a harness asked to stop its turn (startAcp)
 const nextId = () => Math.max(0, ...runs.keys()) + 1;
 /** Runs kept: the newest KEEP_RUNS, and every run from the last KEEP_DAYS days, whichever is more. */
 const KEEP_RUNS = 500,
@@ -1256,6 +1282,7 @@ function startAgent(run, read = {}) {
         before: read[e.path] ?? fs.readFileSync(path.join(ROOT, e.path), 'utf8'),
       };
   fs.writeFileSync(scopeFile, JSON.stringify({ scope: run.scope || [], ranges }));
+  if (ACP[run.agent]) return startAcp(run, prompt, scopeFile);
   let cmd, args;
   if (run.agent === 'claude') {
     cmd = BIN.claude;
@@ -1337,8 +1364,12 @@ function noteWrites(run, name, input) {
         : name === 'MultiEdit'
           ? (input.edits || []).map(e => e.new_string)
           : [];
+  noteLines(run, input.file_path, texts);
+}
+/** Lines an agent wrote into a file, by the path it named, kept for the run's attribution (agentLinesOf). */
+function noteLines(run, file, texts) {
   // Agents name files by the path they were given, which may run through a symlink (macOS's /var is /private/var).
-  let abs = path.resolve(ROOT, input.file_path);
+  let abs = path.resolve(ROOT, file);
   try {
     abs = path.join(fs.realpathSync(path.dirname(abs)), path.basename(abs));
   } catch {}
@@ -1427,6 +1458,202 @@ function onAgentLine(run, line) {
     push(run, { t: 'tool', text: it.type || it.name || m.type });
     if (it.text && m.type === 'item.completed' && /message/.test(it.type || '')) run.summary = it.text;
   }
+}
+/**
+ * A run by an ACP harness: JSON-RPC 2.0 over its stdin and stdout, one message a line. No file system or terminal
+ * is offered: the bridge reads what changed from its own snapshots. The harness's reply becomes the run's summary,
+ * its tool calls the activity, and the edits it shows as diffs count as its lines. A follow-up resumes the same
+ * session. What it asks before doing is answered by permitAcp. When the turn ends, the harness is stopped.
+ */
+function startAcp(run, prompt, scopeFile) {
+  const { name, command } = ACP[run.agent];
+  const child = spawn(command[0], command.slice(1), {
+    cwd: ROOT,
+    env: { ...process.env, LOA_MANAGED: '1' },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+  active.child = child;
+  const rawOut = fs.createWriteStream(path.join(RUNS_DIR, `${run.id}.stream.jsonl`));
+  const rawErr = fs.createWriteStream(path.join(RUNS_DIR, `${run.id}.stderr.log`));
+  const waiting = new Map(),
+    diffsSeen = new Set();
+  let next = 1,
+    buf = '',
+    said = '',
+    lastErr = '',
+    prompted = false,
+    outcome = null;
+  const send = m => child.stdin.writable && child.stdin.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\n');
+  const call = (method, params) =>
+    new Promise((resolve, reject) => {
+      const id = next++;
+      waiting.set(id, { resolve, reject });
+      send({ id, method, params });
+    });
+  // The reply so far, as one entry each time the harness turns to something else; the last one is the summary.
+  const flush = () => {
+    const text = said.trim();
+    said = '';
+    if (!text) return;
+    push(run, { t: 'text', text });
+    run.summary = text;
+  };
+  // Each file's diff once per tool call: harnesses show one in the request to edit and again as it completes.
+  const noteDiffs = (id, content) => {
+    for (const c of content || [])
+      if (c?.type === 'diff' && typeof c.path === 'string' && typeof c.newText === 'string') {
+        if (diffsSeen.has(`${id} ${c.path}`)) continue;
+        diffsSeen.add(`${id} ${c.path}`);
+        noteLines(run, c.path, [c.newText]);
+      }
+  };
+  const onUpdate = u => {
+    if (u.sessionUpdate === 'agent_message_chunk') {
+      if (u.content?.type === 'text') said += u.content.text;
+      return;
+    }
+    if (u.sessionUpdate === 'tool_call') {
+      flush();
+      push(run, { t: 'tool', text: acpToolLabel(u) });
+      noteDiffs(u.toolCallId, u.content);
+    } else if (u.sessionUpdate === 'tool_call_update') {
+      noteDiffs(u.toolCallId, u.content);
+      if (u.status === 'failed') push(run, { t: 'err', text: `${acpToolLabel(u)} failed` });
+    } else if (u.sessionUpdate === 'config_option_update') {
+      run.model = acpModel(u) ?? run.model;
+      emit('progress', run);
+    }
+  };
+  const onMessage = m => {
+    if (m.id !== undefined && !m.method) {
+      const w = waiting.get(m.id);
+      waiting.delete(m.id);
+      if (w) m.error ? w.reject(new Error(m.error.message || 'error')) : w.resolve(m.result ?? {});
+    } else if (m.method === 'session/update') {
+      // A resumed session may be replayed first (Hermes does): only what comes once the prompt is sent is this run's.
+      const u = m.params?.update || {};
+      if (prompted || u.sessionUpdate === 'config_option_update') onUpdate(u);
+    } else if (m.method === 'session/request_permission') {
+      const req = m.params || {};
+      const answer = permitAcp(run, req);
+      if (answer.optionId && /^allow/.test(req.options.find(o => o.optionId === answer.optionId)?.kind))
+        noteDiffs(req.toolCall?.toolCallId, req.toolCall?.content);
+      send({ id: m.id, result: { outcome: answer } });
+    } else if (m.id !== undefined) send({ id: m.id, error: { code: -32601, message: 'Not offered' } });
+  };
+  child.stdout.on('data', d => {
+    rawOut.write(d);
+    buf += d;
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (!line) continue;
+      try {
+        onMessage(JSON.parse(line));
+      } catch {}
+    }
+  });
+  // Harnesses log freely to stderr: kept in the raw log, and its last line said only if the run fails.
+  child.stderr.on('data', d => {
+    rawErr.write(d);
+    lastErr = String(d).trim().split('\n').at(-1) || lastErr;
+  });
+  child.on('error', e => push(run, { t: 'err', text: `Could not start ${command[0]}: ${e.message}` }));
+  // Cancel: the harness is asked to stop the turn, and stopped if it hasn't within 3 s.
+  active.cancel = () => {
+    send({ method: 'session/cancel', params: { sessionId: run.sessionId } });
+    setTimeout(() => child.kill('SIGTERM'), 3000).unref();
+  };
+  (async () => {
+    const init = await call('initialize', {
+      protocolVersion: 1,
+      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+      clientInfo: { name: 'league-of-agents', version: VERSION },
+    });
+    const where = { cwd: ROOT, mcpServers: [] };
+    let session;
+    if (run.sessionId && init.agentCapabilities?.sessionCapabilities?.resume)
+      session = await call('session/resume', { sessionId: run.sessionId, ...where });
+    else {
+      if (run.sessionId) push(run, { t: 'warn', text: `${name} can't resume a session: this run starts a new one` });
+      session = await call('session/new', where);
+      run.sessionId = session.sessionId;
+    }
+    run.model = acpModel(session) ?? run.model;
+    emit('progress', run);
+    prompted = true;
+    const r = await call('session/prompt', { sessionId: run.sessionId, prompt: [{ type: 'text', text: prompt }] });
+    flush();
+    if (r.stopReason === 'refusal') push(run, { t: 'err', text: `${name} refused the task` });
+    if (r.stopReason === 'max_tokens' || r.stopReason === 'max_turn_requests')
+      push(run, { t: 'warn', text: `${name} stopped at its limit before finishing` });
+    outcome = r.stopReason === 'cancelled' ? 'cancelled' : r.stopReason === 'refusal' ? 'failed' : 'done';
+  })()
+    .catch(e => {
+      flush();
+      push(run, { t: 'err', text: `${name}: ${e.message}`.slice(0, 500) });
+      outcome = 'failed';
+    })
+    .finally(() => {
+      child.stdin.end();
+      setTimeout(() => child.kill('SIGTERM'), 2000).unref();
+    });
+  child.on('close', code => {
+    rawOut.end();
+    rawErr.end();
+    waiting.clear();
+    try {
+      fs.rmSync(scopeFile);
+    } catch {}
+    if (!outcome && run.status === 'running')
+      push(run, { t: 'err', text: `${name} exited with code ${code}${lastErr ? `: ${lastErr.slice(0, 300)}` : ''}` });
+    const ended = ['cancelled', 'interrupted'].includes(run.status) ? run.status : outcome || 'failed';
+    finishRun(run, ended).catch(logError);
+  });
+}
+/**
+ * What an ACP harness asks before doing it: an edit is allowed when every file it names is in the repo (not its
+ * .git or .loa) and in the run's scope, if it has one. Anything else is refused, and the run says what.
+ */
+function permitAcp(run, req) {
+  const tool = req.toolCall || {};
+  const files = [
+    ...(tool.locations || []).map(l => l?.path),
+    ...(tool.content || []).filter(c => c?.type === 'diff').map(c => c.path),
+  ].filter(f => typeof f === 'string');
+  const rel = files.map(f => repoRelative(f).split(path.sep).join('/'));
+  const inRepo = rel.every(
+    r => r && !r.startsWith('../') && r !== '..' && !path.isAbsolute(r) && !/^\.(git|loa)\//.test(r),
+  );
+  const ok =
+    tool.kind === 'edit' && rel.length > 0 && inRepo && (!run.scope?.length || rel.every(r => inScope(run.scope, r)));
+  const option = (req.options || []).find(o => (ok ? /^allow/ : /^reject/).test(o.kind));
+  if (!ok) {
+    const what = relPaths(String(tool.title || tool.kind || 'a request')).slice(0, 120);
+    push(run, { t: 'deny', text: rel.length && inRepo ? `Refused, outside the scope: ${what}` : `Refused: ${what}` });
+  }
+  return option ? { outcome: 'selected', optionId: option.optionId } : { outcome: 'cancelled' };
+}
+/** A tool call as an activity entry: its title, with the file it names when the title doesn't. */
+function acpToolLabel(u) {
+  const title = relPaths(String(u.title || u.kind || 'tool')).slice(0, 120);
+  const f = u.locations?.[0]?.path || u.rawInput?.file_path || u.rawInput?.path;
+  return typeof f === 'string' && !title.includes(path.basename(f)) ? `${title} ${repoRelative(f)}` : title;
+}
+/**
+ * The model an ACP session runs, by the name its harness gives it: its "model" config option (DeepSeek Harness),
+ * or its current model (Hermes). Null when it reports neither: never a guess.
+ */
+function acpModel(s) {
+  const opt = (s.configOptions || []).find(o => o?.category === 'model');
+  if (opt) {
+    const named = (opt.options || []).flatMap(o => o.options || [o]).find(o => o.value === opt.currentValue)?.name;
+    return named || (typeof opt.currentValue === 'string' ? opt.currentValue : null);
+  }
+  const m = s.models;
+  if (typeof m?.currentModelId !== 'string') return null;
+  return m.availableModels?.find(a => a.modelId === m.currentModelId)?.name || m.currentModelId;
 }
 /** A failed tool call, as an activity entry: blocked by the scope lock, denied, or an error. */
 function toolError(content) {
@@ -1975,7 +2202,9 @@ const server = http.createServer(async (req, res) => {
       if (m[2] === 'cancel') {
         if (active?.run === run) {
           run.status = 'cancelled';
-          active.child ? active.child.kill('SIGTERM') : await finishRun(run, 'cancelled');
+          if (active.cancel) active.cancel();
+          else if (active.child) active.child.kill('SIGTERM');
+          else await finishRun(run, 'cancelled');
         }
         return send(res, 200, { ok: true }, cors);
       }
@@ -2209,6 +2438,12 @@ for (const sig of ['SIGTERM', 'SIGINT'])
   });
 
 server.listen(PORT, '127.0.0.1', () => checkClaude(listening));
+for (const [id, a] of Object.entries(ACP))
+  if (a.check && onPath(a.check[0]))
+    execFile(a.check[0], a.check.slice(1), { cwd: ROOT, timeout: 60000 }, e => {
+      AGENTS[id].available = !e;
+      if (!e) emit('state');
+    });
 setInterval(() => AGENTS.claude.problem && checkClaude(), CLAUDE_RECHECK_MS).unref();
 function listening() {
   const local = linkOf({ port: PORT, token: TOKEN });

@@ -45,10 +45,12 @@ export const AGENTS: Record<string, AgentStyle> = {
   'codex-terminal': { name: 'Codex (terminal)', c: 'var(--a-codex)', beta: true },
   'cursor-editor': { name: 'Cursor (editor)', c: 'var(--a-cursor)', beta: true },
 };
+/** The names the bridge gives its agents, for harnesses the app doesn't know (one the person added, over ACP). */
+export const bridgeNames = new Map<string, string>();
 /** An agent's name and colour; names other than products' read in the person's language ("Watch mode", "You"). */
 export const agentOf = (k: string): AgentStyle => {
   const a = AGENTS[k];
-  return a ? { ...a, name: t(a.name) } : { name: k, c: 'var(--ink3)' };
+  return a ? { ...a, name: t(a.name) } : { name: bridgeNames.get(k) ?? k, c: 'var(--ink3)' };
 };
 /** The model a run's agent reported; Codex reports none, so its runs say so rather than show nothing. */
 export const modelOf = (agent: string, model?: string | null): string | null =>

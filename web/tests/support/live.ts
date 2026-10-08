@@ -13,6 +13,7 @@ export const REPO_ROOT = path.resolve(here, '../../..');
 export const BRIDGE = path.join(REPO_ROOT, 'bridge/loa.mjs');
 export const FAKE_CLAUDE = path.join(REPO_ROOT, 'tests/fixtures/fake-claude.mjs');
 export const FAKE_CODEX = path.join(REPO_ROOT, 'tests/fixtures/fake-codex.mjs');
+export const FAKE_ACP = path.join(REPO_ROOT, 'tests/fixtures/fake-acp.mjs');
 export const REPLAY_AGENT = path.join(REPO_ROOT, 'tests/fixtures/replay-agent.mjs');
 export const AGENT_FIXTURES = path.join(REPO_ROOT, 'tests/fixtures/agents/claude');
 export const SLOW_AGENT = path.join(here, 'slow-agent.mjs');

@@ -4,6 +4,7 @@ import { buildModel, specFromPaths } from '../lib/model';
 import { authorsOf, rangesOf } from '../lib/attribution';
 import { carryRenames, type SavedLayout } from '../lib/layout';
 import { renamesOf } from '../lib/renames';
+import { bridgeNames } from '../lib/constants';
 import { changedBlock } from '../lib/textdiff';
 import type { Run } from '../lib/types';
 import { t, tn } from '../i18n';
@@ -157,6 +158,7 @@ function withDeltas(s: StateResponse, deltas: StateDelta[], seq: number): StateR
 function applyState(s: StateResponse, first: boolean) {
   last = s;
   S.LIVE_AGENTS = s.agents;
+  for (const [k, a] of Object.entries(s.agents)) bridgeNames.set(k, a.name);
   S.suggestedChecks = s.suggestedChecks ?? [];
   S.checksFromRepo = s.suggestedChecksFrom === 'repo';
   S.checksOn = s.checksOn ?? [];
