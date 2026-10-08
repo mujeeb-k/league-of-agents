@@ -50,7 +50,13 @@ describe('explain', () => {
   });
 
   it('has words for every code the bridge sends', () => {
-    const bridge = fs.readFileSync(path.join(__dirname, '../../../bridge/loa.mjs'), 'utf8');
+    const dir = path.join(__dirname, '../../../bridge');
+    const bridge = [
+      path.join(dir, 'loa.mjs'),
+      ...fs.readdirSync(path.join(dir, 'lib')).map(f => path.join(dir, 'lib', f)),
+    ]
+      .map(f => fs.readFileSync(f, 'utf8'))
+      .join('\n');
     const sent = [...bridge.matchAll(/\b(?:code|reason): '([a-z-]+)'/g)].map(m => m[1]);
     expect(new Set(sent)).toEqual(new Set(Object.keys(BY_CODE)));
   });
