@@ -27,6 +27,7 @@ import { runs, working, saveRun, publicRun, beginRun, finishRun, push, revertRun
 import { armIdle, ownWrite, writeConfig, watchOff } from './watch.mjs';
 import { seq, events, waiters, emit } from './events.mjs';
 import { cancelSession, startSession } from './sessions.mjs';
+import { shellEnds, shellStarts } from './shell.mjs';
 
 /**
  * @typedef {{ url: URL; params: string[]; body: () => Promise<any> }} Request  `params`: what the route's pattern
@@ -173,6 +174,21 @@ function findLines(b) {
 const runOf = params => runs.get(Number(params[0]));
 const noRun = /** @type {Reply} */ ([404, { error: 'No such run' }]);
 
+/**
+ * A session's shell command starting or ending, from its hooks: `undone` names what was put back.
+ * @param {Request} request
+ * @returns {Promise<Reply>}
+ */
+async function shell({ params, body }) {
+  const run = runOf(params);
+  if (!run || !working.has(run.id)) return [200, { undone: [] }];
+  const { phase, tool } = await body();
+  if (phase === 'start') {
+    await shellStarts(run, tool);
+    return [200, { undone: [] }];
+  }
+  return [200, { undone: await shellEnds(run, tool) }];
+}
 /**
  * @param {Request} request
  * @returns {Promise<Reply>}
@@ -405,6 +421,7 @@ export const ROUTES = [
   ['POST', /^\/api\/runs\/(\d+)\/keep$/, keepRun],
   ['POST', /^\/api\/runs\/(\d+)\/revert$/, revert],
   ['GET', /^\/api\/runs\/(\d+)\/before$/, runFileBefore],
+  ['POST', /^\/api\/runs\/(\d+)\/shell$/, shell],
   ['POST', '/api/attribution/export', exportNote],
   ['GET', '/api/authors', authors],
   ['GET', '/api/layout', layout],

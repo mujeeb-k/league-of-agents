@@ -19,6 +19,7 @@ export async function runHook(kind, agent = 'claude') {
   // Cursor also runs Claude Code's hook files; its payload says it is Cursor's.
   if (data.cursor_version) agent = 'cursor';
   const cwd = data.cwd || data.workspace_roots?.[0] || process.cwd();
+  if (kind === 'post' || (kind === 'pre' && data.tool_name === 'Bash')) await shellBracket(kind, data, cwd);
   if (kind === 'pre') {
     const scopeFile = process.env.LOA_SCOPE_FILE;
     if (!scopeFile || !fs.existsSync(scopeFile)) process.exit(0);
@@ -102,6 +103,37 @@ export async function runHook(kind, agent = 'claude') {
     }),
   );
   done();
+}
+
+/**
+ * A shell command of a session with a section, bracketed: the bridge snapshots before and after it (lib/shell.mjs).
+ * What it changed outside the section is put back, and Claude Code is told so (exit 2). Anything else, a terminal
+ * session among them, passes at once.
+ */
+async function shellBracket(kind, data, cwd) {
+  const scopeFile = process.env.LOA_SCOPE_FILE || '';
+  const id = /scope-(\d+)\.json$/.exec(scopeFile)?.[1];
+  const scope = id ? (readJson(scopeFile, null)?.scope ?? []) : [];
+  const root = scope.length && repoOf(cwd);
+  const b = root && liveBridge(root);
+  if (!b) process.exit(0);
+  try {
+    const res = await fetch(`http://127.0.0.1:${b.port}/api/runs/${id}/shell`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + b.token, 'content-type': 'application/json' },
+      body: JSON.stringify({ phase: kind === 'pre' ? 'start' : 'end', tool: data.tool_use_id }),
+      signal: AbortSignal.timeout(60000),
+    });
+    const { undone = [] } = /** @type {{ undone?: string[] }} */ (await res.json());
+    if (undone.length) {
+      process.stderr.write(
+        `League of Agents scope lock: a shell command changed ${undone.join(', ')} outside the selected scope, so it ` +
+          `was put back. Only edit: ${scope.join(', ')}`,
+      );
+      process.exit(2);
+    }
+  } catch {}
+  process.exit(0);
 }
 
 /** The git repo a folder is in, or null. */

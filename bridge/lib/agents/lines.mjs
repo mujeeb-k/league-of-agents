@@ -30,6 +30,8 @@ export function noteLines(run, file, texts) {
   const rel = path.relative(ROOT, abs).split(path.sep).join('/');
   if (!writes.has(run.id)) writes.set(run.id, new Map());
   const files = writes.get(run.id);
+  // Named even when it added no line: a file it emptied or deleted is still its own.
+  if (!files.has(rel)) files.set(rel, []);
   for (const t of texts) if (typeof t === 'string') files.set(rel, [...(files.get(rel) || []), ...t.split('\n')]);
 }
 /**

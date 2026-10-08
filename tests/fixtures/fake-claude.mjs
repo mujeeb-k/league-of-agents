@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 const args = process.argv.slice(2);
 // While the file FAKE_CLAUDE_LOGGED_OUT names exists, it answers as a logged-out Claude Code does: to
@@ -17,6 +18,36 @@ if (loggedOut) {
   out({ type: 'assistant', error: 'authentication_failed', message: { content: [{ type: 'text', text }] } });
   out({ type: 'result', is_error: true, result: text, session_id: 'sess-123', total_cost_usd: 0 });
   process.exit(1);
+}
+// "shell:<path>" in the prompt: append a line to that file with a shell command instead of the usual edit, run between
+// the PreToolUse and PostToolUse hooks the repo's .claude/settings.local.json holds for Bash, as Claude Code runs them.
+const shells = [...prompt.matchAll(/\bshell:(\S+)/g)].map(m => m[1]);
+if (shells.length) {
+  const hooks = JSON.parse(fs.readFileSync('.claude/settings.local.json', 'utf8')).hooks || {};
+  const runHooks = (event, payload) => {
+    for (const entry of hooks[event] || [])
+      if (new RegExp(`^(${entry.matcher || '.*'})$`).test('Bash'))
+        for (const h of entry.hooks) {
+          const r = spawnSync(h.command, { shell: true, input: JSON.stringify(payload), encoding: 'utf8' });
+          if (r.status === 2) return r.stderr;
+        }
+    return null;
+  };
+  const results = [];
+  for (const [i, file] of shells.entries()) {
+    const command = `printf '// written by a shell command\\n' >> ${file}`;
+    const payload = { tool_name: 'Bash', tool_input: { command }, tool_use_id: `toolu_shell_${i}`, cwd: process.cwd() };
+    out({
+      type: 'assistant',
+      message: { content: [{ type: 'tool_use', id: payload.tool_use_id, name: 'Bash', input: { command } }] },
+    });
+    const refused = runHooks('PreToolUse', payload);
+    if (!refused) fs.appendFileSync(file, '// written by a shell command\n');
+    const told = refused ?? runHooks('PostToolUse', payload);
+    results.push(told ? `${file}: ${told}` : `${file}: written`);
+  }
+  out({ type: 'result', result: results.join('\n'), session_id: 'sess-123', total_cost_usd: 0.0123 });
+  process.exit(0);
 }
 out({
   type: 'assistant',

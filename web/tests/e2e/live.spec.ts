@@ -908,7 +908,13 @@ test('bridge keeps deny rules, records raw agent output, and keeps secret files 
       hooks: Record<string, unknown>;
     };
     expect(settings.permissions.deny).toEqual(deny);
-    expect(Object.keys(settings.hooks).sort()).toEqual(['PreToolUse', 'SessionEnd', 'Stop', 'UserPromptSubmit']);
+    expect(Object.keys(settings.hooks).sort()).toEqual([
+      'PostToolUse',
+      'PreToolUse',
+      'SessionEnd',
+      'Stop',
+      'UserPromptSubmit',
+    ]);
     // Hooks run the bridge's copy inside the repo, so they survive npx clearing its cache.
     const commands = JSON.stringify(settings.hooks);
     expect(commands).toContain(path.join(repo, '.loa', 'bridge.mjs').replace(/\\/g, '\\\\'));
@@ -1318,6 +1324,36 @@ test.describe('sessions at once', () => {
       await until(b, h.id, 'done');
       expect((await runOf(b, h.id)).changes.map(ch => ch.path)).toEqual(['apps/console/main.ts']);
       expect((await state(b)).runs.map(r => r.agent)).toEqual(['hermes', 'codex']);
+    }));
+
+  test("Claude Code's shell commands: inside its section its own, line for line; outside, put back and it is told", () =>
+    twoSessions(async (b, repo) => {
+      const h = (await start(b, ['apps/'], 'edit:apps/console/main.ts wait:a')).body as unknown as RunDTO;
+      const prompt = 'Log it. shell:shared/log.ts shell:notes.md';
+      const c = (await call(b, '/api/runs', { agent: 'claude', prompt, scope: ['shared/'] })).body as unknown as RunDTO;
+      await until(b, c.id, 'done');
+      const run = await runOf(b, c.id);
+      expect(run.changes.map(ch => ch.path)).toEqual(['shared/log.ts']);
+      expect(run.agentLines).toEqual({ 'shared/log.ts': [[1, 1]] });
+      // Outside its section: undone at once, and the agent told why.
+      expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
+      expect(run.summary).toContain('notes.md: League of Agents scope lock: a shell command changed notes.md');
+      expect(run.stream.map(e => e.text).join('\n')).toContain('Put back what a shell command changed outside');
+      go(repo, 'a');
+      await until(b, h.id, 'done');
+      // Nothing left over, and the session reverts on its own.
+      expect((await state(b)).runs.map(r => r.agent)).toEqual(['hermes', 'claude']);
+      expect((await call(b, `/api/runs/${c.id}/revert`, {})).status).toBe(200);
+      expect(fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8')).toBe(SEED['shared/log.ts']);
+      // A terminal session, with no section, passes its shell commands through at once.
+      const t0 = Date.now();
+      const hook = spawnSync(process.execPath, [path.join(repo, '.loa/bridge.mjs'), 'hook', 'pre'], {
+        cwd: repo,
+        input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' }, cwd: repo }),
+        env: { ...process.env, LOA_SCOPE_FILE: '' },
+      });
+      expect(hook.status).toBe(0);
+      expect(Date.now() - t0).toBeLessThan(1000);
     }));
 
   test('sections of sessions at work never overlap, and a whole-repository run works alone', () =>
@@ -2356,7 +2392,13 @@ test('hooks go in only with consent, and removing them restores every file byte 
   const claude = read('.claude/settings.local.json');
   expect(claude.permissions).toEqual({ deny: ['Read(./.env)'] });
   expect(claude.hooks.Stop![0]!.hooks![0]!.command).toBe('say done');
-  expect(Object.keys(claude.hooks).sort()).toEqual(['PreToolUse', 'SessionEnd', 'Stop', 'UserPromptSubmit']);
+  expect(Object.keys(claude.hooks).sort()).toEqual([
+    'PostToolUse',
+    'PreToolUse',
+    'SessionEnd',
+    'Stop',
+    'UserPromptSubmit',
+  ]);
   const codex = read('.codex/hooks.json');
   expect(codex.hooks.UserPromptSubmit![0]!.hooks![0]!.command).toBe('python3 mine.py');
   expect(codex.hooks.UserPromptSubmit![1]!.hooks![0]!.command).toMatch(/\.loa\/bridge\.mjs" hook start codex$/);

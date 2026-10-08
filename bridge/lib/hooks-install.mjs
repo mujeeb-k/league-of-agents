@@ -58,7 +58,9 @@ function ourEntries(agent, cmd) {
   const command = (type, matcher) => ({ ...(matcher ? { matcher } : {}), hooks: [{ type: 'command', command: type }] });
   if (agent === 'claude')
     return {
-      PreToolUse: [command(cmd('pre'), 'Edit|Write|MultiEdit|NotebookEdit')],
+      // Shell commands too: bracketed, so what one changes is told apart (lib/shell.mjs).
+      PreToolUse: [command(cmd('pre'), 'Edit|Write|MultiEdit|NotebookEdit|Bash')],
+      PostToolUse: [command(cmd('post'), 'Bash')],
       UserPromptSubmit: [command(cmd('start'))],
       Stop: [command(cmd('stop'))],
       // Stop does not run when the user interrupts a turn; the session ending closes the run instead.
