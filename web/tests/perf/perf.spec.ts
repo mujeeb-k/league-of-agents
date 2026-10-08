@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { git, startBridge } from '../support/live';
+import { FAKE_ACP, call, git, startBridge, type Bridge } from '../support/live';
 import { APP } from '../support/targets';
 import fr from '../../src/i18n/fr';
 
@@ -578,14 +578,33 @@ interface Measured {
   stateEvent: number;
 }
 
-/** One fresh page load on react-router: map visible, pan and zoom, a click, and an edit made outside the app. */
-async function measureReactRouter(
-  page: Page,
-  base: string,
-  repo: string,
-  file: string,
-  byAuthor: boolean,
-): Promise<Measured> {
+type Mode = 'as it opens' | 'colored by author' | 'three sessions at once';
+/**
+ * Folders of react-router that three sessions work on at once, and a file each edits there. Each is held at work
+ * until its .loa/go-<name> exists (tests/fixtures/fake-acp.mjs).
+ */
+const SECTIONS = [
+  ['packages/react-router/', 'packages/react-router/index.ts'],
+  ['integration/', 'integration/action-test.ts'],
+  ['docs/', 'docs/index.md'],
+];
+
+/**
+ * One fresh page load on react-router: map visible, pan and zoom, a click, and a state event: an edit made outside
+ * the app or, with three sessions at work, one of them finishing.
+ */
+async function measureReactRouter(page: Page, b: Bridge, repo: string, file: string, mode: Mode): Promise<Measured> {
+  const held = SECTIONS.map(() => `s${Math.random().toString(36).slice(2, 8)}`);
+  if (mode === 'three sessions at once') {
+    await expect
+      .poll(async () => ((await call(b, '/api/state')).body.agents as Record<string, { available: boolean }>).hermes)
+      .toMatchObject({ available: true });
+    for (const [i, [scope, file]] of SECTIONS.entries()) {
+      const prompt = `edit:${file} wait:${held[i]}`;
+      const r = await call(b, '/api/runs', { agent: 'hermes', prompt, scope: [scope] });
+      expect(r.status, 'a session starts').toBe(200);
+    }
+  }
   await page.addInitScript(() => {
     const w = window as unknown as { mapVisible: number | null; stateEvents: number[] };
     w.mapVisible = null;
@@ -610,11 +629,12 @@ async function measureReactRouter(
       return res;
     };
   });
-  await page.goto(base);
+  await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
   await page.waitForFunction(() => (window as unknown as { mapVisible: number | null }).mapVisible !== null);
   const mapVisible = await page.evaluate(() => (window as unknown as { mapVisible: number }).mapVisible);
   await page.waitForTimeout(1500);
-  if (byAuthor) {
+  if (mode === 'three sessions at once') await expect(page.locator('#sels .zone b')).toHaveCount(3);
+  if (mode === 'colored by author') {
     await page.keyboard.press('c');
     await page.locator('#byAuthor[aria-pressed="true"]').waitFor();
   }
@@ -658,61 +678,61 @@ async function measureReactRouter(
   );
   await page.mouse.click(spot!.x, spot!.y);
   const selection = await selected;
-  // An edit outside the app: from its state event to the first frame that shows the new run.
-  const runs = await page.locator('#sideList .run').count();
+  // From the state event to the first frame that shows it: an edit outside the app as a new run, or a session's
+  // end as one session fewer at work.
+  const sessions = mode === 'three sessions at once';
+  const counted = sessions ? '#sideList .run.running' : '#sideList .run';
+  const before = await page.locator(counted).count();
   const events = await page.evaluate(() => (window as unknown as { stateEvents: number[] }).stateEvents.length);
-  fs.appendFileSync(path.join(repo, file), `\n// perf ${Date.now()}\n`);
+  if (sessions) fs.writeFileSync(path.join(repo, `.loa/go-${held[0]}`), '');
+  else fs.appendFileSync(path.join(repo, file), `\n// perf ${Date.now()}\n`);
   const shown = await page.evaluate(
-    n =>
+    ({ counted, before, sessions }) =>
       new Promise<number>(resolve => {
-        const look = () =>
-          document.querySelectorAll('#sideList .run').length > n
-            ? requestAnimationFrame(() => resolve(performance.now()))
-            : requestAnimationFrame(look);
+        const look = () => {
+          const n = document.querySelectorAll(counted).length;
+          if (sessions ? n < before : n > before) requestAnimationFrame(() => resolve(performance.now()));
+          else requestAnimationFrame(look);
+        };
         requestAnimationFrame(look);
       }),
-    runs,
+    { counted, before, sessions },
   );
   const event = await page.evaluate(n => (window as unknown as { stateEvents: number[] }).stateEvents[n]!, events);
+  if (sessions) {
+    for (const h of held.slice(1)) fs.writeFileSync(path.join(repo, `.loa/go-${h}`), '');
+    await expect(page.locator(counted)).toHaveCount(0, { timeout: 30_000 });
+  }
   return { mapVisible, panDropped, zoomDropped, selection, stateEvent: shown - event };
 }
 
-// Measured as it opens, and colored by author (spec 017): every line of every file labelled, on each state.
-for (const byAuthor of [false, true])
-  test.describe(`react-router at 246ddbe (1,139 files)${byAuthor ? ', colored by author' : ''}`, () => {
+// Measured as it opens; colored by author (spec 017), every line of every file labelled on each state; and with
+// three sessions at work on sections of their own, each drawn on the map.
+for (const mode of ['as it opens', 'colored by author', 'three sessions at once'] as Mode[])
+  test.describe(`react-router at 246ddbe (1,139 files), ${mode}`, () => {
     const runs: Measured[] = [];
     test.beforeAll(async ({ browser }) => {
       test.setTimeout(600_000);
       const repo = reactRouter();
       const file = 'packages/react-router/index.ts';
-      const b = await startBridge(repo, undefined, { LOA_QUIET_MS: '300' }, ['--no-hooks']);
+      const b = await startBridge(repo, undefined, { LOA_QUIET_MS: '300', LOA_HERMES_BIN: FAKE_ACP }, ['--no-hooks']);
       try {
         for (let i = 0; i < 3; i++) {
           const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-          runs.push(
-            await measureReactRouter(
-              await ctx.newPage(),
-              `http://127.0.0.1:${b.port}/#t=${b.token}`,
-              repo,
-              file,
-              byAuthor,
-            ),
-          );
+          runs.push(await measureReactRouter(await ctx.newPage(), b, repo, file, mode));
           await ctx.close();
         }
       } finally {
         b.stop();
         git(repo, 'checkout', '-q', '--', '.');
       }
-      fs.writeFileSync(
-        path.join(OUT, `react-router${byAuthor ? '-by-author' : ''}.json`),
-        JSON.stringify(runs, null, 2),
-      );
+      fs.writeFileSync(path.join(OUT, `react-router, ${mode}.json`), JSON.stringify(runs, null, 2));
       report(runs);
     });
     const of = (k: keyof Measured) => median(runs.map(r => r[k]));
     // Coloring is turned on after the map is visible, so that budget is measured once, as it opens.
-    if (!byAuthor) test('react-router: map visible under 2 s', () => expect(of('mapVisible')).toBeLessThan(2000));
+    if (mode === 'as it opens')
+      test('react-router: map visible under 2 s', () => expect(of('mapVisible')).toBeLessThan(2000));
     test('react-router: pan and zoom at 60 fps (at most 2% of frames dropped)', () => {
       expect(of('panDropped'), 'pan').toBeLessThanOrEqual(2);
       expect(of('zoomDropped'), 'zoom').toBeLessThanOrEqual(2);
