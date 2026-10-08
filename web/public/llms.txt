@@ -22,6 +22,8 @@ npx leagueofagents-cli@latest
 ## Supported agents
 
 - Claude Code
+- Hermes Agent and DeepSeek Harness, through the Agent Client Protocol
+- Any other Agent Client Protocol harness, added in ~/.config/league-of-agents/agents.json
 - Codex (beta)
 - Cursor (beta)
 

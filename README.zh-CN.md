@@ -58,9 +58,17 @@ npx leagueofagents-cli@latest
 
 ## 适用于
 
-Claude Code，可以从地图或终端使用。Codex 和 Cursor 处于测试版。来自任何其他编辑器或代理的改动会通过监视模式显示出来。
+Claude Code，可以从地图或终端使用。Hermes Agent 和 DeepSeek Harness 通过 Agent Client Protocol 从地图使用（Hermes 需要安装它的 `acp` 扩展）。Codex 和 Cursor 处于测试版。来自任何其他编辑器或代理的改动会通过监视模式显示出来。每次运行都会显示其代理报告的模型。
 
-<sub>使用 Claude Code 构建和测试。对 Codex 和 Cursor 的支持遵循它们公开的格式，并通过了针对这些格式的测试，但还没有用真实的运行完全验证。</sub>
+任何其他支持 Agent Client Protocol 的 harness 都可以添加到你自己的设置中，而不是仓库的设置中：
+
+```json
+[{ "id": "goose", "name": "Goose", "command": ["goose", "acp"] }]
+```
+
+把它保存为 `~/.config/league-of-agents/agents.json`，然后重启 League of Agents。密钥、服务商和模型都保留在各个 harness 自己的设置中。会在编辑前询问的 harness（例如 Hermes）在你的选择范围之外的任何编辑都会被拒绝。不询问的 harness（例如 DeepSeek Harness）所做的这类编辑会在运行结束后标出。
+
+<sub>使用 Claude Code、Hermes Agent 和 DeepSeek Harness 构建和测试。对 Codex 和 Cursor 的支持遵循它们公开的格式，并通过了针对这些格式的测试，但还没有用真实的运行完全验证。</sub>
 
 ## 使用方法
 

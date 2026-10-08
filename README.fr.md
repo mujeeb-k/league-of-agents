@@ -58,9 +58,17 @@ Ensuite :
 
 ## Compatible avec
 
-Claude Code, depuis la carte ou votre terminal. Codex et Cursor sont en bêta. Les changements faits dans tout autre éditeur ou agent apparaissent grâce au mode veille.
+Claude Code, depuis la carte ou votre terminal. Hermes Agent et DeepSeek Harness, depuis la carte, par l’Agent Client Protocol (Hermes a besoin de son extra `acp`). Codex et Cursor sont en bêta. Les changements faits dans tout autre éditeur ou agent apparaissent grâce au mode veille. Chaque exécution affiche le modèle indiqué par son agent.
 
-<sub>Construit et testé avec Claude Code. La prise en charge de Codex et de Cursor suit leurs formats publiés et passe des tests sur ces formats, mais n’a pas encore été entièrement vérifiée avec de vraies exécutions.</sub>
+Tout autre harness qui parle l’Agent Client Protocol peut être ajouté dans vos propres réglages, jamais dans ceux d’un dépôt :
+
+```json
+[{ "id": "goose", "name": "Goose", "command": ["goose", "acp"] }]
+```
+
+Enregistrez-le sous `~/.config/league-of-agents/agents.json`, puis redémarrez League of Agents. Les clés, fournisseurs et modèles restent dans les réglages de chaque harness. Un harness qui demande avant de modifier, comme Hermes, se voit refuser toute modification hors de votre sélection. Les modifications d’un harness qui ne demande pas, comme DeepSeek Harness, sont signalées après l’exécution.
+
+<sub>Construit et testé avec Claude Code, Hermes Agent et DeepSeek Harness. La prise en charge de Codex et de Cursor suit leurs formats publiés et passe des tests sur ces formats, mais n’a pas encore été entièrement vérifiée avec de vraies exécutions.</sub>
 
 ## Utilisation
 
