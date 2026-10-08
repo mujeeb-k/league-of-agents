@@ -23,7 +23,7 @@ const catalogue: Catalogue = {
     'El puente rechazó ese enlace. Copia el último que mostró.',
   'The bridge locked itself after too many wrong links. Restart it with npx leagueofagents-cli@latest start.':
     'El puente se bloqueó tras demasiados enlaces incorrectos. Reinícialo con npx leagueofagents-cli@latest start.',
-  "{agent} isn't installed on this computer.": '{agent} no está instalado en este ordenador.',
+  "{agent} isn't installed on this computer.": '{agent} no está instalado en esta computadora.',
   'That run no longer exists on the bridge.': 'Esa ejecución ya no existe en el puente.',
   "The bridge couldn't do that. Try again, or restart the bridge if it keeps happening.":
     'El puente no pudo hacerlo. Inténtalo de nuevo o reinicia el puente si sigue pasando.',
@@ -51,7 +51,7 @@ const catalogue: Catalogue = {
   'Not installed': 'No instalado',
   'Not logged in': 'Sin sesión iniciada',
   'Agents found on this machine. Changes made in any editor or other agent show up as runs on their own.':
-    'Agentes encontrados en este equipo. Los cambios hechos en cualquier editor u otro agente aparecen como ejecuciones propias.',
+    'Agentes encontrados en esta computadora. Los cambios hechos en cualquier editor u otro agente aparecen como ejecuciones propias.',
   'Demo data. Connect a repo to run real agents.':
     'Datos de demostración. Conecta un repositorio para ejecutar agentes reales.',
   "Claude Code isn't installed": 'Claude Code no está instalado',
@@ -96,7 +96,7 @@ const catalogue: Catalogue = {
     'Pega el enlace completo que mostró el puente. Empieza por http://127.0.0.1.',
   'Connect your repo': 'Conecta tu repositorio',
   'A small bridge runs on your machine, inside your repo.':
-    'Un pequeño puente se ejecuta en tu equipo, dentro de tu repositorio.',
+    'Un pequeño puente se ejecuta en tu computadora, dentro de tu repositorio.',
   Privacy: 'Privacidad',
   'Paste this into your coding agent': 'Pega esto en tu agente de código',
   'Or run it yourself in your repo:': 'O ejecútalo tú en tu repositorio:',
@@ -105,7 +105,7 @@ const catalogue: Catalogue = {
   'Bridge link': 'Enlace del puente',
   'http://127.0.0.1:43210/#t=…': 'http://127.0.0.1:43210/#t=…',
   'Chrome, Edge, Brave and Arc ask once to let this site reach apps on your computer, because the bridge runs there: choose Allow. To skip it, open the link the bridge prints that starts with http://127.0.0.1, the local app.':
-    'Chrome, Edge, Brave y Arc piden una vez dejar que este sitio llegue a las apps de tu ordenador, porque el puente se ejecuta ahí: elige Permitir. Para saltarlo, abre el enlace que muestra el puente que empieza por http://127.0.0.1, la app local.',
+    'Chrome, Edge, Brave y Arc piden una vez dejar que este sitio llegue a las apps de tu computadora, porque el puente se ejecuta ahí: elige Permitir. Para saltarlo, abre el enlace que muestra el puente que empieza por http://127.0.0.1, la app local.',
   Cancel: 'Cancelar',
   'Imports {path}. Open it': 'Importa {path}. Abrirlo',
   'Used by {path}. Open it': 'Usado por {path}. Abrirlo',
@@ -179,7 +179,7 @@ const catalogue: Catalogue = {
   "Changed in run {id}, by {agent}. Who typed it isn't known: the agent didn't write it with its edit tools.":
     'Cambiada en la ejecución {id}, por {agent}. No se sabe quién la escribió: el agente no la escribió con sus herramientas de edición.',
   "No run kept on this computer changed it, so who wrote it isn't known.":
-    'Ninguna ejecución guardada en este ordenador la cambió, así que no se sabe quién la escribió.',
+    'Ninguna ejecución guardada en esta computadora la cambió, así que no se sabe quién la escribió.',
   Authors: 'Autores',
   'Line {n}:': 'Línea {n}:',
   'Open run': 'Abrir la ejecución',
@@ -207,7 +207,7 @@ const catalogue: Catalogue = {
   'Write a prompt': 'Escribir un prompt',
   "Couldn't run": 'No se pudo ejecutar',
   'Something this check needs is missing on this machine.':
-    'A este equipo le falta algo que necesita esta comprobación.',
+    'A esta computadora le falta algo que necesita esta comprobación.',
   'Turned off.': 'Desactivada.',
   'Turn off': 'Desactivar',
   "This repo's loa.config.json asks to run these commands after each run:":
@@ -218,7 +218,7 @@ const catalogue: Catalogue = {
   'Also save them in loa.config.json, to share with your team':
     'Guardarlas también en loa.config.json, para compartirlas con tu equipo',
   'Nothing runs until you turn them on here. Read the commands first: they run on your computer.':
-    'Nada se ejecuta hasta que las actives aquí. Lee primero los comandos: se ejecutan en tu ordenador.',
+    'Nada se ejecuta hasta que las actives aquí. Lee primero los comandos: se ejecutan en tu computadora.',
   'Nothing runs until you turn them on. Unless you share them, they stay in .loa/, out of your repo.':
     'Nada se ejecuta hasta que las actives. Salvo que las compartas, se quedan en .loa/, fuera de tu repositorio.',
   '{n} files': { one: '{n} archivo', other: '{n} archivos' },
@@ -296,19 +296,19 @@ const catalogue: Catalogue = {
   "Your bridge didn't accept this link": 'Tu puente no aceptó este enlace',
   "Can't reach your bridge": 'No se puede conectar con tu puente',
   "This browser is set to keep {host} from reaching apps on your computer, so it can't reach the bridge. The local app needs no permission. To allow this site instead, click the icon left of the address, turn on access to apps on this device, and try again.":
-    'Este navegador impide que {host} llegue a las apps de tu ordenador, así que no puede conectar con el puente. La app local no necesita permiso. Para permitir este sitio, haz clic en el icono a la izquierda de la dirección, activa el acceso a las apps de este dispositivo y vuelve a intentarlo.',
+    'Este navegador impide que {host} llegue a las apps de tu computadora, así que no puede conectar con el puente. La app local no necesita permiso. Para permitir este sitio, haz clic en el icono a la izquierda de la dirección, activa el acceso a las apps de este dispositivo y vuelve a intentarlo.',
   'Nothing answered at {address}. The bridge may not be running, or this browser may be keeping the page from reaching your computer (in Chrome, the local network permission). The local app needs no permission.':
-    'Nada respondió en {address}. Puede que el puente no esté en marcha, o que este navegador impida a la página llegar a tu ordenador (en Chrome, el permiso de red local). La app local no necesita permiso.',
+    'Nada respondió en {address}. Puede que el puente no esté en marcha, o que este navegador impida a la página llegar a tu computadora (en Chrome, el permiso de red local). La app local no necesita permiso.',
   "If the bridge isn't running, start it in your repo:": 'Si el puente no está en marcha, inícialo en tu repositorio:',
   'Open the local app': 'Abrir la app local',
   'Your browser will ask to connect': 'Tu navegador pedirá permiso para conectar',
   'League of Agents runs on your computer, and this page connects to it there. Next, your browser asks to let {host} reach apps on this device. Choose Allow.':
-    'League of Agents se ejecuta en tu ordenador, y esta página se conecta a él allí. Después, tu navegador pide dejar que {host} llegue a las apps de este dispositivo. Elige Permitir.',
+    'League of Agents se ejecuta en tu computadora, y esta página se conecta a él allí. Después, tu navegador pide dejar que {host} llegue a las apps de este dispositivo. Elige Permitir.',
   Continue: 'Continuar',
   'Open the local app instead': 'Abrir la app local',
   'Connecting to your repo': 'Conectando con tu repositorio',
   'Waiting for the bridge on this computer. If Chrome or Edge asks to let this site reach your computer, choose Allow.':
-    'Esperando al puente en este ordenador. Si Chrome o Edge pide dejar que este sitio llegue a tu ordenador, elige Permitir.',
+    'Esperando al puente en esta computadora. Si Chrome o Edge pide dejar que este sitio llegue a tu computadora, elige Permitir.',
   'Show the demo meanwhile': 'Mostrar la demostración mientras tanto',
   'This repository has no files yet': 'Este repositorio aún no tiene archivos',
   'Add a file and commit it, or describe what to build in the prompt below. New files appear here as they are made.':

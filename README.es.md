@@ -13,7 +13,7 @@ League of Agents es un mapa de tu código donde diriges agentes de código y rev
 
 Los agentes de código cambian más código del que nadie puede revisar línea por línea. League of Agents muestra tu proyecto como un mapa, y cada cambio que hace un agente aparece en él. Ves qué cambió, dónde y si todo sigue funcionando, y luego lo conservas o lo deshaces.
 
-Se ejecuta en tu ordenador, funciona con los agentes que ya usas y es de código abierto.
+Se ejecuta en tu computadora, funciona con los agentes que ya usas y es de código abierto.
 
 ![Seleccionar una carpeta en el mapa, pedir un cambio a Claude Code y revisar el diff de la ejecución archivo por archivo](docs/media/demo.gif)
 
@@ -45,7 +45,7 @@ npx leagueofagents-cli@latest
 Qué pasa después:
 
 1. League of Agents se inicia en segundo plano y abre tu repositorio como un mapa en tu navegador.
-2. En Chrome, Edge, Brave y Arc, se abre en leagueofagents.dev. El navegador pide una vez dejar que el sitio llegue a tu ordenador: elige Permitir. En Safari y Firefox, abre la app local, que no necesita permiso.
+2. En Chrome, Edge, Brave y Arc, se abre en leagueofagents.dev. El navegador pide una vez dejar que el sitio llegue a tu computadora: elige Permitir. En Safari y Firefox, abre la app local, que no necesita permiso.
 3. Selecciona un archivo, describe un cambio y pulsa Enter.
 
 ### Requisitos
@@ -78,9 +78,9 @@ Un archivo renombrado conserva su lugar en el mapa y aparece como renombrado, co
 
 ### Comprobaciones
 
-Si tu repositorio no tiene ninguna configurada, League of Agents busca scripts de pruebas y de comprobación de tipos, y pytest, y se ofrece a activarlos. Se guardan en tu carpeta personal, fuera de tu repositorio, salvo que elijas compartirlos con tu equipo en `loa.config.json`. Las comprobaciones que un repositorio incluye en su `loa.config.json` se ofrecen con sus comandos, y solo se ejecutan cuando las activas en tu copia; si la lista cambia, vuelven a esperarte. Una comprobación que no puede ejecutarse en tu equipo, porque falta algo que necesita, aparece como "No se pudo ejecutar" en lugar de fallar, y se puede desactivar con un clic. Consulta [`loa.config.example.json`](loa.config.example.json) para escribir las tuyas.
+Si tu repositorio no tiene ninguna configurada, League of Agents busca scripts de pruebas y de comprobación de tipos, y pytest, y se ofrece a activarlos. Se guardan en tu carpeta personal, fuera de tu repositorio, salvo que elijas compartirlos con tu equipo en `loa.config.json`. Las comprobaciones que un repositorio incluye en su `loa.config.json` se ofrecen con sus comandos, y solo se ejecutan cuando las activas en tu copia; si la lista cambia, vuelven a esperarte. Una comprobación que no puede ejecutarse en tu computadora, porque falta algo que necesita, aparece como "No se pudo ejecutar" en lugar de fallar, y se puede desactivar con un clic. Consulta [`loa.config.example.json`](loa.config.example.json) para escribir las tuyas.
 
-### Qué escribe en tu equipo
+### Qué escribe en tu computadora
 
 En tu repositorio:
 
@@ -97,7 +97,7 @@ En la configuración de los agentes, solo después de que digas que sí a los ho
 - Claude Code: `.claude/settings.local.json` en el repositorio, fuera de git.
 - Codex: `.codex/hooks.json` en el repositorio, fuera de git si lo creó League of Agents.
 
-Un archivo de hooks que está en git nunca se edita: los hooks contienen rutas de este ordenador. League of Agents lo indica al iniciarse, y las sesiones de terminal de ese agente no se registran.
+Un archivo de hooks que está en git nunca se edita: los hooks contienen rutas de esta computadora. League of Agents lo indica al iniciarse, y las sesiones de terminal de ese agente no se registran.
 - Cursor: `~/.cursor/hooks.json` en tu carpeta personal. Cursor solo lee los hooks del proyecto en la carpeta que abrió, que a menudo está por encima del repositorio.
 
 Tus propios hooks en estos archivos nunca se modifican. Tu navegador también guarda el puerto y el token del puente, y tus preferencias de paneles, tema e idioma, en su propio almacenamiento.
@@ -117,7 +117,7 @@ Para quitarlo:
 League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized. League of Agents nunca sube tu código a ningún sitio. Tu código va solo al agente que autorizaste.
 
 - **El puente** solo se comunica con 127.0.0.1: la app en tu navegador y los hooks de tus agentes. No hace ninguna otra petición de red. Ejecuta git en local y nunca hace fetch ni push. Al iniciarse, abre tu navegador en leagueofagents.dev o en la app local, y ejecuta `claude auth status` para ver si Claude Code tiene sesión iniciada.
-- **leagueofagents.dev** sirve archivos estáticos: la página, sus scripts, fuentes e imágenes. Se comunica con el puente directamente desde tu navegador, así que tu código, tus prompts y tus ejecuciones solo viajan entre tu navegador y tu ordenador. Cuenta las visitas a la página con Vercel Web Analytics: la ruta de la página, sin nada de lo que va después de `?` o `#`; el sitio que enlazó a ella; el país, la región y la ciudad, deducidos de la petición; y el sistema operativo, el navegador y el tipo de dispositivo. Sin cookies. La app que sirve el puente en tu ordenador no cuenta nada. Los detalles están en la [página de privacidad](https://leagueofagents.dev/privacy).
+- **leagueofagents.dev** sirve archivos estáticos: la página, sus scripts, fuentes e imágenes. Se comunica con el puente directamente desde tu navegador, así que tu código, tus prompts y tus ejecuciones solo viajan entre tu navegador y tu computadora. Cuenta las visitas a la página con Vercel Web Analytics: la ruta de la página, sin nada de lo que va después de `?` o `#`; el sitio que enlazó a ella; el país, la región y la ciudad, deducidos de la petición; y el sistema operativo, el navegador y el tipo de dispositivo. Sin cookies. La app que sirve el puente en tu computadora no cuenta nada. Los detalles están en la [página de privacidad](https://leagueofagents.dev/privacy).
 - **La instalación** descarga el paquete del registro de npm.
 - **Tu agente** recibe tu prompt y una lista de los archivos o líneas seleccionados, como rutas y números de línea. "Actualizar lo que depende de esto" también pone el diff de tu cambio en el prompt. El agente envía lo que lee y lo que recibe a su propio proveedor, según las condiciones de ese proveedor.
 - **Tus comprobaciones** ejecutan los comandos que activaste. Lo que hagan depende de ellos.
@@ -140,16 +140,16 @@ Una continuación añade `--resume <session>` para Claude Code y Cursor, y `resu
 
 ## Privacidad y seguridad
 
-League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized. League of Agents nunca sube tu código a ningún sitio. Tu código va solo al agente que autorizaste. Qué envía, y a dónde, está explicado [más arriba](#qué-envía). Quién puede llegar a League of Agents en tu ordenador, y cómo está protegido, se explica en [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md). Informa de los problemas de seguridad de forma privada, como explica [SECURITY.md](SECURITY.md).
+League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized. League of Agents nunca sube tu código a ningún sitio. Tu código va solo al agente que autorizaste. Qué envía, y a dónde, está explicado [más arriba](#qué-envía). Quién puede llegar a League of Agents en tu computadora, y cómo está protegido, se explica en [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md). Informa de los problemas de seguridad de forma privada, como explica [SECURITY.md](SECURITY.md).
 
 Las instantáneas excluyen los archivos que git ignora, y cualquier archivo que aún no esté en un commit con uno de estos nombres, en cualquier carpeta: `.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.kdbx`, `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `.npmrc`, `.pypirc`, `.netrc`, `.git-credentials`, `.htpasswd`, `credentials.json`, `secrets.json`, `secrets.yaml`, `secrets.yml`, `service-account*.json`, `*.tfvars`. Esta lista no es completa: un secreto con cualquier otro nombre entra en las instantáneas como cualquier archivo, así que guarda los secretos en archivos que git ignore. Un archivo que ya está en un commit forma parte del historial de tu repositorio, y las instantáneas lo incluyen.
 
-Las instantáneas se quedan en tu ordenador salvo que las envíes: `git push`, `git push --all` y `git push --tags` nunca incluyen `refs/loa/`, pero `git push --mirror` envía todas las refs, `refs/loa/` incluidas, y lo mismo ocurre si copias la carpeta `.git`. Ejecuta `uninstall` antes si haces un mirror de un repositorio.
+Las instantáneas se quedan en tu computadora salvo que las envíes: `git push`, `git push --all` y `git push --tags` nunca incluyen `refs/loa/`, pero `git push --mirror` envía todas las refs, `refs/loa/` incluidas, y lo mismo ocurre si copias la carpeta `.git`. Ejecuta `uninstall` antes si haces un mirror de un repositorio.
 
 ## Límites
 
 - macOS. Linux supera todo el conjunto de pruebas en CI, pero aún no se ha probado con un agente real; allí abre la app local. Windows aún no es compatible.
-- No son compatibles las máquinas remotas, SSH ni los dev containers. League of Agents debe ejecutarse en el mismo ordenador que tu navegador.
+- No son compatibles las máquinas remotas, SSH ni los dev containers. League of Agents debe ejecutarse en el misma computadora que tu navegador.
 - El mapa muestra hasta 1500 archivos de código, y las primeras 400 líneas de cada uno. Los archivos de más de 400 KB no aparecen en el mapa. Los diffs conservan las primeras 4000 líneas de un archivo.
 - Los archivos que no son de código, como las imágenes, están en las instantáneas y en el deshacer, pero no en el mapa.
 - Los archivos que git ignora y los archivos nuevos que suelen contener secretos nunca se registran.
@@ -182,15 +182,15 @@ Las instantáneas se quedan en tu ordenador salvo que las envíes: `git push`, `
 - **Fija una versión.** `@latest` descarga la versión más reciente cada vez. Para ejecutar la misma versión en todas partes, indícala: `npx leagueofagents-cli@0.1.3`. Las versiones aparecen en [npm](https://www.npmjs.com/package/leagueofagents-cli?activeTab=versions) y en las etiquetas de este repositorio.
 - **Un registro interno.** El paquete no tiene dependencias, así que un mirror solo necesita el propio `leagueofagents-cli`: `npx --registry https://npm.example.internal leagueofagents-cli@0.1.3`, o define `registry` en tu `.npmrc`.
 - **Sin sitio web.** `--local` usa solo la app que League of Agents sirve en 127.0.0.1, en todos los navegadores, y no deja que se conecte ningún sitio web. No se descarga nada de leagueofagents.dev.
-- **Comprobaciones en un repositorio compartido.** Las comprobaciones incluidas en `loa.config.json` solo se ejecutan en un ordenador después de que la persona que lo usa apruebe esa lista exacta, y de nuevo tras cualquier cambio en ella. Las aprobaciones se guardan en la carpeta personal de cada persona, nunca en el repositorio.
+- **Comprobaciones en un repositorio compartido.** Las comprobaciones incluidas en `loa.config.json` solo se ejecutan en una computadora después de que la persona que la usa apruebe esa lista exacta, y de nuevo tras cualquier cambio en ella. Las aprobaciones se guardan en la carpeta personal de cada persona, nunca en el repositorio.
 - **Archivos de hooks en git.** Un archivo de hooks que está en git nunca se edita, así que las sesiones de terminal de ese agente no se registran.
-- **Qué se queda en cada ordenador.** Las ejecuciones y las instantáneas se guardan por repositorio y por ordenador: las 500 ejecuciones más recientes y todas las de los últimos 30 días. Las instantáneas excluyen los archivos que git ignora y los archivos sin seguimiento que suelen contener secretos ([lista](#privacidad-y-seguridad)). `git push --mirror` las enviaría; los push normales nunca lo hacen.
+- **Qué se queda en cada ordenador.** Las ejecuciones y las instantáneas se guardan por repositorio y por computadora: las 500 ejecuciones más recientes y todas las de los últimos 30 días. Las instantáneas excluyen los archivos que git ignora y los archivos sin seguimiento que suelen contener secretos ([lista](#privacidad-y-seguridad)). `git push --mirror` las enviaría; los push normales nunca lo hacen.
 
 ## Cómo funciona
 
 League of Agents tiene dos partes:
 
-- **El puente** (`bridge/loa.mjs`) se ejecuta en tu ordenador, dentro de tu repositorio. Node 20 o posterior, sin dependencias. Antes y después de cada ejecución, guarda una instantánea de tus archivos en un commit de git usando un índice privado, así que tu rama y tu área de staging nunca se tocan. Los diffs salen de comparar las dos instantáneas. Deshacer restaura la instantánea de "antes", y pregunta primero si un archivo volvió a cambiar desde entonces.
+- **El puente** (`bridge/loa.mjs`) se ejecuta en tu computadora, dentro de tu repositorio. Node 20 o posterior, sin dependencias. Antes y después de cada ejecución, guarda una instantánea de tus archivos en un commit de git usando un índice privado, así que tu rama y tu área de staging nunca se tocan. Los diffs salen de comparar las dos instantáneas. Deshacer restaura la instantánea de "antes", y pregunta primero si un archivo volvió a cambiar desde entonces.
 - **La app** (`web/`, hecha con Vite, React y TypeScript) es el mapa que usas. Se sirve en leagueofagents.dev y desde el propio puente.
 
 Hay más detalles en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
