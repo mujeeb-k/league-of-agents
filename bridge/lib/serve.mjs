@@ -4,7 +4,9 @@ import { execFile } from 'node:child_process';
 import { logError, onPath } from './util.mjs';
 import { WEB_URL, ASKED_PORT } from './args.mjs';
 import { ROOT, bridgeFile, TOKEN } from './repo.mjs';
-import { AGENTS, ACP, CLAUDE_RECHECK_MS, checkClaude } from './agents.mjs';
+import { AGENTS, ACP } from './agents/registry.mjs';
+import { CLAUDE_RECHECK_MS, checkClaude } from './agents/claude.mjs';
+import { stopSessions } from './sessions.mjs';
 import { copyForHooks, installHooks, removeHooks } from './hooks-install.mjs';
 import { active, loadRuns, pruneRuns, finishRun, interruptLeftover } from './runs.mjs';
 import { watch } from './watch.mjs';
@@ -37,9 +39,7 @@ export async function serve(hooks) {
       const run = active?.run;
       if (run) {
         run.status = 'interrupted';
-        if (active.child) active.child.kill('SIGTERM');
-        else await finishRun(run, 'interrupted').catch(logError);
-        for (const t0 = Date.now(); active && Date.now() - t0 < 5000;) await new Promise(r => setTimeout(r, 50));
+        if (!(await stopSessions())) await finishRun(run, 'interrupted').catch(logError);
       }
       process.exit(0);
     });

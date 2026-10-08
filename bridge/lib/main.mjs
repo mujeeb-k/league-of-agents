@@ -3,7 +3,7 @@ import path from 'node:path';
 import { argv } from './args.mjs';
 import { ROOT, prev, openRepo } from './repo.mjs';
 import { initChecks } from './checks.mjs';
-import { loadAgents } from './agents.mjs';
+import { loadAgents } from './agents/registry.mjs';
 import {
   linkOf,
   running,

@@ -19,7 +19,10 @@ import {
   setRepoChecks,
   setChecksShared,
 } from './checks.mjs';
-import { AGENTS, CLAUDE_FIX, checkClaude, startAgent, onAgentLine } from './agents.mjs';
+import { AGENTS } from './agents/registry.mjs';
+import { CLAUDE_FIX, checkClaude } from './agents/claude.mjs';
+import { onAgentLine } from './agents/stream.mjs';
+import { cancelSession, startSession } from './sessions.mjs';
 import { removeHooks } from './hooks-install.mjs';
 import { linkOf } from './cli.mjs';
 import { readTree, hashOf, repoFile } from './files.mjs';
@@ -236,7 +239,7 @@ async function handle(req, res) {
         resumeFrom: parent?.id ?? null,
         sessionId: parent?.agent === b.agent ? parent.sessionId : null,
       });
-      startAgent(run, read);
+      startSession(run, read);
       return send(res, 200, publicRun(run), cors);
     }
     const m = p.match(/^\/api\/runs\/(\d+)\/(cancel|keep|revert)$/);
@@ -245,11 +248,10 @@ async function handle(req, res) {
       if (!run) return send(res, 404, { error: 'No such run' }, cors);
       const b = await readBody(req);
       if (m[2] === 'cancel') {
-        if (active?.run === run) {
+        // A captured terminal turn has no agent of ours to stop: it ends here.
+        if (active?.run === run && !cancelSession(run)) {
           run.status = 'cancelled';
-          if (active.cancel) active.cancel();
-          else if (active.child) active.child.kill('SIGTERM');
-          else await finishRun(run, 'cancelled');
+          await finishRun(run, 'cancelled');
         }
         return send(res, 200, { ok: true }, cors);
       }

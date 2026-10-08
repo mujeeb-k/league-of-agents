@@ -12,7 +12,9 @@ const LIB = path.join(__dirname, '../../../bridge/lib');
 const COMMANDS = ['main.mjs'];
 
 describe('the bridge modules', () => {
-  const modules = fs.readdirSync(LIB).filter(f => f.endsWith('.mjs') && !COMMANDS.includes(f));
+  const modules = (fs.readdirSync(LIB, { recursive: true }) as string[]).filter(
+    f => f.endsWith('.mjs') && !COMMANDS.includes(f),
+  );
   it.each(modules)('%s loads without output, errors or files written', file => {
     // Outside any git repo, where code that sets the bridge up would fail loudly.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'loa-load-'));

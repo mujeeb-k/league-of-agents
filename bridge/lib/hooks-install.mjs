@@ -32,7 +32,8 @@ export const hookFile = () => path.join(LOA, 'bridge.mjs');
  * new one, never half of one. Copies over a day old go; a hook still running from one has long since loaded it.
  */
 export function copyForHooks() {
-  const files = ['loa.mjs', ...fs.readdirSync(path.join(BRIDGE_DIR, 'lib')).map(f => `lib/${f}`)];
+  const lib = /** @type {string[]} */ (fs.readdirSync(path.join(BRIDGE_DIR, 'lib'), { recursive: true }));
+  const files = ['loa.mjs', ...lib.filter(f => f.endsWith('.mjs')).map(f => `lib/${f}`)];
   const hash = crypto.createHash('sha256');
   for (const f of files) hash.update(f).update(fs.readFileSync(path.join(BRIDGE_DIR, f)));
   const dir = `b-${hash.digest('hex').slice(0, 12)}`,

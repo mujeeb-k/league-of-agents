@@ -5,7 +5,7 @@ import { readJson, splitLines, serial } from './util.mjs';
 import { inScope, rangeKept, scopeEntry } from './scope.mjs';
 import { ROOT, RUNS_DIR, CONF, git } from './repo.mjs';
 import { runChecks } from './checks.mjs';
-import { agentLinesOf } from './agents.mjs';
+import { agentLinesOf } from './agents/lines.mjs';
 import { writeTree, commitTree, headNow, pin, showAt, computeChanges } from './snapshots.mjs';
 import { base, setBase, rebase, settle } from './watch.mjs';
 import { emit, emitRun } from './events.mjs';
@@ -19,7 +19,8 @@ export function loadRuns() {
       if (r) runs.set(r.id, r);
     }
 }
-export let active = null; // { run, child, cancel }: cancel, for a harness asked to stop its turn (startAcp)
+/** The run under way, if any: `{ run }`. */
+export let active = null;
 const nextId = () => Math.max(0, ...runs.keys()) + 1;
 /** Runs kept: the newest KEEP_RUNS, and every run from the last KEEP_DAYS days, whichever is more. */
 const KEEP_RUNS = 500,
@@ -96,7 +97,7 @@ export function beginRun(opts) {
     run.before = before;
     await pin(run.id, 'before', run.before);
     runs.set(run.id, run);
-    active = { run, child: null };
+    active = { run };
     saveRun(run);
     emit('state');
     return run;

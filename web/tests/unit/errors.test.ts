@@ -53,7 +53,9 @@ describe('explain', () => {
     const dir = path.join(__dirname, '../../../bridge');
     const bridge = [
       path.join(dir, 'loa.mjs'),
-      ...fs.readdirSync(path.join(dir, 'lib')).map(f => path.join(dir, 'lib', f)),
+      ...(fs.readdirSync(path.join(dir, 'lib'), { recursive: true }) as string[])
+        .filter(f => f.endsWith('.mjs'))
+        .map(f => path.join(dir, 'lib', f)),
     ]
       .map(f => fs.readFileSync(f, 'utf8'))
       .join('\n');

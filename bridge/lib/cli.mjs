@@ -9,7 +9,7 @@ import { readJson } from './util.mjs';
 import { argv, SITE, WEB_URL, APP_PATH } from './args.mjs';
 import { ROOT, LOA, bridgeFile, EXCLUDED, excludeFile, git } from './repo.mjs';
 import { CHECKS_FILE } from './checks.mjs';
-import { CLAUDE_FIX, claudeProblemNow } from './agents.mjs';
+import { CLAUDE_FIX, claudeProblemNow } from './agents/claude.mjs';
 import { hookFiles, shown, removeHooks } from './hooks-install.mjs';
 
 // The bridge runs in the background, in its own process group, so it outlives the terminal or the agent
