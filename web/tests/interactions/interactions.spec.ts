@@ -1326,3 +1326,54 @@ test("opening a file hides the tile's name label, which would float over the edi
   await expect(page.locator('#editor')).toBeVisible();
   await expect(page.locator('#tileName')).toBeHidden();
 });
+
+// Run before each promotion (npm run smoke): every shortcut on every language's homepage, with no page error.
+for (const home of ['/', '/zh-CN/', '/fr/', '/pt-BR/', '/es/'])
+  test(`smoke: every shortcut on ${home}, no page errors`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', e => errors.push(e.message));
+    page.on('console', m => m.type() === 'error' && errors.push(m.text()));
+    await page.goto(home);
+    await page.locator('#insp section').first().waitFor();
+    const keys = [
+      'd',
+      'b',
+      'a',
+      'j',
+      'k',
+      'ArrowDown',
+      'ArrowUp',
+      'r',
+      'c',
+      'c',
+      '0',
+      'f',
+      '=',
+      '+',
+      '-',
+      '[',
+      '[',
+      ']',
+      ']',
+    ];
+    for (const k of keys) await page.keyboard.press(k);
+    // Enter opens the selected file; Esc closes it.
+    await page.keyboard.press('0');
+    await page.locator('.fr[data-path="server/delivery/endpoint-health.ts"]').click();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#editor')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#editor')).toHaveCount(0);
+    await page.keyboard.press('/');
+    await expect(page.locator('#prompt')).toBeFocused();
+    await page.keyboard.press('Escape');
+    for (const k of ['ControlOrMeta+k', 'ControlOrMeta+p']) {
+      await page.keyboard.press(k);
+      await expect(page.locator('#palette')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#palette')).toHaveCount(0);
+    }
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#stage')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
