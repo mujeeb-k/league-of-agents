@@ -8,7 +8,7 @@ import { AGENTS, ACP } from './agents/registry.mjs';
 import { CLAUDE_RECHECK_MS, checkClaude } from './agents/claude.mjs';
 import { stopSessions } from './sessions.mjs';
 import { copyForHooks, installHooks, removeHooks } from './hooks-install.mjs';
-import { active, loadRuns, pruneRuns, finishRun, interruptLeftover } from './runs.mjs';
+import { working, loadRuns, pruneRuns, finishRun, interruptLeftover } from './runs.mjs';
 import { watch } from './watch.mjs';
 import { emit } from './events.mjs';
 import { createBridgeServer, firstFreePort, listening } from './server.mjs';
@@ -36,11 +36,10 @@ export async function serve(hooks) {
   // Stopping the bridge mid-run closes the run the same way; an agent it started is stopped first.
   for (const sig of ['SIGTERM', 'SIGINT'])
     process.on(sig, async () => {
-      const run = active?.run;
-      if (run) {
-        run.status = 'interrupted';
-        if (!(await stopSessions())) await finishRun(run, 'interrupted').catch(logError);
-      }
+      const left = [...working.values()];
+      for (const run of left) run.status = 'interrupted';
+      // A captured terminal turn has no agent of ours to stop: it ends here.
+      if (!(await stopSessions())) for (const run of left) await finishRun(run, 'interrupted').catch(logError);
       process.exit(0);
     });
   const server = createBridgeServer(port);

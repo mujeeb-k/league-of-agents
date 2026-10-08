@@ -3,10 +3,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readJson, splitLines, serial } from './util.mjs';
 import { inScope, rangeKept, scopeEntry } from './scope.mjs';
-import { ROOT, RUNS_DIR, CONF, git } from './repo.mjs';
-import { runChecks } from './checks.mjs';
+import { ROOT, RUNS_DIR, git } from './repo.mjs';
 import { agentLinesOf } from './agents/lines.mjs';
-import { writeTree, commitTree, headNow, pin, showAt, computeChanges } from './snapshots.mjs';
+import { pin, showAt, computeChanges, snapshotNow } from './snapshots.mjs';
+import {
+  checksFor,
+  clash,
+  joinEpoch,
+  keepsBaseline,
+  leaveEpoch,
+  noteRevert,
+  ownChanges,
+  startingPoint,
+} from './parallel.mjs';
 import { base, setBase, rebase, settle } from './watch.mjs';
 import { emit, emitRun } from './events.mjs';
 
@@ -19,8 +28,8 @@ export function loadRuns() {
       if (r) runs.set(r.id, r);
     }
 }
-/** The run under way, if any: `{ run }`. */
-export let active = null;
+/** The runs under way, by id: several at once when their sections don't overlap (parallel.mjs). */
+export const working = new Map();
 const nextId = () => Math.max(0, ...runs.keys()) + 1;
 /** Runs kept: the newest KEEP_RUNS, and every run from the last KEEP_DAYS days, whichever is more. */
 const KEEP_RUNS = 500,
@@ -85,57 +94,46 @@ export function newRun({ agent, prompt = '', scope = [], resumeFrom = null, sess
 }
 export function beginRun(opts) {
   return serial(async () => {
-    if (active)
-      throw Object.assign(new Error(`Run ${active.run.id} is still active`), {
-        code: 409,
-        reason: 'run-active',
-        args: { id: active.run.id },
-      });
-    // Changes made before the run started are recorded on their own, so they never count as the agent's.
-    const before = await settle();
+    const refused = clash(opts.scope ?? []);
+    if (refused) throw refused;
+    const before = await startingPoint(settle);
     const run = newRun(opts);
     run.before = before;
+    joinEpoch(run);
     await pin(run.id, 'before', run.before);
     runs.set(run.id, run);
-    active = { run };
+    working.set(run.id, run);
     saveRun(run);
     emit('state');
     return run;
   });
 }
-export async function finishRun(run, status = 'done') {
-  // Watch mode's runs arrive with their after snapshot; an agent's is taken now and becomes the baseline.
+/** Ends a run with its changes. `checks: false` leaves its checks to the caller (parallel.mjs, an epoch's end). */
+export async function finishRun(run, status = 'done', { checks = true } = {}) {
+  // Watch mode's runs arrive with their after snapshot; an agent's is taken now and, unless others overlapped it,
+  // becomes the baseline.
   if (!run.after)
     await serial(async () => {
-      const head = await headNow(),
-        tree = await writeTree();
-      run.after = await commitTree(tree, `run ${run.id} after`, head);
-      setBase({ head, tree, commit: run.after });
+      const snap = await snapshotNow(`run ${run.id} after`);
+      run.after = snap.commit;
+      if (!keepsBaseline(run)) setBase(snap);
     });
   await pin(run.id, 'after', run.after);
-  run.changes = await computeChanges(run.before, run.after);
+  run.changes = await ownChanges(run, await computeChanges(run.before, run.after));
   run.agentLines = agentLinesOf(run);
   if (run.agent === 'detected' || run.agent === 'you') run.title = editedTitle(run.changes);
   const out = await scopeViolations(run);
   if (out.length) run.stream.push({ t: 'warn', text: `Changed outside scope: ${out.join(', ')}` });
   run.outOfScope = out;
+  working.delete(run.id);
+  if (checks) checksFor(run);
+  // The last run of sessions that overlapped is said to be finished once what none of them made is recorded.
+  await leaveEpoch();
   run.status = status;
   run.endedAt = Date.now();
-  if (active && active.run === run) active = null;
   saveRun(run);
   pruneRuns();
   emitRun(run);
-  if (run.changes.length && CONF.checks?.length) {
-    run.checksRunning = true;
-    emit('progress', run);
-    runChecks(run)
-      .catch(e => run.checks.push({ name: 'checks', ok: false, summary: e.message }))
-      .finally(() => {
-        run.checksRunning = false;
-        saveRun(run);
-        emitRun(run);
-      });
-  }
 }
 /** Names what watch mode saw change: "Edited main.py", or "Edited main.py and 2 more". */
 function editedTitle(changes) {
@@ -186,8 +184,9 @@ export async function revertRun(run, force) {
     }
   }
   run.reverted = true;
-  // The bridge's own writes are not someone's changes.
-  if (!active) await serial(() => rebase());
+  // The bridge's own writes are not someone's changes: taken into the baseline, or into the epoch under way.
+  if (working.size) noteRevert(run);
+  else await serial(() => rebase());
   saveRun(run);
   emit('state');
   return { ok: true };

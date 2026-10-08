@@ -10,7 +10,7 @@ import { HOOK_AGENT } from './hook.mjs';
 import { ROOT, CONFIG_FILE, gitAsync } from './repo.mjs';
 import { SKIP } from './files.mjs';
 import { writeTree, commitTree, headNow, pin, computeChanges } from './snapshots.mjs';
-import { runs, active, newRun, finishRun } from './runs.mjs';
+import { runs, working, newRun, finishRun } from './runs.mjs';
 import { emit } from './events.mjs';
 
 export const QUIET_MS = Number(process.env.LOA_QUIET_MS || 3000);
@@ -24,10 +24,10 @@ const HOOK_IDLE_MS = Number(process.env.LOA_HOOK_IDLE_MS || 30 * 60 * 1000);
 let idleTimer;
 export function armIdle() {
   clearTimeout(idleTimer);
-  const run = active?.run;
-  if (!run || !Object.values(HOOK_AGENT).includes(run.agent)) return;
+  const run = [...working.values()].find(r => Object.values(HOOK_AGENT).includes(r.agent));
+  if (!run) return;
   idleTimer = setTimeout(() => {
-    if (active?.run === run) finishRun(run, 'interrupted').catch(logError);
+    if (working.has(run.id)) finishRun(run, 'interrupted').catch(logError);
   }, HOOK_IDLE_MS);
 }
 /** @type {{ head: { commit: string; ref: string }; tree: string; commit: string } | null} */
@@ -84,7 +84,7 @@ function onQuiet() {
   const paths = [...pending];
   pending.clear();
   serial(async () => {
-    if (active || (await onlyIgnored(paths))) return;
+    if (working.size || (await onlyIgnored(paths))) return;
     await settle();
   }).catch(logError);
 }

@@ -450,5 +450,7 @@ const catalogue: Catalogue = {
     'La carte d’un dépôt, avec les changements d’un agent signalés.',
   'What League of Agents collects.': 'Ce que League of Agents collecte.',
   'Edit file': 'Edit file',
+  'Run {id} is working on {path}. Pick a section outside it, or wait for it to finish.':
+    'Run {id} is working on {path}. Pick a section outside it, or wait for it to finish.',
 };
 export default catalogue;

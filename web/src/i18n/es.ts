@@ -451,5 +451,7 @@ const catalogue: Catalogue = {
     'El mapa de un repositorio con los cambios de un agente marcados.',
   'What League of Agents collects.': 'Qué recopila League of Agents.',
   'Edit file': 'Edit file',
+  'Run {id} is working on {path}. Pick a section outside it, or wait for it to finish.':
+    'Run {id} is working on {path}. Pick a section outside it, or wait for it to finish.',
 };
 export default catalogue;

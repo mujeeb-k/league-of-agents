@@ -450,7 +450,7 @@ test('after a move, the scope lock holds the lines where they are now, not the o
       ...held(SEED[FILE]!, 3, 5),
     });
     expect(r.body.scope).toEqual([`${FILE}:5-7`]);
-    const scopeFile = path.join(repo, '.loa/scope.json');
+    const scopeFile = path.join(repo, `.loa/scope-${r.body.id}.json`);
     const pre = (tool_input: object) => {
       try {
         execFileSync(process.execPath, [BRIDGE, 'hook', 'pre'], {
@@ -505,7 +505,7 @@ test('after the selection grows, the scope lock holds the new range: its new lin
             cwd: repo,
             tool_input: { file_path: path.join(repo, FILE), content: edited.join('\n') },
           }),
-          env: { ...process.env, LOA_SCOPE_FILE: path.join(repo, '.loa/scope.json') },
+          env: { ...process.env, LOA_SCOPE_FILE: path.join(repo, `.loa/scope-${r.body.id}.json`) },
           stdio: ['pipe', 'pipe', 'pipe'],
         });
         return 'allowed';

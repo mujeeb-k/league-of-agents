@@ -5,7 +5,8 @@
 // ACP extra is installed. With FAKE_ACP_STYLE=dsh it asks as DeepSeek Harness does in its read-only mode: its edit
 // tool call is kind "other", titled "edit", with the edit's arguments as rawInput, and its permission request names
 // only the call. The prompt steers it: "outside" also asks to edit outside.txt; "command" asks to run one; "slow" waits to be
-// cancelled.
+// cancelled. "edit:<path>" asks to edit that file and appends a line to it, instead of the usual edit; "wait:<name>"
+// then holds the turn until the file .loa/go-<name> exists, so a test can keep two sessions at work at once.
 import fs from 'node:fs';
 import readline from 'node:readline';
 
@@ -99,6 +100,18 @@ async function turn(sessionId, text) {
         { optionId: 'no', name: 'Deny', kind: 'reject_once' },
       ],
     });
+  const edits = [...text.matchAll(/\bedit:(\S+)/g)].map(m => m[1]);
+  if (edits.length) {
+    for (const [i, file] of edits.entries()) {
+      const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+      const after = `${before}// edited in ${sessionId}\n`;
+      if (await permit(`edit-${i}`, file, before, after)) fs.writeFileSync(file, after);
+    }
+    const hold = /\bwait:(\S+)/.exec(text)?.[1];
+    if (hold) while (!fs.existsSync(`.loa/go-${hold}`)) await new Promise(r => setTimeout(r, 20));
+    say(sessionId, `Edited ${edits.join(', ')}.`);
+    return 'end_turn';
+  }
   if (/outside/.test(text) && (await permit('edit-out', 'outside.txt', '', 'written outside the scope\n')))
     fs.writeFileSync('outside.txt', 'written outside the scope\n');
   const before = fs.readFileSync(FILE, 'utf8');

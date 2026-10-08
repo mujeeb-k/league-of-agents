@@ -1255,6 +1255,147 @@ test("DeepSeek Harness runs in its read-only mode, so each edit asks: in the sco
   }
 });
 
+test.describe('sessions at once', () => {
+  /** A repo whose stand-in Hermes edits what each prompt names, and holds its turn until the test says go. */
+  async function twoSessions(fn: (b: Bridge, repo: string) => Promise<void>) {
+    const repo = makeRepo();
+    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP });
+    try {
+      await expect
+        .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).agents.hermes?.available)
+        .toBe(true);
+      await fn(b, repo);
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+    }
+  }
+  const start = (b: Bridge, scope: string[], prompt: string) =>
+    call(b, '/api/runs', { agent: 'hermes', prompt, scope, resumeFrom: null });
+  const state = async (b: Bridge) => (await call(b, '/api/state')).body as unknown as StateResponse;
+  const runOf = async (b: Bridge, id: number) => (await state(b)).runs.find(r => r.id === id)!;
+  const go = (repo: string, name: string) => fs.writeFileSync(path.join(repo, `.loa/go-${name}`), '');
+  const until = (b: Bridge, id: number, status: string) =>
+    expect.poll(async () => (await runOf(b, id)).status, { timeout: 15_000 }).toBe(status);
+
+  test('two sessions on disjoint folders at once: each owns its own change, and each reverts alone', () =>
+    twoSessions(async (b, repo) => {
+      const a = (await start(b, ['shared/'], 'Edit the log. edit:shared/log.ts wait:a')).body as unknown as RunDTO;
+      expect(a.status).toBe('running');
+      const c = (await start(b, ['apps/'], 'Edit the app. edit:apps/console/main.ts wait:c')).body as unknown as RunDTO;
+      expect(c.status).toBe('running');
+      expect((await state(b)).working).toEqual([a.id, c.id]);
+      // Each prompt names the sections other sessions hold.
+      expect(fs.readFileSync(path.join(repo, '.loa/fake-acp.log'), 'utf8')).toContain(
+        'Other sessions are working at the same time on: shared/.',
+      );
+      go(repo, 'a');
+      go(repo, 'c');
+      await until(b, a.id, 'done');
+      await until(b, c.id, 'done');
+      expect((await runOf(b, a.id)).changes.map(ch => ch.path)).toEqual(['shared/log.ts']);
+      expect((await runOf(b, c.id)).changes.map(ch => ch.path)).toEqual(['apps/console/main.ts']);
+      // Nothing left over: every change is a session's.
+      expect((await state(b)).runs.map(r => r.agent)).toEqual(['hermes', 'hermes']);
+      expect((await call(b, `/api/runs/${a.id}/revert`, {})).status).toBe(200);
+      expect(fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8')).toBe(SEED['shared/log.ts']);
+      expect(fs.readFileSync(path.join(repo, 'apps/console/main.ts'), 'utf8')).not.toBe(SEED['apps/console/main.ts']);
+      expect((await call(b, `/api/runs/${c.id}/revert`, {})).status).toBe(200);
+      expect(fs.readFileSync(path.join(repo, 'apps/console/main.ts'), 'utf8')).toBe(SEED['apps/console/main.ts']);
+    }));
+
+  test('sections of sessions at work never overlap, and a whole-repository run works alone', () =>
+    twoSessions(async (b, repo) => {
+      const a = (await start(b, ['shared/'], 'edit:shared/log.ts wait:a')).body as unknown as RunDTO;
+      const inside = await start(b, ['shared/allowlist.ts'], 'edit:shared/allowlist.ts');
+      expect(inside.status).toBe(409);
+      expect(inside.body).toMatchObject({ code: 'sections-overlap', args: { id: a.id, path: 'shared/' } });
+      expect((await start(b, [], 'edit:README.md')).body).toMatchObject({ code: 'run-active', args: { id: a.id } });
+      go(repo, 'a');
+      await until(b, a.id, 'done');
+      // Alone, a whole-repository run starts; while it works, a section can't.
+      const whole = (await start(b, [], 'edit:shared/log.ts wait:w')).body as unknown as RunDTO;
+      expect((await start(b, ['apps/'], 'edit:apps/console/main.ts')).body).toMatchObject({
+        code: 'run-active',
+        args: { id: whole.id },
+      });
+      go(repo, 'w');
+      await until(b, whole.id, 'done');
+    }));
+
+  test('while sessions overlap, a change no session made is recorded on its own, credited to none', () =>
+    twoSessions(async (b, repo) => {
+      const a = (await start(b, ['shared/'], 'edit:shared/log.ts wait:a')).body as unknown as RunDTO;
+      const c = (await start(b, ['apps/'], 'edit:apps/console/main.ts wait:c')).body as unknown as RunDTO;
+      // Outside every section, and inside one but not by its agent.
+      fs.writeFileSync(path.join(repo, 'notes.md'), '# notes\n');
+      fs.appendFileSync(path.join(repo, 'shared/allowlist.ts'), '// by hand\n');
+      go(repo, 'a');
+      go(repo, 'c');
+      await until(b, a.id, 'done');
+      await until(b, c.id, 'done');
+      expect((await runOf(b, a.id)).changes.map(ch => ch.path)).toEqual(['shared/log.ts']);
+      expect((await runOf(b, c.id)).changes.map(ch => ch.path)).toEqual(['apps/console/main.ts']);
+      await expect
+        .poll(async () => (await state(b)).runs.find(r => r.agent === 'detected')?.changes.map(ch => ch.path))
+        .toEqual(['notes.md', 'shared/allowlist.ts']);
+      // Reverting it puts back only what no session made.
+      const leftover = (await state(b)).runs.find(r => r.agent === 'detected')!;
+      expect((await call(b, `/api/runs/${leftover.id}/revert`, {})).status).toBe(200);
+      expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
+      expect(fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8')).toBe(SEED['shared/allowlist.ts']);
+      expect(fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8')).toContain('// edited in');
+    }));
+
+  test("an earlier run reverted while sessions work is the revert's, not left over when they end", () =>
+    twoSessions(async (b, repo) => {
+      const earlier = (await start(b, ['shared/'], 'edit:shared/log.ts')).body as unknown as RunDTO;
+      await until(b, earlier.id, 'done');
+      const a = (await start(b, ['apps/'], 'edit:apps/console/main.ts wait:a')).body as unknown as RunDTO;
+      const c = (await start(b, ['notes.md'], 'edit:notes.md wait:c')).body as unknown as RunDTO;
+      expect((await call(b, `/api/runs/${earlier.id}/revert`, {})).status).toBe(200);
+      expect(fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8')).toBe(SEED['shared/log.ts']);
+      go(repo, 'a');
+      go(repo, 'c');
+      await until(b, a.id, 'done');
+      await until(b, c.id, 'done');
+      expect((await runOf(b, a.id)).changes.map(ch => ch.path)).toEqual(['apps/console/main.ts']);
+      expect((await runOf(b, c.id)).changes.map(ch => ch.path)).toEqual(['notes.md']);
+      expect((await state(b)).runs.map(r => r.agent)).toEqual(['hermes', 'hermes', 'hermes']);
+    }));
+
+  test('a save from the editor outside every section is its own run while sessions work; inside one, it waits', () =>
+    twoSessions(async (b, repo) => {
+      const a = (await start(b, ['shared/'], 'edit:shared/log.ts wait:a')).body as unknown as RunDTO;
+      const save = async (file: string, text: string) => {
+        const now = (await call(b, `/api/file?path=${encodeURIComponent(file)}`)).body as { hash: string };
+        return call(b, '/api/save', { path: file, text, base: now.hash });
+      };
+      const outside = await save('apps/console/main.ts', 'export {};\n');
+      expect(outside.status).toBe(200);
+      expect(outside.body).toMatchObject({ agent: 'you', status: 'done' });
+      expect((outside.body as unknown as RunDTO).changes.map(ch => ch.path)).toEqual(['apps/console/main.ts']);
+      expect((await save('shared/allowlist.ts', 'export {};\n')).body).toMatchObject({ code: 'sections-overlap' });
+      go(repo, 'a');
+      await until(b, a.id, 'done');
+      expect((await runOf(b, a.id)).changes.map(ch => ch.path)).toEqual(['shared/log.ts']);
+    }));
+
+  test('checks wait until every session is done, then run once for them all', () =>
+    twoSessions(async (b, repo) => {
+      const a = (await start(b, ['shared/'], 'edit:shared/log.ts wait:a')).body as unknown as RunDTO;
+      const c = (await start(b, ['apps/'], 'edit:apps/console/main.ts wait:c')).body as unknown as RunDTO;
+      go(repo, 'a');
+      await until(b, a.id, 'done');
+      // One session still works: no checks yet.
+      expect((await runOf(b, a.id)).checks).toEqual([]);
+      go(repo, 'c');
+      await until(b, c.id, 'done');
+      for (const id of [a.id, c.id])
+        await expect.poll(async () => (await runOf(b, id)).checks.map(k => k.ok), { timeout: 15_000 }).toEqual([true]);
+    }));
+});
+
 test('harnesses the person adds in their own settings are listed by name and run from the map, with their model', async ({
   page,
 }) => {

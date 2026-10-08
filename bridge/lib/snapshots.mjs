@@ -85,6 +85,36 @@ export async function headNow() {
     return { commit: '', ref: '' };
   }
 }
+/** The working tree now, as a snapshot commit: the baseline's shape, `{ head, tree, commit }`. */
+export async function snapshotNow(label) {
+  const head = await headNow(),
+    tree = await writeTree();
+  return { head, tree, commit: await commitTree(tree, label, head) };
+}
+/** A file's content id in a commit, or null when the commit doesn't have it. */
+export async function blobAt(commit, p) {
+  const line = (await gitAsync(['ls-tree', commit, '--', p])).trim();
+  return line ? line.split(/\s+/)[2] : null;
+}
+/**
+ * A commit with the files of `commit`, except each of `files` ([path, from]) as commit `from` has it, or absent where
+ * `from` doesn't have it. Built in an index of its own, so the snapshot index is left as it is.
+ */
+export async function commitWith(commit, files, label) {
+  const index = path.join(LOA, 'compose.index');
+  const env = { ...process.env, GIT_INDEX_FILE: index };
+  await gitAsync(['read-tree', commit], { env });
+  for (const [p, from] of files) {
+    const line = (await gitAsync(['ls-tree', from, '--', p])).trim();
+    if (line) {
+      const [mode, , oid] = line.split(/\s+/);
+      await gitAsync(['update-index', '--add', '--cacheinfo', `${mode},${oid},${p}`], { env });
+    } else await gitAsync(['update-index', '--force-remove', '--', p], { env });
+  }
+  const tree = (await gitAsync(['write-tree'], { env })).trim();
+  fs.rmSync(index, { force: true });
+  return commitTree(tree, label, await headNow());
+}
 export async function pin(id, which, commit) {
   try {
     await gitAsync(['update-ref', `refs/loa/runs/${id}/${which}`, commit]);

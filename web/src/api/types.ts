@@ -108,7 +108,9 @@ export interface StateResponse {
   agents: Record<string, AgentInfo>;
   tree: TreeFile[];
   runs: RunDTO[];
+  /** The first run under way (bridges before 0.2.0 run one at a time); `working` names them all. */
   active: number | null;
+  working?: number[];
   seq: number;
   /** The bridge's version; bridges before 0.1.0 don't send it. */
   version?: string | null;
@@ -148,6 +150,7 @@ export interface StateDelta {
   run: RunDTO;
   files: Record<string, TreeFile | null>;
   active: number | null;
+  working?: number[];
 }
 
 /** GET /api/events?since=N */

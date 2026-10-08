@@ -5,7 +5,7 @@ import path from 'node:path';
 import { logError } from './util.mjs';
 import { scopeEntry } from './scope.mjs';
 import { ROOT, LOA } from './repo.mjs';
-import { finishRun } from './runs.mjs';
+import { finishRun, working } from './runs.mjs';
 import { connectorOf, lockOf } from './agents/registry.mjs';
 
 /** Each run's agent at work, and its run finishing once the agent stops. */
@@ -13,12 +13,19 @@ import { connectorOf, lockOf } from './agents/registry.mjs';
 const sessions = new Map();
 
 /**
- * The scope, written above the prompt. What it says holds for every agent: changes outside the scope are reported
- * and can be undone. Only Claude Code's edit tools are blocked outside it, by the scope lock (runHook 'pre'), which
- * is one of the hooks: without them, Claude Code isn't told it is blocked.
+ * The scope, written above the prompt, and the sections other sessions are working on. What it says holds for every
+ * agent: changes outside the scope are reported and can be undone. Only Claude Code's edit tools are blocked outside
+ * it, by the scope lock (runHook 'pre'), which is one of the hooks: without them, Claude Code isn't told it is blocked.
  */
-function scopePreamble(scope, agent) {
-  if (!scope?.length) return '';
+function scopePreamble(run) {
+  const { scope, agent } = run;
+  const others = [...working.values()]
+    .filter(r => r !== run)
+    .flatMap(r => (r.scope ?? []).map(s => scopeEntry(s).path));
+  const parallel = others.length
+    ? `Other sessions are working at the same time on: ${[...new Set(others)].join(', ')}. Leave their files as they are.\n`
+    : '';
+  if (!scope?.length) return parallel && parallel + '\n';
   const line = s => {
     const e = scopeEntry(s);
     return e.from
@@ -26,7 +33,7 @@ function scopePreamble(scope, agent) {
       : '- ' + s;
   };
   const blocked = lockOf(agent) === 'hooks' ? '\nEdits outside it made with edit tools are blocked.' : '';
-  return `Scope for this task:\n${scope.map(line).join('\n')}\nEdit only inside this scope. Changes outside it are reported to the user and can be undone.${blocked}\n\n`;
+  return `Scope for this task:\n${scope.map(line).join('\n')}\nEdit only inside this scope. Changes outside it are reported to the user and can be undone.${blocked}\n${parallel}\n`;
 }
 /**
  * Starts the run's agent on its prompt, with the scope above it. The scope lock's file holds the scope, and for line
@@ -34,8 +41,9 @@ function scopePreamble(scope, agent) {
  * finished, as cancelled or interrupted if it was stopped so, or as the agent's outcome.
  */
 export function startSession(run, read = {}) {
-  const prompt = scopePreamble(run.scope, run.agent) + run.prompt;
-  const scopeFile = path.join(LOA, 'scope.json');
+  const prompt = scopePreamble(run) + run.prompt;
+  // Each run's own: Claude Code's hooks find it by the environment the run starts them with.
+  const scopeFile = path.join(LOA, `scope-${run.id}.json`);
   const ranges = {};
   for (const e of (run.scope || []).map(scopeEntry))
     if (e.from)

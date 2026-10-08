@@ -8,3 +8,5 @@ web/dist/
 **/test-results/
 tests/fixtures/agents/raw/
 video/
+# Translated privacy pages: one paragraph a line, as the English page they replace the body of.
+web/src/i18n/privacy/

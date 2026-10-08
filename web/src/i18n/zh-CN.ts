@@ -419,5 +419,7 @@ const catalogue: Catalogue = {
   "A map of a repository with an agent's changes marked.": '一个代码仓库的地图，标出了代理的改动。',
   'What League of Agents collects.': 'League of Agents 收集哪些信息。',
   'Edit file': 'Edit file',
+  'Run {id} is working on {path}. Pick a section outside it, or wait for it to finish.':
+    'Run {id} is working on {path}. Pick a section outside it, or wait for it to finish.',
 };
 export default catalogue;

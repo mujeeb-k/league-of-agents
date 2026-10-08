@@ -23,7 +23,7 @@ import { removeHooks } from './hooks-install.mjs';
 import { readTree, hashOf, repoFile } from './files.mjs';
 import { showAt } from './snapshots.mjs';
 import { recordedAuthors, exportAttribution } from './authorship.mjs';
-import { runs, active, saveRun, publicRun, beginRun, finishRun, push, revertRun } from './runs.mjs';
+import { runs, working, saveRun, publicRun, beginRun, finishRun, push, revertRun } from './runs.mjs';
 import { armIdle, ownWrite, writeConfig, watchOff } from './watch.mjs';
 import { seq, events, waiters, emit } from './events.mjs';
 import { cancelSession, startSession } from './sessions.mjs';
@@ -44,7 +44,8 @@ function state() {
       agents: AGENTS,
       tree: readTree(),
       runs: [...runs.values()].sort((a, b) => a.id - b.id).map(publicRun),
-      active: active?.run.id ?? null,
+      active: working.keys().next().value ?? null,
+      working: [...working.keys()],
       seq,
       version: VERSION,
       suggestedChecks: CONF.checks?.length ? [] : repoChecks.length ? repoChecks : detectChecks(),
@@ -180,7 +181,7 @@ async function cancelRun({ params }) {
   const run = runOf(params);
   if (!run) return noRun;
   // A captured terminal turn has no agent of ours to stop: it ends here.
-  if (active?.run === run && !cancelSession(run)) {
+  if (working.has(run.id) && !cancelSession(run)) {
     run.status = 'cancelled';
     await finishRun(run, 'cancelled');
   }
@@ -278,7 +279,8 @@ async function save({ body }) {
   // Changed on disk since it was opened: never overwrite silently.
   if (hashOf(now) !== b.base) return [409, { error: 'changed', text: now, hash: hashOf(now) }];
   if (now === b.text) return [200, { unchanged: true }];
-  const run = await beginRun({ agent: 'you' });
+  // Its section is the file, so it can be saved while sessions work elsewhere, and waits for one working on it.
+  const run = await beginRun({ agent: 'you', scope: [b.path] });
   fs.writeFileSync(abs, b.text);
   await finishRun(run);
   return [200, publicRun(run)];
@@ -306,7 +308,7 @@ async function turnOnChecks({ body }) {
   const chosen = detectChecks().filter(c => names.has(c.name));
   if (!chosen.length || CONF.checks?.length) return [400, { error: 'No such checks to turn on' }];
   if (b.share) {
-    if (active) return [409, { error: 'Wait for the run to finish', code: 'wait-for-run' }];
+    if (working.size) return [409, { error: 'Wait for the run to finish', code: 'wait-for-run' }];
     await writeConfig({ ...readJson(CONFIG_FILE, {}), checks: chosen });
     saveAllowed({ approved: chosen });
     setChecksShared(true);
@@ -325,7 +327,7 @@ async function turnOffCheck({ body }) {
   const b = await body();
   const gone = (CONF.checks || []).find(c => c.name === b.name);
   if (!gone) return [404, { error: 'No such check' }];
-  if (checksShared && active) return [409, { error: 'Wait for the run to finish', code: 'wait-for-run' }];
+  if (checksShared && working.size) return [409, { error: 'Wait for the run to finish', code: 'wait-for-run' }];
   CONF.checks = CONF.checks.filter(c => c !== gone);
   if (checksShared) {
     const file = readJson(CONFIG_FILE, {});
@@ -341,12 +343,13 @@ async function turnOffCheck({ body }) {
 }
 /** @returns {Promise<Reply>} */
 async function hooksRemove() {
-  if (active)
+  if (working.size)
     return [409, { error: 'A run is in progress. Remove the hooks once it finishes.', code: 'hooks-run-active' }];
   return [200, { removed: await ownWrite(removeHooks) }];
 }
 
-const hookRun = r => Object.values(HOOK_AGENT).includes(r.agent);
+/** The run a terminal or editor turn started through our hooks, if one is under way: it works alone. */
+const capturedRun = () => [...working.values()].find(r => Object.values(HOOK_AGENT).includes(r.agent));
 /**
  * A prompt sent in a terminal or editor with our hooks, as a run (hook.mjs runHook 'start').
  * @param {Request} request
@@ -354,12 +357,14 @@ const hookRun = r => Object.values(HOOK_AGENT).includes(r.agent);
  */
 async function captureStart({ body }) {
   const b = await body();
-  if (active && !hookRun(active.run)) return [200, { ignored: true }];
+  const captured = capturedRun();
+  // Runs from the map are at work: the terminal's turn is theirs to wait for, and isn't recorded.
+  if (working.size && !captured) return [200, { ignored: true }];
   // The same prompt from a second set of hooks (a plugin's and the repo's): one run, not two.
-  if (active && active.run.sessionId === (b.sessionId || null) && active.run.prompt === (b.prompt || ''))
+  if (captured && captured.sessionId === (b.sessionId || null) && captured.prompt === (b.prompt || ''))
     return [200, { ignored: true }];
   // A terminal turn that never sent Stop was interrupted; the next prompt closes it.
-  if (active) await finishRun(active.run, 'interrupted');
+  if (captured) await finishRun(captured, 'interrupted');
   const run = await beginRun({
     agent: Object.values(HOOK_AGENT).includes(b.agent) ? b.agent : 'claude-terminal',
     prompt: b.prompt,
@@ -379,13 +384,14 @@ async function captureStart({ body }) {
  */
 async function captureStop({ body }) {
   const b = await body();
+  const captured = capturedRun();
   // A stop from another conversation (a second Cursor window, another terminal) leaves this run running.
-  const other = b.sessionId && active?.run.sessionId && b.sessionId !== active.run.sessionId;
-  if (active && hookRun(active.run) && !other) {
-    for (const e of Array.isArray(b.events) ? b.events : []) onAgentLine(active.run, JSON.stringify(e));
-    if (b.summary) active.run.summary = b.summary;
+  const other = b.sessionId && captured?.sessionId && b.sessionId !== captured.sessionId;
+  if (captured && !other) {
+    for (const e of Array.isArray(b.events) ? b.events : []) onAgentLine(captured, JSON.stringify(e));
+    if (b.summary) captured.summary = b.summary;
     // Cursor says how the turn ended.
-    await finishRun(active.run, b.status === 'aborted' ? 'cancelled' : b.status === 'error' ? 'failed' : 'done');
+    await finishRun(captured, b.status === 'aborted' ? 'cancelled' : b.status === 'error' ? 'failed' : 'done');
   }
   return [200, { ok: true }];
 }

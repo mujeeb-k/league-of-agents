@@ -116,3 +116,5 @@ export function lockOf(id) {
   if (id === 'claude') return HOOKS ? 'hooks' : 'none';
   return id === 'hermes' || id === 'dsh' ? 'asks' : 'none';
 }
+/** Agents that report each edit they make (edit tools, or diffs when they ask), so their files can be told apart. */
+export const reportsEdits = id => id === 'claude' || id === 'hermes' || id === 'dsh';

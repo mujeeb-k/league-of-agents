@@ -16,6 +16,7 @@ export const BY_CODE: Record<string, string> = {
   'not-logged-in': "{agent} isn't logged in. Run claude auth login, then try again.",
   'lines-changed': 'The lines you selected in {name} changed. Select them again.',
   'run-active': 'Run {id} is still active',
+  'sections-overlap': 'Run {id} is working on {path}. Pick a section outside it, or wait for it to finish.',
   'wait-for-run': 'Wait for the run to finish',
   'hooks-run-active': 'A run is in progress. Remove the hooks once it finishes.',
   'no-commit': 'There is no commit yet.',
