@@ -1,5 +1,6 @@
-// The editor. A code card expands in place into a large editor centred on
-// the canvas, over the dimmed map, and Esc collapses it back to its spot. Only transform and opacity animate.
+// The editor. A code card expands in place into an editor that fills the canvas beside the sidebar, over the dimmed
+// map, and Esc collapses it back to its spot. Only transform and opacity animate. While a run that changed the file is
+// open, it shows the run's Before, After or Diff on the whole file, read only.
 import { ChevronDown, X } from 'lucide-react';
 import { EDITORS, editorUrl } from '../lib/openIn';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
@@ -20,6 +21,8 @@ import {
   instruct,
   refreshEditor,
   reviewRun,
+  runInView,
+  runView,
   saveEditor,
   selectLines,
   useDiskVersion,
@@ -37,6 +40,7 @@ import { changedBlock } from '../lib/textdiff';
 import { t } from '../i18n';
 
 const DUR = 240;
+const MODE_NAMES = { before: 'Before', after: 'After', diff: 'Diff' } as const;
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** The files a file imports, and the files that use it (scene.ts builds the graph). */
@@ -45,101 +49,55 @@ const related = (path: string) => ({
   usedBy: S.GRAPH.in.get(path) ?? [],
 });
 
-/** Room on each side of the editor for its import lines (Related), when the file has any. */
-const SIDE = 176;
+const MARGIN = 12;
+/** Room kept below the editor for the composer, which takes the selected lines as its scope. */
+const COMPOSER = 128;
 
-/**
- * Where the editor sits: centred in the part of the canvas the sidebar leaves free, clear of the composer,
- * with room at its sides for the file's import lines.
- */
-function frame(path: string) {
+/** Where the editor sits: across the part of the canvas the sidebar leaves free, above the composer. */
+function frame() {
   const W = dom.stage.clientWidth,
     H = dom.stage.clientHeight,
-    inset = sideInset(st.v.s),
-    r = related(path);
-  // The editor keeps at least 600 px for code; the sides give way first.
-  const side = r.imports.length || r.usedBy.length ? Math.min(SIDE, Math.max(32, (W - inset - 600) / 2)) : 32;
-  const w = Math.min(1040, W - inset - 2 * side),
-    top = 56,
-    h = H - top - 128;
-  return { left: inset + (W - inset - w) / 2, top, width: w, height: h };
+    inset = sideInset(st.v.s);
+  return { left: inset + MARGIN, top: MARGIN, width: W - inset - 2 * MARGIN, height: H - MARGIN - COMPOSER };
 }
-type Frame = ReturnType<typeof frame>;
 
-/**
- * The file's import lines stay visible while it is open: a line from the editor's edge to each related
- * card that is on screen, outlined above the dimmed map; a related file off screen is a chip beside the
- * editor instead, imports on the right and users on the left. Either opens that file.
- */
-function Related({ path, box }: { path: string; box: Frame }) {
-  const W = dom.stage.clientWidth,
-    H = dom.stage.clientHeight,
-    { x, y, s } = st.v;
-  const lines: React.ReactNode[] = [],
-    chips: React.ReactNode[] = [];
+/** The files this one imports, and the files that use it: a row of chips under the header, each opening that file. */
+function RelatedRow({ path }: { path: string }) {
   const r = related(path);
-  for (const [side, paths] of [
-    ['right', r.imports],
-    ['left', r.usedBy],
-  ] as const) {
-    let row = 0;
-    for (const p of paths) {
+  if (!r.imports.length && !r.usedBy.length) return null;
+  const chips = (paths: string[], label: (p: string) => string) =>
+    paths.map(p => {
       const f = S.FILES.get(p);
-      if (!f) continue;
-      const c = { l: f.x * s + x, t: f.y * s + y, w: CW * s, h: CH * s };
-      const onScreen =
-        c.l >= 0 &&
-        c.t >= 0 &&
-        c.l + c.w <= W &&
-        c.t + c.h <= H - 128 &&
-        (c.l + c.w < box.left || c.l > box.left + box.width);
-      const edge = side === 'right' ? box.left + box.width : box.left;
-      if (onScreen) {
-        const toX = c.l > edge ? c.l : c.l + c.w,
-          cy = c.t + c.h / 2,
-          fromY = Math.min(Math.max(cy, box.top + 24), box.top + box.height - 24),
-          mid = (edge + toX) / 2;
-        lines.push(
-          <g key={p} className="rel" data-path={p} onClick={() => void openEditor(p)}>
-            <path d={`M${edge} ${fromY}H${mid}V${cy}H${toX}`} />
-            <rect x={c.l} y={c.t} width={c.w} height={c.h} rx={6} />
-          </g>,
-        );
-        continue;
-      }
-      const room = side === 'right' ? W - edge : edge - sideInset(s);
-      const top = box.top + 12 + row * 40;
-      if (room < 120 || top > box.top + box.height - 40) continue;
-      row++;
-      const chipW = Math.min(SIDE, room) - 32,
-        chipX = side === 'right' ? edge + 16 : edge - 16 - chipW;
-      lines.push(<path key={p} d={`M${edge} ${top + 14}H${side === 'right' ? edge + 16 : edge - 16}`} />);
-      chips.push(
+      return f ? (
         <button
           key={p}
           type="button"
-          className="rel-chip absolute flex h-7 items-center gap-1.5 truncate rounded-md border bg-popover px-2 font-mono text-xs text-ink2 shadow-[var(--e1)] hover:text-foreground"
-          style={{ left: chipX, top, width: chipW }}
+          className="rel-chip flex h-7 max-w-56 shrink-0 items-center gap-1.5 rounded-md border bg-popover px-2 font-mono text-xs text-ink2 hover:text-foreground"
           data-path={p}
-          aria-label={
-            side === 'right' ? t('Imports {path}. Open it', { path: p }) : t('Used by {path}. Open it', { path: p })
-          }
+          aria-label={label(p)}
           title={p}
           onClick={() => void openEditor(p)}
         >
           <FileIcon kind={fileKind(f.name)} />
           <span className="truncate">{f.name}</span>
-        </button>,
-      );
-    }
-  }
+        </button>
+      ) : null;
+    });
   return (
-    <>
-      <svg id="editorLinks" className="pointer-events-none absolute inset-0 size-full overflow-visible">
-        {lines}
-      </svg>
-      {chips}
-    </>
+    <div id="editorRelated" className="flex shrink-0 items-center gap-2 overflow-x-auto border-b px-4 py-2">
+      {r.imports.length ? (
+        <>
+          <span className="shrink-0 text-xs text-muted-foreground">{t('Imports')}</span>
+          {chips(r.imports, p => t('Imports {path}. Open it', { path: p }))}
+        </>
+      ) : null}
+      {r.usedBy.length ? (
+        <>
+          <span className="ml-2 shrink-0 text-xs text-muted-foreground">{t('Used by')}</span>
+          {chips(r.usedBy, p => t('Used by {path}. Open it', { path: p }))}
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -221,6 +179,10 @@ export function Editor() {
   const path = ed.path;
   if (path && path !== shown) setShown(path);
   const blocked = editingBlocked();
+  // A run that changed the file is open: its change, whole, in the run's mode; null while it loads.
+  const inRun = runInView(),
+    view = inRun && path ? runView(inRun, path, st.mode) : null,
+    readOnly = !!blocked || !!inRun;
 
   // Expand: start over the card, then move to the editor's place. Opening another file from inside the
   // editor expands from that file's card.
@@ -229,7 +191,7 @@ export function Editor() {
     if (!el || !shown || !path) return;
     if (reduced()) return;
     el.style.transition = 'none';
-    el.style.transform = fromCard(shown, frame(shown));
+    el.style.transform = fromCard(shown, frame());
     el.style.opacity = '0';
     shade.current!.style.opacity = '0';
     void el.offsetWidth;
@@ -249,7 +211,7 @@ export function Editor() {
       setShown(null);
     };
     if (!el || reduced()) return done();
-    el.style.transform = fromCard(shown, frame(shown));
+    el.style.transform = fromCard(shown, frame());
     el.style.opacity = '0';
     shade.current!.style.opacity = '0';
     const t = setTimeout(done, DUR);
@@ -259,8 +221,8 @@ export function Editor() {
   // The code editor, once the text is loaded: one per file, kept through the collapse. Its text follows the
   // saved text when there is no draft, as when watch mode or an agent changed the file.
   useEffect(() => {
-    if (!path || ed.loading || !host.current) return;
-    const text = drafts.get(path)?.text ?? ed.saved;
+    if (!path || ed.loading || !host.current || (inRun && !view)) return;
+    const text = view ? view.text : (drafts.get(path)?.text ?? ed.saved);
     if (cm.current && cm.current.path !== path) {
       cm.current.editor.view.destroy();
       cm.current = null;
@@ -269,7 +231,7 @@ export function Editor() {
       void import('../lib/editor').then(({ createEditor }) => {
         if (ed.path !== path || cm.current || !host.current) return;
         // It starts from the saved text, with a draft applied as one change, so undo goes back to the saved text.
-        const editor = createEditor(host.current, ed.saved, !!editingBlocked(), {
+        const editor = createEditor(host.current, view ? view.text : ed.saved, readOnly, {
           onChange: t => edited(path, t),
           onSelect: selectLines,
           onInstruct: instruct,
@@ -277,31 +239,33 @@ export function Editor() {
           onClose: closeEditor,
         });
         cm.current = { path, editor };
-        if (text !== ed.saved) editor.view.dispatch({ changes: { from: 0, to: ed.saved.length, insert: text } });
+        if (!view && text !== ed.saved)
+          editor.view.dispatch({ changes: { from: 0, to: ed.saved.length, insert: text } });
         editor.view.focus();
         // Render again now that the code editor exists, so an agent's change shows inline at once.
         bump('editor');
       });
     } else if (cm.current.editor.view.state.doc.toString() !== text) {
       cm.current.editor.reset(text);
-      cm.current.editor.setReadOnly(!!editingBlocked());
+      cm.current.editor.setReadOnly(readOnly);
       // Selected lines follow their code to where it is now (refreshEditor); a stale selection stays unselected.
       if (ed.range && !ed.stale) cm.current.editor.select(ed.range);
     }
   });
 
   useEffect(() => {
-    cm.current?.editor.setReadOnly(!!blocked);
-  }, [blocked]);
+    cm.current?.editor.setReadOnly(readOnly);
+  }, [readOnly]);
 
-  // An agent's change to lines of this file shows inline until it is kept or reverted; a draft hides it.
-  const review = path && !drafts.has(path) ? reviewRun(path) : null;
+  // An agent's change to lines of this file shows inline until it is kept or reverted; a draft hides it. In an open
+  // run, the run's change shows instead.
+  const review = path && !inRun && !drafts.has(path) ? reviewRun(path) : null;
   const shownDiff = useRef('');
   useEffect(() => {
-    const key = review && path ? `${review.id}|${ed.saved}` : '';
+    const key = view && inRun ? `run|${inRun.id}|${st.mode}` : review && path ? `${review.id}|${ed.saved}` : '';
     if (!cm.current || key === shownDiff.current) return;
     shownDiff.current = key;
-    cm.current.editor.showDiff(review && path ? inlineDiff(review, path) : null);
+    cm.current.editor.showDiff(view ? view.diff : review && path ? inlineDiff(review, path) : null);
   });
 
   // A control that just went away, such as the conflict's buttons, leaves focus nowhere: back to the code.
@@ -318,7 +282,7 @@ export function Editor() {
   const f = S.FILES.get(shown),
     name = f?.name ?? shown,
     dirty = drafts.has(shown),
-    b = frame(shown);
+    b = frame();
   return (
     <div id="editorLayer" className="absolute inset-0">
       <div
@@ -326,7 +290,6 @@ export function Editor() {
         className="absolute inset-0 bg-canvas/75 transition-opacity duration-200"
         onPointerDown={closeEditor}
       />
-      {path ? <Related path={shown} box={b} /> : null}
       <section
         id="editor"
         ref={panel}
@@ -350,22 +313,42 @@ export function Editor() {
               </span>
             ) : null}
             {S.repoRoot ? <OpenIn path={shown} line={() => cursorLine(cm.current?.editor)} /> : null}
+            {inRun ? (
+              <>
+                <span id="editorRunView" className="text-xs text-ink2">
+                  {t('Run {id}', { id: inRun.id })} · {t(MODE_NAMES[st.mode])}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  id="editFile"
+                  onClick={() => {
+                    ed.asEdit = true;
+                    bump('editor');
+                  }}
+                >
+                  {t('Edit file')}
+                </Button>
+              </>
+            ) : null}
             {dirty && !blocked ? (
               <Button variant="ghost" size="sm" id="discardDraft" onClick={discardDraft}>
                 {t('Discard changes')}
               </Button>
             ) : null}
-            <Tip label={t('Save')} keys="⌘S">
-              <Button
-                size="sm"
-                id="saveFile"
-                disabled={!dirty || !!blocked || ed.saving}
-                onClick={() => void saveEditor()}
-              >
-                {ed.saving ? <Spinner className="text-current" /> : null}
-                {t('Save')}
-              </Button>
-            </Tip>
+            {inRun ? null : (
+              <Tip label={t('Save')} keys="⌘S">
+                <Button
+                  size="sm"
+                  id="saveFile"
+                  disabled={!dirty || !!blocked || ed.saving}
+                  onClick={() => void saveEditor()}
+                >
+                  {ed.saving ? <Spinner className="text-current" /> : null}
+                  {t('Save')}
+                </Button>
+              </Tip>
+            )}
             <Tip label={t('Close')} keys="Esc">
               <Button
                 variant="ghost"
@@ -379,6 +362,7 @@ export function Editor() {
             </Tip>
           </span>
         </header>
+        <RelatedRow path={shown} />
         {review ? (
           <div id="editorReview" className="flex shrink-0 items-center gap-3 border-b bg-card px-4 py-2">
             <span className="min-w-0 flex-1 text-ink2 text-pretty">
@@ -410,12 +394,12 @@ export function Editor() {
             </div>
           </div>
         ) : null}
-        {ed.loading ? (
+        {ed.loading || (inRun && !view) ? (
           <div className="flex flex-1 items-center justify-center text-ink2">
             <Spinner />
           </div>
         ) : null}
-        <div ref={host} className="cm-host min-h-0 flex-1" hidden={ed.loading} />
+        <div ref={host} className="cm-host min-h-0 flex-1" hidden={ed.loading || (!!inRun && !view)} />
       </section>
     </div>
   );

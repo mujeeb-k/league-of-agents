@@ -300,6 +300,109 @@ for (const lang of ['en', 'fr'] as const)
     for (const r of rows) expect(r.ms, r.action).toBeLessThan(100);
   });
 
+/** From Enter on the selected tile to the first frame that shows the file's code in the editor, in ms. */
+async function openTime(page: Page) {
+  // Listening before the key is pressed, so the key's time is always caught.
+  await page.evaluate(() => {
+    (window as unknown as { opened: Promise<number> }).opened = new Promise(resolve => {
+      let t0 = 0;
+      document.addEventListener('keydown', e => (t0 = e.timeStamp), { capture: true, once: true });
+      const frame = (now: number) =>
+        t0 && document.querySelector('#editor .cm-line')?.textContent
+          ? resolve(Math.round(now - t0))
+          : requestAnimationFrame(frame);
+      requestAnimationFrame(frame);
+    });
+  });
+  await page.keyboard.press('Enter');
+  return page.evaluate(() => (window as unknown as { opened: Promise<number> }).opened);
+}
+
+/** Scrolls the open editor down by a screenful over about two seconds, one step a frame; each frame's duration. */
+const scrollEditor = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<number[]>(resolve => {
+        const el = document.querySelector<HTMLElement>('#editor .cm-scroller')!;
+        const times: number[] = [];
+        let last = 0;
+        const tick = (t: number) => {
+          if (last) times.push(t - last);
+          last = t;
+          if (times.length >= 120) return resolve(times);
+          el.scrollTop += 80;
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+
+// A 10,000-line file opened in full, as it is and in a run's Diff: its code shows within 200 ms of Enter, and
+// scrolling through it drops 2% of frames or fewer. Three opens and three scrolls each; the median must pass.
+test('a 10,000-line file opened in full: code within 200 ms, scrolling drops 2% of frames or fewer', async ({
+  page,
+}) => {
+  // Six opens and six scrolls, and a run recorded between them.
+  test.setTimeout(180_000);
+  const repo = bigRepo(40);
+  const huge = Array.from(
+    { length: 10000 },
+    (_, i) => `export const value${i} = compute(${i}, 'label ${i}'); // line ${i + 1}`,
+  );
+  fs.writeFileSync(path.join(repo, 'src/huge.ts'), huge.join('\n') + '\n');
+  git(repo, 'add', '-A');
+  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'huge file');
+  const b = await startBridge(repo, undefined, { LOA_QUIET_MS: '300' }, ['--no-hooks']);
+  const rows: object[] = [];
+  const measure = async (label: string) => {
+    const opens: number[] = [],
+      scrolls: ReturnType<typeof stats>[] = [];
+    for (let i = 0; i < 3; i++) {
+      // Selected once, as the scope shows: a click on a selected tile would deselect it.
+      if (!(await page.locator('#scopeRow .chip', { hasText: 'huge.ts' }).count()))
+        await page.locator('[data-path="src/huge.ts"]:visible').first().click();
+      // Enter opens the selected file from the map, not from a button that has focus.
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      opens.push(await openTime(page));
+      scrolls.push(stats(label, await scrollEditor(page)));
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#editor')).toHaveCount(0);
+    }
+    const row = {
+      view: label,
+      open_median_ms: median(opens),
+      open_worst_ms: Math.max(...opens),
+      dropped_median_pct: median(scrolls.map(s => (100 * s.dropped) / s.frames)),
+      dropped_worst_pct: Math.max(...scrolls.map(s => (100 * s.dropped) / s.frames)),
+    };
+    rows.push(row);
+    return row;
+  };
+  try {
+    await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.keyboard.press('0');
+    const editing = await measure('the file as it is');
+    const edited = huge.slice();
+    for (const n of [10, 5000, 9990]) edited[n - 1] = `export const value${n - 1} = 0; // changed`;
+    fs.writeFileSync(path.join(repo, 'src/huge.ts'), edited.join('\n') + '\n');
+    // The sidebar steps aside at this zoom: bring it back to open the run.
+    if (await page.locator('#side').evaluate(el => el.hasAttribute('inert'))) await page.keyboard.press('[');
+    await page.locator('[data-tab="runs"]').click();
+    await page.locator('#sideList [data-run="1"]').click({ timeout: 15_000 });
+    await page.locator('[data-mode="diff"]').click();
+    const diff = await measure("a run's Diff");
+    fs.writeFileSync(path.join(OUT, 'open-in-full.json'), JSON.stringify(rows, null, 2));
+    report(rows);
+    for (const r of [editing, diff]) {
+      expect(r.open_median_ms, `${r.view}: open`).toBeLessThan(200);
+      expect(r.dropped_median_pct, `${r.view}: scroll`).toBeLessThanOrEqual(2);
+    }
+  } finally {
+    b.stop();
+  }
+});
+
 // The editor on a 1,000-line file. The expand animates transform and opacity only, at 60 fps, and a
 // keystroke shows on screen within 100 ms.
 test('the editor on a 1,000-line file: expand at 60 fps, keystrokes under 100 ms', async ({ page }) => {

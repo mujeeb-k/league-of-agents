@@ -1,13 +1,13 @@
 // Editing on the map: the file open in the editor, unsaved drafts, and saving. A save is a run by
 // "You", with the same history, review and revert as an agent's run; in the demo it stays in the browser.
-import { bridge } from '../api/client';
+import { BridgeError, bridge } from '../api/client';
 import type { Conn } from '../api/types';
 import { anchorAt, grown, relocate, toLines, type Anchor } from '../lib/anchor';
 import { explain } from '../api/errors';
 import type { InlineDiff } from '../lib/editor';
-import { diffRows, linesAt } from '../lib/model';
+import { applyHunks, diffRows, linesAt } from '../lib/model';
 import { changedBlock } from '../lib/textdiff';
-import type { Run } from '../lib/types';
+import type { Change, Mode, Run } from '../lib/types';
 import { toast } from '../ui/toast';
 import { S, dom, st } from './app';
 import { applyPanels } from './panels';
@@ -45,6 +45,8 @@ export const ed = {
    * answer); cleared once it ends, fails to start, or the selection changes.
    */
   sent: null as { id: number | null; path: string; before: string[]; range: [number, number] } | null,
+  /** Edit the file as it is now, though a run that changed it is open (which shows the run's change instead). */
+  asEdit: false,
 };
 
 /** Said when the selected lines can't be found as they were. */
@@ -156,7 +158,11 @@ export async function openEditor(path: string) {
   ed.anchor = null;
   ed.stale = null;
   ed.sent = null;
+  // Opened with a run open, it shows the run's change; opened to edit, it stays so when a run is selected later.
+  ed.asEdit = !st.run;
   ed.loading = true;
+  // The hovered tile's name would float over the editor until the pointer moves.
+  dom.tileName.hidden = true;
   renderSel();
   bump('editor');
   try {
@@ -311,14 +317,25 @@ export function reviewRun(path: string): Run | null {
 export function inlineDiff(run: Run, path: string): InlineDiff {
   const ch = run.changes.get(path)!;
   const pre = S.CONN ? (ch.pre ?? []) : linesAt(S.FILES.get(path)!, S.RUNS.indexOf(run)).L;
+  const { added, removed } = changeLines(pre, ch);
+  return { added, removed };
+}
+
+/**
+ * A change as line numbers: lines added and lines removed (by the line they preceded) in the text after it, and the
+ * lines it replaced in the text before it.
+ */
+function changeLines(pre: string[], ch: Change): Required<InlineDiff> {
   const rows = ch.created ? ch.lines.map((t, i) => ({ t, k: 'add' as const, na: i + 1 })) : diffRows(pre, ch.hunks);
   const added: number[] = [],
+    deleted: number[] = [],
     removed = new Map<number, string[]>();
   let gone: string[] = [],
     next = 1;
   for (const r of rows) {
     if (r.k === 'del') {
       gone.push(r.t);
+      deleted.push(r.nb!);
       continue;
     }
     next = r.na! + 1;
@@ -327,7 +344,50 @@ export function inlineDiff(run: Run, path: string): InlineDiff {
     if (r.k === 'add') added.push(r.na!);
   }
   if (gone.length) removed.set(next, gone);
-  return { added, removed };
+  return { added, removed, deleted };
+}
+
+/** The run whose change to the open file it shows, read only, in Before, After or Diff; null to edit the file. */
+export function runInView(): Run | null {
+  const run = st.run;
+  return ed.path && !ed.asEdit && run?.changes.has(ed.path) ? run : null;
+}
+
+type RunView = { text: string; diff: InlineDiff };
+/** Each file a run changed, whole, once loaded: its text and marks in each mode. Null while it loads. */
+const runViews = new Map<string, Record<Mode, RunView> | null>();
+
+/**
+ * The file as the run found it, whole (the state keeps only its first 4,000 lines), and as the run left it, in
+ * each mode: Before marks the lines the run replaced, After the lines it added, Diff both.
+ */
+async function loadRunView(run: Run, path: string, key: string) {
+  runViews.set(key, null);
+  const ch = run.changes.get(path)!;
+  let before = ch.created ? [] : (ch.pre ?? []);
+  if (!S.CONN) before = linesAt(S.FILES.get(path)!, S.RUNS.indexOf(run)).L;
+  else if (!ch.created)
+    try {
+      before = toLines((await bridge.runBefore(S.CONN, run.id, path)).text);
+    } catch (e) {
+      // Bridges before 0.2.0 don't hand the whole file over: the lines the run kept stand in for it.
+      if (!(e instanceof BridgeError && e.status === 404)) toast(explain(e));
+    }
+  const after = ch.deleted ? [] : ch.created && !ch.hunks.length ? ch.lines : applyHunks(before, ch.hunks);
+  const { added, removed, deleted } = changeLines(before, ch);
+  runViews.set(key, {
+    before: { text: before.join('\n'), diff: { added: [], removed: new Map(), deleted } },
+    after: { text: after.join('\n'), diff: { added, removed: new Map() } },
+    diff: { text: after.join('\n'), diff: { added, removed } },
+  });
+  bump('editor');
+}
+
+/** What the open file shows in a run's mode, loading it the first time; null while it loads. */
+export function runView(run: Run, path: string, mode: Mode): RunView | null {
+  const key = `${run.id}|${path}`;
+  if (!runViews.has(key)) void loadRunView(run, path, key);
+  return runViews.get(key)?.[mode] ?? null;
 }
 
 /** Leaving the page with unsaved edits asks first. */

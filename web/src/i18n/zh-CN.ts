@@ -418,5 +418,6 @@ const catalogue: Catalogue = {
     '你的代码仓库的地图，适用于 Claude Code、Codex 和 Cursor。选择文件或代码行，给代理一个任务，然后审查它的改动。',
   "A map of a repository with an agent's changes marked.": '一个代码仓库的地图，标出了代理的改动。',
   'What League of Agents collects.': 'League of Agents 收集哪些信息。',
+  'Edit file': 'Edit file',
 };
 export default catalogue;

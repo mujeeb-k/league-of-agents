@@ -58,9 +58,14 @@ const highlighter = ViewPlugin.fromClass(
  * An agent's change to this file, shown inline: its added lines, by line number in the text, and its
  * removed lines, by the line number they were removed before (one past the last line for the end).
  */
+/**
+ * A change shown in the text, by line number: lines added, lines removed shown before the line they preceded, and,
+ * in the text before the change, the lines it replaced.
+ */
 export interface InlineDiff {
   added: number[];
   removed: Map<number, string[]>;
+  deleted?: number[];
 }
 
 class Removed extends WidgetType {
@@ -90,13 +95,18 @@ const diffField = StateField.define({
         const doc = tr.state.doc,
           b = new RangeSetBuilder<Decoration>(),
           d = e.value;
-        if (d)
+        if (d) {
+          const added = new Set(d.added),
+            deleted = new Set(d.deleted);
           for (let n = 1; n <= doc.lines + 1; n++) {
             const rm = d.removed.get(n);
             const at = n <= doc.lines ? doc.line(n).from : doc.length;
             if (rm) b.add(at, at, Decoration.widget({ widget: new Removed(rm), block: true, side: -1 }));
-            if (n <= doc.lines && d.added.includes(n)) b.add(at, at, Decoration.line({ class: 'cm-added' }));
+            if (n > doc.lines) continue;
+            if (added.has(n)) b.add(at, at, Decoration.line({ class: 'cm-added' }));
+            else if (deleted.has(n)) b.add(at, at, Decoration.line({ class: 'cm-deleted' }));
           }
+        }
         deco = b.finish();
       }
     return deco;
@@ -177,12 +187,14 @@ export function createEditor(parent: HTMLElement, text: string, readOnly: boolea
     },
     // The change is brought into view, so it is seen without scrolling for it.
     showDiff: diff => {
-      const first = diff && Math.min(...diff.added, ...diff.removed.keys());
+      let first = Infinity;
+      for (const n of diff ? [...diff.added, ...diff.removed.keys(), ...(diff.deleted ?? [])] : [])
+        first = Math.min(first, n);
       const doc = view.state.doc;
       view.dispatch({
         effects: [
           setDiff.of(diff),
-          ...(first && Number.isFinite(first)
+          ...(Number.isFinite(first)
             ? [EditorView.scrollIntoView(doc.line(Math.min(first, doc.lines)).from, { y: 'center' })]
             : []),
         ],

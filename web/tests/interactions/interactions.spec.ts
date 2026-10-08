@@ -1083,7 +1083,7 @@ test.describe('editor', () => {
     );
     await expect(page.locator('#editor .tk-k').first()).toHaveText('import');
     await expect(page.locator('#scopeRow .chip:not(.all) > span')).toHaveText(['endpoint-health.ts']);
-    // The file's import lines stay visible: what it imports on the right, what uses it on the left.
+    // Its related files, under the header: what it imports, then what uses it. Each chip opens that file.
     const rel = (label: string) => page.locator(`.rel-chip[aria-label^="${label}"]`, {}).locator('span');
     await expect(rel('Imports')).toHaveText(['attempt-log.ts', 'types.ts']);
     await expect(rel('Used by')).toHaveText(['endpoints.ts', 'schedule-retry.ts', 'circuit-breaker.ts']);
@@ -1315,4 +1315,14 @@ test.describe('a page per language', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     await expect(page.locator('#conn')).toHaveText('Demo');
   });
+});
+
+test("opening a file hides the tile's name label, which would float over the editor", async ({ page }) => {
+  const tile = page.locator('.fr').first();
+  await tile.hover();
+  await expect(page.locator('#tileName')).toBeVisible();
+  await tile.click();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#editor')).toBeVisible();
+  await expect(page.locator('#tileName')).toBeHidden();
 });

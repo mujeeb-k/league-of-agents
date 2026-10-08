@@ -449,5 +449,6 @@ const catalogue: Catalogue = {
   "A map of a repository with an agent's changes marked.":
     'La carte d’un dépôt, avec les changements d’un agent signalés.',
   'What League of Agents collects.': 'Ce que League of Agents collecte.',
+  'Edit file': 'Edit file',
 };
 export default catalogue;

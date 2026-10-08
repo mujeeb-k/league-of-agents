@@ -1923,6 +1923,93 @@ test('lines selected in the editor scope a live run; changes outside them are fl
   }
 });
 
+/**
+ * A repo with a 600-line file, a 5,000-line one, and a run that changed the first's 5th, 300th and 596th lines (watch
+ * mode records it), open in Diff.
+ */
+async function longRun(page: Page, bridge?: string) {
+  const repo = makeRepo(),
+    FILE = 'shared/long.ts';
+  const lines = Array.from({ length: 600 }, (_, i) => `export const v${i + 1} = ${i + 1};`);
+  fs.writeFileSync(path.join(repo, FILE), lines.join('\n') + '\n');
+  // Longer than the 4,000 lines a run keeps of a file in the state.
+  fs.writeFileSync(path.join(repo, 'shared/big.ts'), Array.from({ length: 5000 }, (_, i) => `// ${i + 1}\n`).join(''));
+  git(repo, 'add', '-A');
+  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'long');
+  const b = await startBridge(repo, undefined, { LOA_QUIET_MS: String(QUIET) }, ['--no-hooks'], bridge);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto(bridge ? `${APP}/#bridge=${b.port}&t=${b.token}` : linkFor(b));
+  await expect(page.locator('#conn')).toHaveText('Live');
+  const edited = lines.slice();
+  for (const n of [5, 300, 596]) edited[n - 1] = `export const v${n} = ${n * 10};`;
+  fs.writeFileSync(path.join(repo, FILE), edited.join('\n') + '\n');
+  await expect.poll(async () => (await runsOf(b)).length, { timeout: 15_000 }).toBe(1);
+  await page.locator('[data-tab="runs"]').click();
+  await page.locator('#sideList [data-run="1"]').click();
+  await expect(page.locator('#runbar b')).toHaveText('Run 1');
+  await page.locator('[data-mode="diff"]').click();
+  // Open it: select its card, then Enter.
+  await page.locator(`.card[data-path="${FILE}"]`).click();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#editor .cm-content')).toBeVisible();
+  return { repo, b, FILE };
+}
+
+test('a file opened during a run shows the whole file in Before, After and Diff, its changes marked, filling the stage', async ({
+  page,
+}) => {
+  const { repo, b, FILE } = await longRun(page);
+  try {
+    // The opened file fills the stage beside the sidebar, above the composer: not a small centred box.
+    const stage = (await page.locator('#stage').boundingBox())!,
+      box = (await page.locator('#editor').boundingBox())!;
+    expect(box.width).toBeGreaterThan(stage.width - 300);
+    expect(box.height).toBeGreaterThan(stage.height - 160);
+    // Diff: the run's changes on the whole file, read only, scrolled to the first one.
+    await expect(page.locator('#editorRunView')).toContainText('Run 1');
+    await expect(page.locator('#editor .cm-content')).toHaveAttribute('aria-readonly', 'true');
+    await expect(page.locator('#editor .cm-added').first()).toHaveText('export const v5 = 50;');
+    await expect(page.locator('#editor .cm-removed').first()).toHaveText('export const v5 = 5;');
+    // The last change, near line 596 of 600, is there too.
+    await page.locator('#editor .cm-content').click();
+    await page.keyboard.press('ControlOrMeta+End');
+    await expect(page.locator('#editor .cm-added').last()).toHaveText('export const v596 = 5960;');
+    await expect(page.locator('#editor .cm-gutterElement').last()).toHaveText('600');
+    // After: the file as the run left it, its new lines marked, no removed lines.
+    await page.locator('[data-mode="after"]').click();
+    await expect(page.locator('#editor .cm-removed')).toHaveCount(0);
+    await expect(page.locator('#editor .cm-added').first()).toHaveText('export const v5 = 50;');
+    // Before: the file as the run found it, the lines it replaced marked.
+    await page.locator('[data-mode="before"]').click();
+    await expect(page.locator('#editor .cm-added')).toHaveCount(0);
+    await expect(page.locator('#editor .cm-deleted').first()).toHaveText('export const v5 = 5;');
+    // One click edits the file as it is now.
+    await page.locator('#editFile').click();
+    await expect(page.locator('#editorRunView')).toHaveCount(0);
+    await expect(page.locator('#editor .cm-content')).toHaveAttribute('aria-readonly', 'false');
+    // The bridge hands over the whole file as the run found it, past the 4,000 lines a run keeps in the state.
+    fs.appendFileSync(path.join(repo, 'shared/big.ts'), '// 5001\n');
+    await expect.poll(async () => (await runsOf(b)).length, { timeout: 15_000 }).toBe(2);
+    const before = await call(b, `/api/runs/2/before?path=${encodeURIComponent('shared/big.ts')}`);
+    expect((before.body.text as string).split('\n').length).toBe(5001);
+    expect((await call(b, `/api/runs/2/before?path=${encodeURIComponent(FILE)}`)).status).toBe(404);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test("on a 0.1.3 bridge, a file opened during a run still shows the run's changes", async ({ page }) => {
+  const { repo, b } = await longRun(page, publishedBridge('0.1.3'));
+  try {
+    await expect(page.locator('#editor .cm-added').first()).toHaveText('export const v5 = 50;');
+    await expect(page.locator('#editor .cm-removed').first()).toHaveText('export const v5 = 5;');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('open in Cursor or VS Code at the cursor line, from the editor and the inspector', async ({ page }) => {
   const repo = makeRepo(),
     b = await startBridge(repo, undefined, {}, ['--no-hooks']);

@@ -89,6 +89,9 @@ export const bridge = {
   turnOffCheck: (c: Conn, name: string) =>
     request<OkResponse>(c, '/api/checks/off', { method: 'POST', body: { name } }),
   file: (c: Conn, path: string) => request<FileResponse>(c, `/api/file?path=${encodeURIComponent(path)}`),
+  /** A file a run changed, whole, as the run found it. Bridges before 0.2.0 answer 404. */
+  runBefore: (c: Conn, id: number, path: string) =>
+    request<{ text: string }>(c, `/api/runs/${id}/before?path=${encodeURIComponent(path)}`),
   /** A file changed on disk since it was opened comes back as `{ changed }` instead of throwing. */
   async save(c: Conn, body: SaveBody): Promise<SaveResponse | { changed: { text: string; hash: string } }> {
     try {

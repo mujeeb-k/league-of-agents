@@ -674,7 +674,11 @@ const CODE_EXT =
 const SKIP =
   /(^|\/)(node_modules|\.git|\.loa|dist|build|coverage|\.next|\.turbo)(\/|$)|(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$|(^|\/)\.env/;
 const MAX_LINES = 400,
-  MAX_FILES = 1500;
+  MAX_FILES = 1500,
+  // Larger files are left off the map and can't be opened: a guard against reading a giant file into memory.
+  MAX_BYTES = 16 * 1024 * 1024;
+/** Text, as git judges it: no NUL byte in the first 8,000 bytes. */
+const isText = buf => !buf.subarray(0, 8000).includes(0);
 
 function listFiles() {
   const out = git(['ls-files', '-z', '--cached', '--others', '--exclude-standard']).split('\0').filter(Boolean);
@@ -683,21 +687,28 @@ function listFiles() {
     .sort()
     .slice(0, MAX_FILES);
 }
-/** A file as the map shows it: its length and first lines; null for one the map leaves out. */
+/**
+ * A file as the map shows it: its length and first lines; null for one the map leaves out. The whole file opens on
+ * demand (/api/file), so only its start is decoded here.
+ */
 function treeEntry(p) {
   const abs = path.join(ROOT, p);
-  let st;
+  let buf;
   try {
-    st = fs.statSync(abs);
+    if (fs.statSync(abs).size > MAX_BYTES) return null;
+    buf = fs.readFileSync(abs);
   } catch {
     return null;
   }
-  if (!st.isFile() || st.size > 400000) return null;
-  const text = fs.readFileSync(abs, 'utf8');
-  if (text.includes('\0')) return null;
-  const lines = text.split('\n');
-  if (lines.length && lines[lines.length - 1] === '') lines.pop();
-  return { path: p, total: lines.length, lines: lines.slice(0, MAX_LINES) };
+  if (!isText(buf)) return null;
+  let total = 0;
+  for (let i = buf.indexOf(10); i >= 0; i = buf.indexOf(10, i + 1)) total++;
+  if (buf.length && buf[buf.length - 1] !== 10) total++;
+  const head = buf
+    .subarray(0, 256 * 1024)
+    .toString('utf8')
+    .split('\n');
+  return { path: p, total, lines: head.slice(0, Math.min(MAX_LINES, total)) };
 }
 function readTree() {
   return listFiles().map(treeEntry).filter(Boolean);
@@ -848,11 +859,6 @@ function rangeKept(before, after, { from, to }) {
   return true;
 }
 const hashOf = text => crypto.createHash('sha1').update(text).digest('hex');
-/**
- * The absolute path of a file the app may read or write, or null: only a file the map shows (listFiles,
- * which leaves out .env files, .git, .loa and the skip list), whose real path is inside the repo, and that
- * is text under 400 KB.
- */
 // ---------------------------------------------------------------- authorship recorded in git (read only)
 /**
  * A Git AI authorship log (Git AI Standard v3.0.0, refs/notes/ai): for each file, its lines by author key, and
@@ -1040,6 +1046,11 @@ async function exportAttribution(format, files) {
   return { ref, commit: head, files: named.length };
 }
 
+/**
+ * The absolute path of a file the app may read or write, or null: only a file the map shows (listFiles,
+ * which leaves out .env files, .git, .loa and the skip list), whose real path is inside the repo, and that
+ * is text under MAX_BYTES.
+ */
 function repoFile(rel) {
   if (typeof rel !== 'string' || !listFiles().includes(rel)) return null;
   const abs = path.join(ROOT, rel);
@@ -1047,7 +1058,7 @@ function repoFile(rel) {
     const real = fs.realpathSync(abs);
     if (!real.startsWith(fs.realpathSync(ROOT) + path.sep)) return null;
     const st = fs.statSync(real);
-    if (!st.isFile() || st.size > 400000 || fs.readFileSync(real).includes(0)) return null;
+    if (!st.isFile() || st.size > MAX_BYTES || !isText(fs.readFileSync(real))) return null;
   } catch {
     return null;
   }
@@ -2278,6 +2289,15 @@ const server = http.createServer(async (req, res) => {
       if (!abs) return send(res, 404, { error: 'Not a file on the map' }, cors);
       const text = fs.readFileSync(abs, 'utf8');
       return send(res, 200, { path: url.searchParams.get('path'), text, hash: hashOf(text) }, cors);
+    }
+    // A file a run changed, whole, as the run found it: the state keeps only its first 4,000 lines (computeChanges).
+    const before = p.match(/^\/api\/runs\/(\d+)\/before$/);
+    if (req.method === 'GET' && before) {
+      const run = runs.get(+before[1]),
+        rel = url.searchParams.get('path');
+      if (!run?.before || !run.changes?.some(c => c.path === rel))
+        return send(res, 404, { error: 'That file is not in this run' }, cors);
+      return send(res, 200, { text: (await showAt(run.before, rel)) ?? '' }, cors);
     }
     // A save from the editor is a run by "You": the same snapshots, history and revert as an agent's.
     // Turns on checks the bridge found, or approves the ones the repo's loa.config.json asks for (all of them).

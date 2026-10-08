@@ -184,25 +184,13 @@ svg.ic {
   color: var(--num);
 }
 
-/* The open file's import lines (Editor.tsx, Related): to related cards on screen, outlined above the dim. */
-#editorLinks path {
-  fill: none;
-  stroke: var(--sel);
-  stroke-width: 1.75;
-}
-#editorLinks .rel {
-  pointer-events: all;
-  cursor: pointer;
-}
-#editorLinks .rel rect {
-  fill: transparent;
-  stroke: var(--sel);
-  stroke-width: 2;
-}
-
-/* An agent's change, inline in the editor (lib/editor.ts): added lines tinted, removed lines shown struck. */
+/* A change, inline in the editor (lib/editor.ts): added lines tinted, removed lines shown struck, and in the text
+   before the change, the lines it replaced tinted. */
 #editor .cm-added {
   background: var(--add-bg);
+}
+#editor .cm-deleted {
+  background: var(--del-bg);
 }
 #editor .cm-removed {
   padding-left: 6px;
