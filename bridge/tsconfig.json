@@ -1,0 +1,22 @@
+{
+  // Type-checks the bridge's JavaScript (npm --prefix web run typecheck): it ships as plain .mjs, with no build.
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "typeRoots": ["../web/node_modules/@types"],
+    // Strict checks come later: the bridge was written untyped. Checked now: names, properties, calls, unused code.
+    "strict": false,
+    "noImplicitAny": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true
+  },
+  "include": ["*.mjs", "lib/**/*.mjs"]
+}

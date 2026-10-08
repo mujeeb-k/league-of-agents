@@ -234,21 +234,32 @@ function readJson(p, d) {
 function git(args, opts = {}) {
   return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, ...opts });
 }
-/** git without blocking the bridge: snapshots, diffs and reverts run while requests are still answered. */
+/**
+ * git without blocking the bridge: snapshots, diffs and reverts run while requests are still answered.
+ * @param {string[]} args
+ * @param {{ input?: string } & import('node:child_process').ExecFileOptions} [opts]
+ * @returns {Promise<string>}
+ */
 function gitAsync(args, { input, ...opts } = {}) {
   return new Promise((resolve, reject) => {
     const child = execFile(
       'git',
       args,
       { cwd: ROOT, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, ...opts },
-      (e, out) => (e ? reject(e) : resolve(out)),
+      (e, out) => (e ? reject(e) : resolve(String(out))),
     );
     if (input !== undefined) child.stdin.end(input);
   });
 }
 const logError = e => console.error(e.message);
 /** Runs baseline and snapshot work one at a time, in order: they share the snapshot index and the baseline. */
+/** @type {Promise<unknown>} */
 let lane = Promise.resolve();
+/**
+ * @template T
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
 function serial(fn) {
   const done = lane.then(fn);
   lane = done.catch(() => {});
@@ -627,6 +638,7 @@ if (argv[0] === 'hooks' && argv[1] === 'remove') {
       method: 'POST',
       headers: { authorization: 'Bearer ' + b.token },
     });
+    /** @type {{ error?: string; removed?: string[] }} */
     const body = await r.json();
     if (!r.ok) {
       console.error(body.error);
@@ -945,10 +957,13 @@ async function recordedAuthors(rel) {
  * authorship log (refs/notes/ai, agent lines only, never over a log already there). Only files whose working copy
  * is HEAD's, so the line numbers are HEAD's. `files`: path to { start, end, author, run } ranges, 1-based. No
  * prompts go in: notes can be pushed.
+ * @param {'agent-trace' | 'git-ai'} format
+ * @param {Record<string, { start: number; end: number; author: string; run: number | null }[]>} files
  */
 async function exportAttribution(format, files) {
   const head = (await headNow()).commit;
   if (!head) return { error: 'There is no commit yet.', code: 'no-commit' };
+  /** @type {[string, (typeof files)[string]][]} */
   const asHead = [];
   for (const [p, ranges] of Object.entries(files || {})) {
     if (!repoFile(p) || !Array.isArray(ranges)) continue;
@@ -1164,7 +1179,10 @@ const title = s => {
   return s.length > 72 ? s.slice(0, 70) + '…' : s || 'Untitled run';
 };
 
-function newRun({ agent, prompt, scope = [], resumeFrom = null, sessionId = null }) {
+/**
+ * @param {{ agent: string; prompt?: string; scope?: string[]; resumeFrom?: number | null; sessionId?: string | null }} opts
+ */
+function newRun({ agent, prompt = '', scope = [], resumeFrom = null, sessionId = null }) {
   return {
     id: nextId(),
     agent,
@@ -1875,7 +1893,8 @@ const QUIET_MS = Number(process.env.LOA_QUIET_MS || 3000);
  * interrupted, with its changes.
  */
 const HOOK_IDLE_MS = Number(process.env.LOA_HOOK_IDLE_MS || 30 * 60 * 1000);
-let idleTimer = 0;
+/** @type {NodeJS.Timeout | undefined} */
+let idleTimer;
 function armIdle() {
   clearTimeout(idleTimer);
   const run = active?.run;
@@ -1884,8 +1903,10 @@ function armIdle() {
     if (active?.run === run) finishRun(run, 'interrupted').catch(logError);
   }, HOOK_IDLE_MS);
 }
-let base = null; // { head, tree, commit }
-let quietTimer = 0;
+/** @type {{ head: { commit: string; ref: string }; tree: string; commit: string } | null} */
+let base = null;
+/** @type {NodeJS.Timeout | undefined} */
+let quietTimer;
 const pending = new Set();
 const sameHead = (a, b) => a.commit === b.commit && a.ref === b.ref;
 /** Takes a new baseline; `fresh` restarts the snapshot index from HEAD, as when HEAD moved. */
@@ -2513,7 +2534,7 @@ function listening() {
     );
   console.log('');
 }
-server.on('error', e => {
+server.on('error', (/** @type {NodeJS.ErrnoException} */ e) => {
   console.error(e.code === 'EADDRINUSE' ? `Port ${PORT} is busy. Use --port <n>.` : e.message);
   process.exit(1);
 });
