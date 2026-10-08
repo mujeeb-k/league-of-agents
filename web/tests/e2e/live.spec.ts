@@ -1262,7 +1262,7 @@ test.describe('sessions at once', () => {
   /** A repo whose stand-in Hermes edits what each prompt names, and holds its turn until the test says go. */
   async function twoSessions(fn: (b: Bridge, repo: string) => Promise<void>) {
     const repo = makeRepo();
-    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP });
+    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP, LOA_CODEX_BIN: FAKE_CODEX });
     try {
       await expect
         .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).agents.hermes?.available)
@@ -1305,6 +1305,19 @@ test.describe('sessions at once', () => {
       expect(fs.readFileSync(path.join(repo, 'apps/console/main.ts'), 'utf8')).not.toBe(SEED['apps/console/main.ts']);
       expect((await call(b, `/api/runs/${c.id}/revert`, {})).status).toBe(200);
       expect(fs.readFileSync(path.join(repo, 'apps/console/main.ts'), 'utf8')).toBe(SEED['apps/console/main.ts']);
+    }));
+
+  test("Codex beside Hermes: Codex doesn't report its edits, so it is credited what changed in its own section", () =>
+    twoSessions(async (b, repo) => {
+      const h = (await start(b, ['apps/'], 'edit:apps/console/main.ts wait:a')).body as unknown as RunDTO;
+      const c = (await call(b, '/api/runs', { agent: 'codex', prompt: 'Change the log prefix', scope: ['shared/'] }))
+        .body as unknown as RunDTO;
+      await until(b, c.id, 'done');
+      expect((await runOf(b, c.id)).changes.map(ch => ch.path)).toEqual(['shared/log.ts']);
+      go(repo, 'a');
+      await until(b, h.id, 'done');
+      expect((await runOf(b, h.id)).changes.map(ch => ch.path)).toEqual(['apps/console/main.ts']);
+      expect((await state(b)).runs.map(r => r.agent)).toEqual(['hermes', 'codex']);
     }));
 
   test('sections of sessions at work never overlap, and a whole-repository run works alone', () =>
