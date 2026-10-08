@@ -21,7 +21,8 @@
     "screens": "npm run build && playwright test --project screens",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run check:any && npm run test:unit",
     "test": "npm run check && npm run test:e2e",
-    "smoke": "npm run build && playwright test --project app -g smoke"
+    "smoke": "npm run build && playwright test --project app -g smoke",
+    "smoke:live": "LOA_APP_URL=https://leagueofagents.dev playwright test --project app -g smoke"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",
