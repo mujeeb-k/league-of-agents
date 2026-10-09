@@ -2029,6 +2029,50 @@ test.describe('sessions at once, in the app', () => {
       await expect(page.locator('#sessionsCost')).toHaveText('$0.008 so far');
     }));
 
+  test('a session that finishes while you look elsewhere: a mark in the tab title, and a notification once turned on', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const w = window as unknown as { away: boolean; notes: { title: string; body?: string }[] };
+      w.away = false;
+      w.notes = [];
+      Object.defineProperty(document, 'hidden', { get: () => w.away });
+      document.hasFocus = () => !w.away;
+      class Recorder {
+        static permission = 'default';
+        static requestPermission = async () => (Recorder.permission = 'granted');
+        onclick: (() => void) | null = null;
+        constructor(title: string, opts?: { body?: string }) {
+          w.notes.push({ title, body: opts?.body });
+        }
+      }
+      (window as unknown as { Notification: unknown }).Notification = Recorder;
+    });
+    await withHermes(page, async repo => {
+      const title = await page.title();
+      await page.locator('#notifyBtn').click();
+      await expect(page.locator('#notifyBtn')).toHaveAttribute('aria-pressed', 'true');
+      await folder(page, 'shared').click();
+      await run(page, 'Tidy the log. edit:shared/log.ts wait:a');
+      await expect(running(page)).toHaveCount(1);
+      await page.evaluate(() => {
+        (window as unknown as { away: boolean }).away = true;
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      go(repo, 'a');
+      await expect.poll(() => page.title(), { timeout: 15_000 }).toBe(`(1) ${title}`);
+      expect(await page.evaluate(() => (window as unknown as { notes: unknown[] }).notes)).toEqual([
+        { title: 'Run 1 finished', body: 'Tidy the log. edit:shared/log.ts wait:a' },
+      ]);
+      // Back: the mark goes.
+      await page.evaluate(() => {
+        (window as unknown as { away: boolean }).away = false;
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await expect.poll(() => page.title()).toBe(title);
+    });
+  });
+
   test('a session finishing while another is reviewed leaves the view where it is', async ({ page }) =>
     withHermes(page, async repo => {
       await folder(page, 'shared').click();

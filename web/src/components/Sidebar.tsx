@@ -1,5 +1,5 @@
 // Sidebar: Files and Runs.
-import { ChevronRight, Pin, Square } from 'lucide-react';
+import { Bell, ChevronRight, Pin, Square } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { flyAll, flyDir, flyFile } from '../lib/camera';
 import { agentOf } from '../lib/constants';
@@ -15,6 +15,7 @@ import { stopAll } from '../api/live';
 import { renderSel, renderSide, useRegion } from '../state/render';
 import { endedAs, sessionColour, sessionsCost, workingRuns } from '../state/sessions';
 import { money } from '../lib/util';
+import { notifying, toggleNotifying } from '../state/notices';
 import { cn } from '@/lib/utils';
 import { BetaTag, CheckBadge, Dot, Stat } from './bits';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -443,6 +444,27 @@ function RunList() {
   );
 }
 
+/** Notifications when a session finishes or needs you while you look elsewhere (state/notices.ts). */
+function NotifyButton() {
+  if (!S.CONN) return null;
+  const on = notifying();
+  return (
+    <Tip label={on ? t('Stop notifying me') : t('Notify me when a session finishes or needs me')}>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        id="notifyBtn"
+        aria-label={t('Notify me when a session finishes or needs me')}
+        aria-pressed={on}
+        className="shrink-0 text-ink3 aria-pressed:text-foreground"
+        onClick={() => void toggleNotifying()}
+      >
+        {on ? <Bell className="fill-current" /> : <Bell />}
+      </Button>
+    </Tip>
+  );
+}
+
 function PinButton() {
   const pinned = panels.side === 'pinned';
   return (
@@ -498,6 +520,7 @@ export function Sidebar() {
               </span>
             </TabsTrigger>
           </TabsList>
+          <NotifyButton />
           <PinButton />
         </div>
         <div id="sideList" className="min-h-0 flex-1 overflow-auto pb-4">

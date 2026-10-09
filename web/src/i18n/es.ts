@@ -513,5 +513,9 @@ const catalogue: Catalogue = {
     one: 'Not counted: {n} session whose agent reports no cost, or not yet (Claude Code says it as it finishes).',
     other: 'Not counted: {n} sessions whose agents report no cost, or not yet (Claude Code says it as it finishes).',
   },
+  'Run {id} needs you': 'Run {id} needs you',
+  'Run {id} failed': 'Run {id} failed',
+  'Stop notifying me': 'Stop notifying me',
+  'Notify me when a session finishes or needs me': 'Notify me when a session finishes or needs me',
 };
 export default catalogue;

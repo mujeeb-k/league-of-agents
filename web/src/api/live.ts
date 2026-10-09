@@ -11,7 +11,8 @@ import { t, tn } from '../i18n';
 import { fmtDur, relTime } from '../lib/util';
 import { S, st } from '../state/app';
 import { noteEnded, opensOnFinish } from '../state/sessions';
-import { loadDemo } from '../state/actions';
+import { noticeEnded } from '../state/notices';
+import { loadDemo, selectRun } from '../state/actions';
 import { refreshEditor } from '../state/editing';
 import { bump, renderAll, renderCrumb, renderInspector, renderSide, setConnUI } from '../state/render';
 import { toast } from '../ui/toast';
@@ -312,6 +313,7 @@ async function poll() {
         const s = needState ? await bridge.state(conn()) : withDeltas(last!, deltas, r.seq);
         followSessions(S.WORKING, workingOf(s), s);
         noteEnded(S.WORKING, workingOf(s), s.runs);
+        noticeEnded(S.WORKING, workingOf(s), s.runs, id => selectRun(S.RUNS.find(r => r.id === id) ?? null));
         applyState(s, false);
         S.EVSEQ = Math.max(S.EVSEQ, s.seq || 0);
       } else renderSide();
