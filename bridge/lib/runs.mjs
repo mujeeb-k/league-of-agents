@@ -141,7 +141,15 @@ export async function finishRun(run, status = 'done', { checks = true } = {}) {
       if (!keepsBaseline(run)) setBase(snap);
     });
   await pin(run.id, 'after', run.after);
-  run.changes = await ownChanges(run, await computeChanges(run.before, run.after));
+  const own = await ownChanges(run, await computeChanges(run.before, run.after, { unseen: true }));
+  run.changes = own.filter(c => !c.unseen);
+  // What the map doesn't show (binary files, the skip list's) is still the run's: said, and undone by a revert.
+  run.unseen = own.filter(c => c.unseen).map(({ unseen, ...c }) => c);
+  if (run.unseen.length)
+    run.stream.push({
+      t: 'warn',
+      text: `Changed files the map doesn't show: ${run.unseen.map(c => c.path).join(', ')}`,
+    });
   run.agentLines = agentLinesOf(run);
   if (run.agent === 'detected' || run.agent === 'you') run.title = editedTitle(run.changes);
   const out = await scopeViolations(run);
@@ -209,7 +217,9 @@ export function push(run, entry) {
 }
 export async function revertRun(run, force) {
   // A run names only files inside the repo; anything else in a run file is never read or touched.
-  const changes = run.changes.filter(c => path.resolve(ROOT, c.path).startsWith(ROOT + path.sep));
+  const changes = [...run.changes, ...(run.unseen ?? [])].filter(c =>
+    path.resolve(ROOT, c.path).startsWith(ROOT + path.sep),
+  );
   const drift = [];
   for (const c of changes) {
     const now = fs.existsSync(path.join(ROOT, c.path)) ? (await gitAsync(['hash-object', '--', c.path])).trim() : null;

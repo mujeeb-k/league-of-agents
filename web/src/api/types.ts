@@ -104,6 +104,8 @@ export interface RunDTO {
    * under `ref`, to restore (POST /api/runs/:id/put-back).
    */
   putBack?: { path: string; ref: string; put: string | null; restored: boolean }[];
+  /** Files it changed that the map doesn't show (binary files, the skip list's): reverted and committed with it. */
+  unseen?: { path: string; created: boolean; deleted: boolean }[];
   committed?: { sha: string; at: number; files: string[] };
   limited?: boolean;
   slot?: number;

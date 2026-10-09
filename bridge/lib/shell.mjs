@@ -54,14 +54,15 @@ export function shellEnds(run, tool) {
     const to = (await snapshotNow(`run ${run.id} after a shell command`, watched(run))).commit;
     const others = [...working.values()].filter(r => r !== run).flatMap(r => (r.scope?.length ? r.scope : ['/']));
     const undone = [];
-    for (const c of await computeChanges(from, to)) {
-      if (inScope(run.scope, c.path))
-        noteLines(
-          run,
-          c.path,
-          c.hunks.map(h => h.add.join('\n')),
-        );
-      else if (!watched(run) && !inScope(others, c.path)) {
+    for (const c of await computeChanges(from, to, { unseen: true })) {
+      if (inScope(run.scope, c.path)) {
+        if ('hunks' in c)
+          noteLines(
+            run,
+            c.path,
+            c.hunks.map(h => h.add.join('\n')),
+          );
+      } else if (!watched(run) && !inScope(others, c.path)) {
         if ((await blobAt(from, c.path)) === null) fs.rmSync(path.join(ROOT, c.path), { force: true });
         else await restoreFrom(from, [c.path]);
         undone.push(c.path);

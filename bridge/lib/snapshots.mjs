@@ -209,7 +209,11 @@ export async function showAt(ref, p) {
     return null;
   }
 }
-export async function computeChanges(before, after) {
+/**
+ * The files that differ between two snapshots, with their hunks and each file as it was. Binary files and the skip
+ * list's are left out, as the map doesn't show them; `unseen` includes them, marked `unseen` and without hunks.
+ */
+export async function computeChanges(before, after, { unseen = false } = {}) {
   const range = [before, after, '--', '.', ':(exclude).loa'];
   // Each file's path and status from git's -z listing, which names any file exactly; its hunks from the patch, whose
   // file blocks come in the same order (the patch's headers quote names beyond ASCII).
@@ -252,9 +256,10 @@ export async function computeChanges(before, after) {
         i += 2;
       } else if (/^[ACDMTUX]/.test(fields[i] ?? '')) i += 1;
   }
-  return Promise.all(
+  const hidden = c => c.binary || SKIP.test(c.path);
+  const shown = await Promise.all(
     out
-      .filter(c => c.path && !c.binary && !SKIP.test(c.path))
+      .filter(c => c.path && !hidden(c))
       .map(async c => {
         const pre = c.created ? [] : splitLines((await showAt(before, c.path)) || '');
         const from = c.created ? moved.get(c.path) : undefined;
@@ -268,4 +273,11 @@ export async function computeChanges(before, after) {
         };
       }),
   );
+  if (!unseen) return shown;
+  return [
+    ...shown,
+    ...out
+      .filter(c => c.path && hidden(c))
+      .map(c => ({ path: c.path, created: c.created, deleted: c.deleted, unseen: true })),
+  ];
 }

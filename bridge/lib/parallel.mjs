@@ -101,7 +101,7 @@ export async function ownChanges(run, changes) {
 
 /** A revert while runs work: what it wrote is the revert's, not theirs, and not left over at the epoch's end. */
 export function noteRevert(run) {
-  if (epoch) for (const c of run.changes) epoch.expected.set(c.path, run.before);
+  if (epoch) for (const c of [...run.changes, ...(run.unseen ?? [])]) epoch.expected.set(c.path, run.before);
 }
 
 /** A run's checks: now, or once the epoch ends when it overlapped others still at work. */

@@ -27,7 +27,7 @@ export async function commitPreview(run) {
   const files = [],
     yours = [],
     changed = [];
-  for (const { path: p } of run.changes) {
+  for (const { path: p } of [...run.changes, ...(run.unseen ?? [])]) {
     if ((await blobNow(p)) !== (await blobAt(run.after, p))) changed.push(p);
     if (head.commit && (await blobAt(run.before, p)) !== (await blobAt(head.commit, p))) yours.push(p);
     else files.push(p);

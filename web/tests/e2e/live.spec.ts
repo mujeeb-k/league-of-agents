@@ -2354,6 +2354,33 @@ test.describe('sessions at once', () => {
       expect((await runOf(b, h.id)).summary).toBe('é'.repeat(70000));
     }));
 
+  test("revert undoes what the map doesn't show: images and other binary files, files in dist/", () =>
+    twoSessions(async (b, repo) => {
+      const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 0xff, 0xfe]);
+      fs.writeFileSync(path.join(repo, 'shared/logo.png'), png);
+      fs.mkdirSync(path.join(repo, 'shared/dist'));
+      fs.writeFileSync(path.join(repo, 'shared/dist/out.js'), 'export {};\n');
+      git(repo, 'add', '-A');
+      git(repo, '-c', 'user.name=t', '-c', 'user.email=t@e.t', 'commit', '-qm', 'logo');
+      const cmd =
+        "printf '\\001\\000\\377' > shared/logo.png; printf '\\000\\001' > shared/new.bin; echo x >> shared/dist/out.js";
+      const h = (await start(b, ['shared/'], `exec: ${cmd}`)).body as unknown as RunDTO;
+      await until(b, h.id, 'done');
+      const run = await runOf(b, h.id);
+      expect(run.changes).toEqual([]);
+      expect(run.stream?.map(e => e.text)).toContain(
+        "Changed files the map doesn't show: shared/dist/out.js, shared/logo.png, shared/new.bin",
+      );
+      // They are the run's to commit too.
+      expect((await call(b, `/api/runs/${h.id}/commit`)).body).toMatchObject({
+        files: ['shared/dist/out.js', 'shared/logo.png', 'shared/new.bin'],
+      });
+      expect((await call(b, `/api/runs/${h.id}/revert`, {})).status).toBe(200);
+      expect(fs.readFileSync(path.join(repo, 'shared/logo.png')).equals(png)).toBe(true);
+      expect(fs.readFileSync(path.join(repo, 'shared/dist/out.js'), 'utf8')).toBe('export {};\n');
+      expect(fs.existsSync(path.join(repo, 'shared/new.bin'))).toBe(false);
+    }));
+
   test('revert puts back a file that is not UTF-8 byte for byte', () =>
     twoSessions(async (b, repo) => {
       // Latin-1 text: é is the single byte 0xe9, which UTF-8 can't decode.
