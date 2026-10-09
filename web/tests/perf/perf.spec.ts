@@ -93,43 +93,46 @@ const report = (rows: object[]) =>
 test.describe.configure({ mode: 'serial' });
 fs.mkdirSync(OUT, { recursive: true });
 
-test('pan and zoom on a 1,000-file repo hold 60 fps', async ({ page, browser }) => {
-  const repo = bigRepo(1000);
-  const b = await startBridge(repo);
-  try {
-    await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
-    await expect(page.locator('#conn')).toHaveText('Live');
-    await expect(page.locator('.fr')).toHaveCount(1000);
-    // Fit everything, as a person would first: that ends the first-load sidebar (panels.ts), so it steps
-    // aside when zoomed out.
-    await page.keyboard.press('0');
-    await page.waitForTimeout(600);
-    await browser.startTracing(page, { path: path.join(OUT, 'pan-zoom-trace.json'), screenshots: false });
-    const results: ReturnType<typeof stats>[] = [];
-    // Each phase starts after the previous zoom has settled (camera.ts SETTLE_MS), so the one-off settle is
-    // measured on its own, as a response time, and not counted as dropped frames.
-    const phase = async (name: string, frames: number, w: Wheel) => {
-      results.push(stats(name, await drive(page, frames, w)));
-      await page.waitForTimeout(400);
-    };
-    const side = page.locator('#side'),
-      away = /(^|\s)away(\s|$)/;
-    await phase('pan, zoomed out (all 1,000 file tiles)', 180, { deltaX: 6, deltaY: 4 });
-    await expect(side).toHaveClass(away);
-    await phase('zoom in across 34%, the sidebar returns', 120, { deltaY: -6, ctrlKey: true });
-    await expect(page.locator('#world')).toHaveClass(/near/);
-    await expect(side).not.toHaveClass(away);
-    await phase('pan, zoomed in (code cards)', 180, { deltaX: 8, deltaY: 6 });
-    await phase('zoom out across 34%, the sidebar steps aside', 120, { deltaY: 6, ctrlKey: true });
-    await expect(side).toHaveClass(away);
-    await browser.stopTracing();
-    fs.writeFileSync(path.join(OUT, 'pan-zoom.json'), JSON.stringify(results, null, 2));
-    report(results);
-    for (const r of results) expect(r.dropped, r.name).toBeLessThanOrEqual(Math.ceil(r.frames * 0.02));
-  } finally {
-    b.stop();
-  }
-});
+for (const n of [1000, 10000])
+  test(`pan and zoom on a ${n.toLocaleString('en')}-file repo hold 60 fps`, async ({ page, browser }) => {
+    test.setTimeout(300_000);
+    const repo = bigRepo(n);
+    const b = await startBridge(repo);
+    try {
+      await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+      await expect(page.locator('#conn')).toHaveText('Live', { timeout: 60_000 });
+      await expect(page.locator('#world .frame').first()).toBeVisible({ timeout: 60_000 });
+      // Fit everything, as a person would first: that ends the first-load sidebar (panels.ts), so it steps
+      // aside when zoomed out. Every tile is then in view, so drawn even where a large map draws only those near it.
+      await page.keyboard.press('0');
+      await page.waitForTimeout(600);
+      await expect(page.locator('.fr')).toHaveCount(n, { timeout: 60_000 });
+      await browser.startTracing(page, { path: path.join(OUT, `pan-zoom-trace-${n}.json`), screenshots: false });
+      const results: ReturnType<typeof stats>[] = [];
+      // Each phase starts after the previous zoom has settled (camera.ts SETTLE_MS), so the one-off settle is
+      // measured on its own, as a response time, and not counted as dropped frames.
+      const phase = async (name: string, frames: number, w: Wheel) => {
+        results.push(stats(name, await drive(page, frames, w)));
+        await page.waitForTimeout(400);
+      };
+      const side = page.locator('#side'),
+        away = /(^|\s)away(\s|$)/;
+      await phase(`pan, zoomed out (all ${n.toLocaleString('en')} file tiles)`, 180, { deltaX: 6, deltaY: 4 });
+      await expect(side).toHaveClass(away);
+      await phase('zoom in across 34%, the sidebar returns', 120, { deltaY: -6, ctrlKey: true });
+      await expect(page.locator('#world')).toHaveClass(/near/);
+      await expect(side).not.toHaveClass(away);
+      await phase('pan, zoomed in (code cards)', 180, { deltaX: 8, deltaY: 6 });
+      await phase('zoom out across 34%, the sidebar steps aside', 120, { deltaY: 6, ctrlKey: true });
+      await expect(side).toHaveClass(away);
+      await browser.stopTracing();
+      fs.writeFileSync(path.join(OUT, `pan-zoom-${n}.json`), JSON.stringify(results, null, 2));
+      report(results);
+      for (const r of results) expect(r.dropped, r.name).toBeLessThanOrEqual(Math.ceil(r.frames * 0.02));
+    } finally {
+      b.stop();
+    }
+  });
 
 type Action = 'quick open' | 'command menu' | 'type' | 'explorer down' | 'inspector wider';
 
@@ -756,7 +759,8 @@ test("a run's timeline of 1,000 steps scrolls at 60 fps, and a click shows its f
     await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
     await expect(page.locator('#conn')).toHaveText('Live');
     await page.locator(`#sideList [data-run="${id}"]`).click();
-    await expect(page.locator('#timeline [data-step]').first()).toBeVisible();
+    // Just after the page loads, the map's first layout, and the bridge's own finishing of the run, come first.
+    await expect(page.locator('#timeline [data-step]').first()).toBeVisible({ timeout: 20_000 });
     const scrolled = await page.evaluate(
       () =>
         new Promise<number[]>(resolve => {

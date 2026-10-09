@@ -16,7 +16,8 @@ import {
   type ZoneBox,
 } from '../lib/scene';
 import { fitLabels } from '../lib/labels';
-import { dom } from '../state/app';
+import { culling, drawn } from '../lib/cull';
+import { dom, st } from '../state/app';
 import { useRegion } from '../state/render';
 import { Stat } from './bits';
 import { FileIcon } from './FileIcon';
@@ -167,6 +168,30 @@ const Zone = ({ z }: { z: ZoneBox }) => (
 );
 
 /**
+ * The file tiles and code cards: all of them, or on a large map, those near the view, tiles zoomed out and cards
+ * zoomed in (lib/cull.ts).
+ */
+function Files() {
+  useRegion('cards');
+  const sc = scene;
+  if (!sc) return null;
+  if (!culling())
+    return (
+      <>
+        {sc.tiles.map(f => (
+          <Tile key={'t:' + f.path} f={f} />
+        ))}
+        {sc.cards.map(c => (
+          <Card key={c.path} c={c} />
+        ))}
+      </>
+    );
+  return st.near
+    ? sc.cards.filter(c => drawn(c, CW, CH)).map(c => <Card key={c.path} c={c} />)
+    : sc.tiles.filter(f => drawn(f, CW, CH)).map(f => <Tile key={'t:' + f.path} f={f} />);
+}
+
+/**
  * Content of #wires, #nodes, #links and #sels. Elements are keyed by what they show (folder, file, import),
  * so a render updates them in place: switching views or selecting does not rebuild or re-fade the canvas.
  */
@@ -191,12 +216,7 @@ export function useScene() {
         {sc?.frames.map(f => (
           <Frame key={'d:' + f.path} f={f} />
         ))}
-        {sc?.tiles.map(f => (
-          <Tile key={'t:' + f.path} f={f} />
-        ))}
-        {sc?.cards.map(c => (
-          <Card key={c.path} c={c} />
-        ))}
+        <Files />
       </>
     ),
     sels: (

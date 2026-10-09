@@ -117,9 +117,6 @@
   background: var(--surface);
   box-shadow: 0 0 0 calc(1px / var(--s)) var(--hair);
   cursor: pointer;
-  /* Tiles are a fixed size (CW × CH), so off-screen tiles skip layout and paint. */
-  content-visibility: auto;
-  contain-intrinsic-size: 420px 300px;
 }
 .near .fr {
   display: none;

@@ -9,6 +9,8 @@ import { clamp } from './util';
 import { area } from './sections';
 import { filesUnder } from './model';
 import { workingRuns } from '../state/sessions';
+import { recull } from './cull';
+import { bump } from '../state/render';
 
 /*
   Zoom stays at 60 fps on large repos by changing only the transform while the scale is moving. The world is
@@ -31,8 +33,9 @@ function applyScale() {
 
 export function applyView(settle = false) {
   const { x, y, s } = st.v;
-  // The hovered tile's name label stays where the tile was; it returns on the next pointer move.
-  if (dom.tileName) dom.tileName.hidden = true;
+  // The hovered tile's name label stays where the tile was; it returns on the next pointer move. Written only when
+  // it changes, as below: a write on every frame of a pan restyles a large map.
+  if (dom.tileName && !dom.tileName.hidden) dom.tileName.hidden = true;
   dom.world.style.transform = `translate(${x}px,${y}px) scale(${s})`;
   const near = s >= NEAR;
   if (near !== st.near) {
@@ -56,13 +59,18 @@ export function applyView(settle = false) {
     dom.stage.style.backgroundSize = `${24 * s}px ${24 * s}px`;
     dom.stage.style.backgroundPosition = `${x}px ${y}px`;
   }
-  dom.zPct.textContent = Math.round(s * 100) + '%';
+  if (recull()) bump('cards');
+  const pct = Math.round(s * 100) + '%';
+  if (dom.zPct.textContent !== pct) dom.zPct.textContent = pct;
   drawMini();
 }
+/** The farthest zoom: 4%, or less on a map too large to fit at that, so the whole of it can always be seen. */
+export const minZoom = () =>
+  Math.min(0.04, (dom.stage.clientWidth - 60) / (S.WB.w || 1), (dom.stage.clientHeight - 60) / (S.WB.h || 1));
 export function zoomAt(px: number, py: number, f: number) {
   endFirstLoad();
   const { x, y, s } = st.v,
-    ns = clamp(s * f, 0.04, 2.5);
+    ns = clamp(s * f, minZoom(), 2.5);
   const wx = (px - x) / s,
     wy = (py - y) / s;
   st.v = { x: px - wx * ns, y: py - wy * ns, s: ns };
@@ -77,7 +85,7 @@ export function fitView(b: Box, pad = 80, maxS = 1.1): View {
     H = dom.stage.clientHeight - TOP - BOTTOM;
   const fit = (inset: number): View => {
     const w = W - inset,
-      s = clamp(Math.min((w - pad * 2) / b.w, (H - pad * 2) / b.h), 0.04, maxS);
+      s = clamp(Math.min((w - pad * 2) / b.w, (H - pad * 2) / b.h), minZoom(), maxS);
     return { s, x: inset + w / 2 - (b.x + b.w / 2) * s, y: TOP + H / 2 - (b.y + b.h / 2) * s };
   };
   const v = fit(0);

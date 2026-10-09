@@ -125,5 +125,7 @@ export function drawMini() {
     c.arc(ox + (f.x + CW / 2) * k, oy + (f.y + CH / 2) * k, 3.5, 0, Math.PI * 2);
     c.fill();
   }
-  cv.dataset.here = here.map(m => `${m.run.id} ${m.at.file}`).join(',');
+  // Written only when it changes: an attribute written on every frame of a pan restyles the page.
+  const where = here.map(m => `${m.run.id} ${m.at.file}`).join(',');
+  if (cv.dataset.here !== where) cv.dataset.here = where;
 }

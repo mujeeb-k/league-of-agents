@@ -1,6 +1,6 @@
 // The canvas stage: its markup and input handlers.
 import { useEffect, useRef } from 'react';
-import { applyView, flyDir, flyFile, flyTo, zoomAt } from '../lib/camera';
+import { applyView, flyDir, flyFile, flyTo, minZoom, zoomAt } from '../lib/camera';
 import { CH, CW } from '../lib/constants';
 import { existsNow } from '../lib/model';
 import { updateEdgeFocus } from '../lib/scene';
@@ -188,7 +188,7 @@ function bindStage(stage: HTMLElement) {
     else {
       const r = stage.getBoundingClientRect(),
         { s } = st.v,
-        ns = clamp(s * 2, 0.04, 2.5),
+        ns = clamp(s * 2, minZoom(), 2.5),
         px = e.clientX - r.left,
         py = e.clientY - r.top;
       flyTo({ s: ns, x: px - ((px - st.v.x) / s) * ns, y: py - ((py - st.v.y) / s) * ns });
