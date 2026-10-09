@@ -783,7 +783,8 @@ function repoWithFolders() {
   for (let i = 0; i < 40; i++) {
     const p = path.join(repo, `src/area${i % 5}/part${i % 3}/file${i}.ts`);
     fs.mkdirSync(path.dirname(p), { recursive: true });
-    fs.writeFileSync(p, `export const v${i} = ${i};\n`);
+    // A few lines each: git finds a rename by half the content in common (git diff -M).
+    fs.writeFileSync(p, [0, 1, 2, 3].map(k => `export const v${i}_${k} = ${i * k};\n`).join(''));
   }
   git(repo, 'add', '-A');
   git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'folders');
@@ -893,12 +894,13 @@ async function runToEnd(b: Bridge, body: object) {
       timeout: 15_000,
     })
     .toBe('done');
-  return ((await api('/api/state')) as StateResponse).runs.find(r => r.id === run.id)!;
+  // With its details: each file as it found it, and its activity.
+  return (await api(`/api/runs/${run.id}`)) as RunDTO;
 }
 
 /** Waits for a run to ask to change files outside its section, answers each, and waits for it to end. */
 async function answered(b: Bridge, id: number, allow: boolean) {
-  const now = async () => ((await call(b, '/api/state')).body as unknown as StateResponse).runs.find(r => r.id === id)!;
+  const now = async () => (await call(b, `/api/runs/${id}`)).body as unknown as RunDTO;
   await expect.poll(async () => (await now()).waiting, { timeout: 15_000 }).toBeTruthy();
   for (const w of (await now()).wants ?? [])
     if (!w.answer) expect((await call(b, `/api/runs/${id}/wants`, { path: w.path, allow })).status).toBe(200);
@@ -950,6 +952,109 @@ test("a start's first snapshot: from git's own index the first time, the same tr
     const tree = await beforeOf(b);
     expect(git(repo, 'ls-tree', '-r', '--name-only', tree)).not.toContain('out/x.log');
     expect(git(repo, 'ls-tree', '-r', '--name-only', tree)).toContain('apps/new.ts');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test("a folder as the map: the state holds its files; the repo's folders are listed with their counts; any code file opens", async () => {
+  const repo = makeRepo();
+  for (let i = 0; i < 3; i++) {
+    fs.mkdirSync(path.join(repo, 'apps/web'), { recursive: true });
+    fs.writeFileSync(path.join(repo, `apps/web/page${i}.ts`), `export const page${i} = ${i};\n`);
+  }
+  const b = await startBridge(repo);
+  try {
+    const whole = (await call(b, '/api/state')).body as unknown as StateResponse;
+    expect(whole.root).toBe('');
+    expect(whole.codeFiles).toBe(whole.tree.length);
+    const apps = (await call(b, '/api/state?root=apps/')).body as unknown as StateResponse;
+    expect(apps.root).toBe('apps/');
+    expect(apps.tree.map(f => f.path)).toEqual([
+      'apps/console/main.ts',
+      'apps/web/page0.ts',
+      'apps/web/page1.ts',
+      'apps/web/page2.ts',
+    ]);
+    expect(apps.codeFiles).toBe(whole.codeFiles);
+    // Folders to pick a map from: every folder holding code files, with how many are in it and under it.
+    const { folders } = (await call(b, '/api/folders')).body as unknown as {
+      folders: { path: string; files: number }[];
+    };
+    expect(folders).toEqual(
+      expect.arrayContaining([
+        { path: '', files: whole.codeFiles },
+        { path: 'apps/', files: 4 },
+        { path: 'apps/web/', files: 3 },
+        { path: 'shared/', files: 2 },
+      ]),
+    );
+    // A file outside the map still opens: the map is a view, not a limit.
+    const shared = await call(b, '/api/file?path=shared/log.ts');
+    expect(shared.status).toBe(200);
+    expect((await call(b, '/api/state?root=../')).status).toBe(400);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test("a map of over 1,500 files: names and lengths in the state, each file's first lines asked for when shown", async () => {
+  const repo = makeRepo();
+  fs.mkdirSync(path.join(repo, 'big'), { recursive: true });
+  for (let i = 0; i < 1600; i++)
+    fs.writeFileSync(path.join(repo, `big/f${String(i).padStart(4, '0')}.ts`), `export const v = ${i};\nexport {};\n`);
+  const b = await startBridge(repo);
+  try {
+    const s = (await call(b, '/api/state?root=big/')).body as unknown as StateResponse;
+    expect(s.tree).toHaveLength(1600);
+    expect(s.tree[0]).toEqual({ path: 'big/f0000.ts', total: 2, lines: [] });
+    const heads = (await call(b, '/api/heads', { paths: ['big/f0007.ts', 'shared/log.ts', '../x', 'nope.ts'] }))
+      .body as unknown as { files: { path: string; total: number; lines: string[] }[] };
+    expect(heads.files).toEqual([
+      { path: 'big/f0007.ts', total: 2, lines: ['export const v = 7;', 'export {};'] },
+      { path: 'shared/log.ts', total: 1, lines: [SEED['shared/log.ts']!.trimEnd()] },
+    ]);
+    // Under the line, the state carries the lines as before.
+    expect(
+      ((await call(b, '/api/state?root=shared/')).body as unknown as StateResponse).tree[0]!.lines.length,
+    ).toBeGreaterThan(0);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test("a run's details on demand: the state's runs leave out each file as the run found it and the activity; renames come from git", async () => {
+  const repo = makeRepo();
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP });
+  try {
+    const run = await runToEnd(b, { agent: 'claude', prompt: 'Name it', scope: [], resumeFrom: null });
+    const inState = ((await call(b, '/api/state')).body as unknown as StateResponse).runs.find(r => r.id === run.id)!;
+    const listed = inState.changes.find(c => c.path === 'shared/allowlist.ts')!;
+    expect(listed.pre).toBeUndefined();
+    expect(inState.stream).toBeUndefined();
+    expect(listed.hunks.length).toBeGreaterThan(0);
+    const full = (await call(b, `/api/runs/${run.id}`)).body as unknown as RunDTO;
+    expect(full.changes.find(c => c.path === 'shared/allowlist.ts')!.pre).toEqual(
+      SEED['shared/allowlist.ts']!.split('\n').slice(0, -1),
+    );
+    expect(full.stream!.length).toBeGreaterThan(0);
+    expect((await call(b, '/api/runs/99')).status).toBe(404);
+    await expect
+      .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).agents.hermes?.available)
+      .toBe(true);
+    const moved = await runToEnd(b, {
+      agent: 'hermes',
+      prompt: 'exec: mv shared/log.ts shared/logger.ts',
+      scope: ['shared/'],
+      resumeFrom: null,
+    });
+    expect(moved.changes.map(c => [c.path, c.created, c.deleted, c.renamedFrom ?? null])).toEqual([
+      ['shared/log.ts', false, true, null],
+      ['shared/logger.ts', true, false, 'shared/log.ts'],
+    ]);
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
@@ -1262,7 +1367,7 @@ test('an ACP harness (Hermes): asks before editing, reports its model, is refuse
     expect(first.sessionId).toMatch(/^fake-session-/);
     expect(first.summary).toBe(`Added reviewedBy to ${FILE}.`);
     expect(first.changes.map(c => c.path)).toEqual([FILE]);
-    expect(first.stream.map(e => e.text)).toEqual(
+    expect(first.stream!.map(e => e.text)).toEqual(
       expect.arrayContaining(['Reading the policy module.', `read: ${FILE}`, `patch: ${FILE}`]),
     );
     // The line it showed as a diff before writing it counts as the agent's (attribution).
@@ -1283,18 +1388,15 @@ test('an ACP harness (Hermes): asks before editing, reports its model, is refuse
     expect(second.sessionId).toBe(first.sessionId);
     expect(log()).toContain(`resume ${first.sessionId}`);
     // What the harness replays on resuming is the earlier run's, not this one's.
-    expect(second.stream.map(e => e.text)).not.toContain('replayed: an earlier call');
-    expect(second.stream.map(e => e.text)).not.toContain('Replayed from before.');
+    expect(second.stream!.map(e => e.text)).not.toContain('replayed: an earlier call');
+    expect(second.stream!.map(e => e.text)).not.toContain('Replayed from before.');
     expect(fs.existsSync(path.join(repo, 'outside.txt'))).toBe(false);
-    expect(second.stream.map(e => `${e.t} ${e.text}`)).toContain('deny Tried to change outside.txt. Blocked.');
+    expect(second.stream!.map(e => `${e.t} ${e.text}`)).toContain('deny Tried to change outside.txt. Blocked.');
     // Cancel asks the harness to stop its turn.
     const slow = (await api('/api/runs', { agent: 'hermes', prompt: 'Take it slow', scope: [], resumeFrom: null }))
       .body;
     await expect
-      .poll(
-        async () =>
-          ((await api('/api/state')).body as unknown as StateResponse).runs.find(r => r.id === slow.id)?.stream.length,
-      )
+      .poll(async () => ((await api(`/api/runs/${slow.id}`)).body as unknown as RunDTO).stream?.length)
       .toBeGreaterThan(1);
     await api(`/api/runs/${slow.id}/cancel`, {});
     await expect
@@ -1328,7 +1430,7 @@ test("without a sandbox, DeepSeek Harness runs in its read-only mode, so each ed
     const at = SEED[FILE]!.split('\n').length - 1;
     expect(run.agentLines).toEqual({ [FILE]: [[at, at]] });
     expect(fs.existsSync(path.join(repo, 'outside.txt'))).toBe(false);
-    const entries = run.stream.map(e => `${e.t} ${e.text}`);
+    const entries = run.stream!.map(e => `${e.t} ${e.text}`);
     expect(entries).toContain('deny Tried to change outside.txt. Blocked.');
     // A command it asks to run is refused, by what it would run.
     expect(entries).toContain('deny Refused: bash rm -rf build');
@@ -1363,7 +1465,7 @@ onMac(
       expect(run.agentLines).toEqual({ [FILE]: [[at, at]] });
       expect(fs.existsSync(path.join(repo, 'outside.txt'))).toBe(false);
       // Refused by the system, and asked of the person; not a failure.
-      const entries = run.stream.map(e => `${e.t} ${e.text}`);
+      const entries = run.stream!.map(e => `${e.t} ${e.text}`);
       expect(entries).toContain('deny Tried to change outside.txt. Blocked.');
       expect(entries.filter(e => e.startsWith('err'))).toEqual([]);
     } finally {
@@ -1596,7 +1698,7 @@ test.describe('sessions at once', () => {
   const start = (b: Bridge, scope: string[], prompt: string) =>
     call(b, '/api/runs', { agent: 'hermes', prompt, scope, resumeFrom: null });
   const state = async (b: Bridge) => (await call(b, '/api/state')).body as unknown as StateResponse;
-  const runOf = async (b: Bridge, id: number) => (await state(b)).runs.find(r => r.id === id)!;
+  const runOf = async (b: Bridge, id: number) => (await call(b, `/api/runs/${id}`)).body as unknown as RunDTO;
   const go = (repo: string, name: string) => fs.writeFileSync(path.join(repo, `.loa/go-${name}`), '');
   const until = (b: Bridge, id: number, status: string) =>
     expect.poll(async () => (await runOf(b, id)).status, { timeout: 15_000 }).toBe(status);
@@ -1655,7 +1757,7 @@ test.describe('sessions at once', () => {
         // Outside its section: undone at once, and the agent told why.
         expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
         expect(run.summary).toContain('notes.md: League of Agents scope lock: a shell command changed notes.md');
-        expect(run.stream.map(e => e.text).join('\n')).toContain('Put back what a shell command changed outside');
+        expect(run.stream!.map(e => e.text).join('\n')).toContain('Put back what a shell command changed outside');
         // Kept: restored as the command left it, once asked.
         expect(run.putBack).toEqual([
           { path: 'notes.md', ref: `refs/loa/runs/${c.id}/put-back-0`, put: null, restored: false },
@@ -1705,7 +1807,7 @@ test.describe('sessions at once', () => {
         expect(run.summary).toContain('apps/console/main.ts: EPERM');
         // A command's write names no file to ask about: said once, plainly.
         expect(run.commandBlocked).toBe(true);
-        expect(run.stream.filter(e => e.say === 'command-blocked')).toHaveLength(1);
+        expect(run.stream!.filter(e => e.say === 'command-blocked')).toHaveLength(1);
         expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
         expect(fs.readFileSync(path.join(repo, 'apps/console/main.ts'), 'utf8')).toBe(SEED['apps/console/main.ts']);
         expect(run.putBack).toBeUndefined();
@@ -1890,7 +1992,7 @@ test.describe('sessions at once', () => {
       // Waiting for the person: still at work on its section, which no other session may take.
       expect(run.status).toBe('running');
       expect(run.wants).toEqual([{ path: MAIN }]);
-      expect(run.stream.map(e => `${e.t} ${e.text}`)).toContain(`deny Tried to change ${MAIN}. Blocked.`);
+      expect(run.stream!.map(e => `${e.t} ${e.text}`)).toContain(`deny Tried to change ${MAIN}. Blocked.`);
       expect(fs.readFileSync(path.join(repo, MAIN), 'utf8')).toBe(SEED[MAIN]);
       expect((await start(b, ['shared/log.ts'], 'Log it')).status).toBe(409);
       expect((await answer(b, h.id, MAIN, true)).status).toBe(200);
@@ -2829,7 +2931,7 @@ for (const name of fs.readdirSync(AGENT_FIXTURES).filter(f => f.endsWith('.jsonl
       expect(run.summary).toBe(result.result);
       expect(run.cost).toBe(result.total_cost_usd);
       // Every label is relative to the repo: no absolute paths, no /repo placeholder.
-      for (const e of run.stream) {
+      for (const e of run.stream!) {
         expect(e.text).not.toContain(repo);
         expect(e.text).not.toContain('/repo');
       }
@@ -2839,7 +2941,7 @@ for (const name of fs.readdirSync(AGENT_FIXTURES).filter(f => f.endsWith('.jsonl
         expect(run.turn?.status).toBe(verdict.status_category);
         expect(run.turn?.needs === '').toBe(verdict.needs_action === '');
       }
-      const lines = run.stream.map(e => `${e.t}: ${e.text}`);
+      const lines = run.stream!.map(e => `${e.t}: ${e.text}`);
       if (name === 'claude-scope-lock-blocked.jsonl') {
         expect(run.turn?.status).toBe('blocked');
         expect(run.turn?.needs).not.toBe('');
@@ -2925,7 +3027,7 @@ test('terminal Claude Code: hooks record the turn, with its reply and tool calls
     expect(run.agentLines).toEqual({ 'shared/log.ts': [[0, 0]] });
     expect(run.sessionId).toBe('sess-term');
     expect(run.summary).toBe('Log lines now start with `[app]`.');
-    expect(run.stream.filter(e => e.t === 'tool').map(e => e.text)).toEqual([
+    expect(run.stream!.filter(e => e.t === 'tool').map(e => e.text)).toEqual([
       'Read shared/log.ts',
       'Edit shared/log.ts',
     ]);
@@ -3385,11 +3487,11 @@ test('a run limited to lines flags changes outside them; a file outside its file
     });
     expect(start.status).toBe(200);
     await expect.poll(async () => (await runsOf(b))[0]?.status, { timeout: 15_000 }).toBe('done');
-    const [run] = await runsOf(b);
+    const run = (await call(b, `/api/runs/${(await runsOf(b))[0]!.id}`)).body as unknown as RunDTO;
     // In the sandbox the file outside its file is never written; without one it is, and flagged.
     const outside = ['shared/allowlist.ts outside lines 3–5', ...(SANDBOX ? [] : ['shared/policy-cache.ts'])];
-    expect(run!.outOfScope).toEqual(outside);
-    expect(run!.stream.map(e => e.text)).toContain(`Changed outside scope: ${outside.join(', ')}`);
+    expect(run.outOfScope).toEqual(outside);
+    expect(run.stream!.map(e => e.text)).toContain(`Changed outside scope: ${outside.join(', ')}`);
     expect(fs.existsSync(path.join(repo, 'shared/policy-cache.ts'))).toBe(!SANDBOX);
   }));
 

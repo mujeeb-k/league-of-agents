@@ -68,7 +68,7 @@ function RunBar() {
             id="byAuthor"
             aria-pressed={st.byAuthor}
             className="shrink-0"
-            onClick={toggleByAuthor}
+            onClick={() => void toggleByAuthor()}
           >
             <Users />
 

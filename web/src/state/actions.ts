@@ -11,6 +11,7 @@ import { area, clashOf, type Clash } from '../lib/sections';
 import type { FileNode, Mode, Run } from '../lib/types';
 import { clamp } from '../lib/util';
 import { forgetAll, setMoment } from '../lib/live';
+import { ensureDetails, needsDetails } from '../api/live';
 import { DEMO_AGENTS, DEMO_STAYS, SAMPLE_BRANCH, SAMPLE_REPO, SAMPLE_RUNS, SAMPLE_TREE } from '../demo/sample';
 import { SAMPLE_TEXT } from '../demo/sampleText';
 import { startDemoSessions, stopDemoSession } from '../demo/sessions';
@@ -31,6 +32,15 @@ import {
 import { locale, t, tn } from '../i18n';
 
 export function selectRun(run: Run | null, fly = true) {
+  // A run opens once it has its details: each file as it found it, which its diff is drawn from.
+  if (run && needsDetails(run)) {
+    void ensureDetails([run.id]).then(() => openRun(S.RUNS.find(r => r.id === run.id) ?? null, fly));
+    return;
+  }
+  openRun(run, fly);
+}
+
+function openRun(run: Run | null, fly: boolean) {
   // An ended session's mark on the map goes once its run is looked at: opened, or left after being open.
   if (st.run && st.run !== run && st.run.status !== 'running') seen(st.run.id);
   if (run) seen(run.id);
@@ -43,7 +53,9 @@ export function selectRun(run: Run | null, fly = true) {
 }
 
 /** Colours the map by who wrote each line, on the latest state: an open run closes. */
-export function toggleByAuthor() {
+export async function toggleByAuthor() {
+  // Every run's files as it found them: who wrote each line is worked out run by run.
+  if (!st.byAuthor) await ensureDetails();
   st.byAuthor = !st.byAuthor;
   st.authorLine = null;
   if (st.run) selectRun(null, false);
@@ -470,6 +482,7 @@ function diffText(run: Run): string {
  * repository. In the demo, identifiers the save renamed are renamed in the files that import it.
  */
 export async function propagate(run: Run) {
+  await ensureDetails([run.id]);
   const files = [...run.changes.keys()].map(p => p.split('/').pop()).join(', ');
   const prompt = `Update what depends on my change to ${files}.\n\nThis is my change:\n\n${diffText(run)}\n\nUpdate every caller, import, test and type in the repository that depends on it, so the code stays consistent. Keep my change as it is.`;
   if (!S.LIVE || !S.CONN) return propagateInDemo(run, files);

@@ -57,11 +57,20 @@ export interface ChangeDTO {
   path: string;
   created: boolean;
   deleted: boolean;
-  pre: string[];
+  /**
+   * The file as the run found it. Bridges from 0.2.0 leave it out of the state's runs (GET /api/runs/:id has it);
+   * earlier ones send it always.
+   */
+  pre?: string[];
   hunks: HunkDTO[];
+  /** For a created file, the file it was renamed from, as git finds renames (bridges from 0.2.0). */
+  renamedFrom?: string;
 }
 
-/** publicRun(): a stored run with the stream trimmed to the last 60 entries. */
+/**
+ * publicRun(): a stored run. In the state, bridges from 0.2.0 leave out its stream and each file as it found it
+ * (GET /api/runs/:id has them); earlier ones send the stream's last 60 entries.
+ */
 export interface RunDTO {
   id: number;
   agent: string;
@@ -85,7 +94,7 @@ export interface RunDTO {
   changes: ChangeDTO[];
   checks: Check[];
   summary: string;
-  stream: StreamEntry[];
+  stream?: StreamEntry[];
   cost: number | null;
   kept: boolean;
   reverted: boolean;
@@ -134,8 +143,15 @@ export interface TreeFile {
   lines: string[];
 }
 
-/** GET /api/state. `tree` lists files with their first 400 lines. */
+/**
+ * GET /api/state(?root=folder/). `tree` lists the map's files with their first 400 lines, or, for a map of over 1,500
+ * files, with none (POST /api/heads has them).
+ */
 export interface StateResponse {
+  /** The folder the map is of, '' for the whole repository (bridges from 0.2.0). */
+  root?: string;
+  /** Code files in the whole repository, on the map or not (bridges from 0.2.0). */
+  codeFiles?: number;
   /** root: the repository's absolute path on this computer, for opening files in another editor. */
   repo: { name: string; branch: string; root: string };
   agents: Record<string, AgentInfo>;

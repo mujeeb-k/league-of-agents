@@ -71,7 +71,7 @@ function onKey(e: KeyboardEvent) {
   ) {
     e.preventDefault();
     void openEditor([...st.sel][0]!);
-  } else if (k === 'c' && S.ROOT) toggleByAuthor();
+  } else if (k === 'c' && S.ROOT) void toggleByAuthor();
   else if (k === '0') flyAll();
   else if (k === 'f') {
     if (st.sel.size) flySelection();

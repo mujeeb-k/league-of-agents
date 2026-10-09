@@ -20,10 +20,10 @@ import { AGENTS } from './agents/registry.mjs';
 import { checkClaude } from './agents/claude.mjs';
 import { onAgentLine } from './agents/stream.mjs';
 import { removeHooks } from './hooks-install.mjs';
-import { readTree, hashOf, repoFile } from './files.mjs';
+import { codeFiles, folders, readTree, hashOf, repoFile, treeEntry } from './files.mjs';
 import { showAt } from './snapshots.mjs';
 import { recordedAuthors, exportAttribution } from './authorship.mjs';
-import { runs, working, saveRun, publicRun, beginRun, finishRun, push, revertRun } from './runs.mjs';
+import { runs, working, saveRun, publicRun, fullRun, beginRun, finishRun, push, revertRun } from './runs.mjs';
 import { armIdle, ownWrite, writeConfig, watchOff } from './watch.mjs';
 import { seq, events, waiters, emit, emitRun } from './events.mjs';
 import { answerWant, cancelSession, startSession } from './sessions.mjs';
@@ -38,14 +38,23 @@ import { commitPreview, commitRun } from './commit.mjs';
  * @typedef {(r: Request) => Reply | Promise<Reply>} Handler
  */
 
-/** @returns {Reply} */
-function state() {
+/**
+ * The state, with the map of a folder (`root`, ending in /) or of the whole repo.
+ * @param {Request} request
+ * @returns {Reply}
+ */
+function state({ url }) {
+  const root = url.searchParams.get('root') ?? '';
+  if (root && (!root.endsWith('/') || root.split('/').some(s => s === '..' || s === '.') || root.startsWith('/')))
+    return [400, { error: 'Not a folder of the repo' }];
   return [
     200,
     {
       repo: { name: path.basename(ROOT), branch: safeBranch(), root: ROOT },
       agents: AGENTS,
-      tree: readTree(),
+      root,
+      codeFiles: codeFiles().files.length,
+      tree: readTree(root),
       runs: [...runs.values()].sort((a, b) => a.id - b.id).map(publicRun),
       active: working.keys().next().value ?? null,
       working: [...working.keys()],
@@ -235,6 +244,36 @@ async function answer({ params, body }) {
   const { path: file, allow } = await body();
   await answerWant(run, String(file ?? ''), allow === true);
   return [200, { ok: true }];
+}
+/**
+ * A run with everything: each file as it found it, and its activity (the state leaves them out).
+ * @param {Request} request
+ * @returns {Promise<Reply>}
+ */
+async function runDetails({ params }) {
+  const run = runOf(params);
+  return run ? [200, fullRun(run)] : noRun;
+}
+/**
+ * The folders a map can be of, with the code files in each.
+ * @returns {Reply}
+ */
+const folderList = () => [200, { folders: folders() }];
+/**
+ * Files' lengths and first lines, for the files a map too large to carry them shows (any code file; others are left
+ * out).
+ * @param {Request} request
+ * @returns {Promise<Reply>}
+ */
+async function heads({ body }) {
+  const { paths } = await body();
+  const { set } = codeFiles();
+  const files = (Array.isArray(paths) ? paths : [])
+    .slice(0, 2000)
+    .filter(p => typeof p === 'string' && set.has(p))
+    .map(p => treeEntry(p))
+    .filter(Boolean);
+  return [200, { files }];
 }
 /**
  * A run's steps from the `from`th on: each tool call its agent made (lib/steps.mjs).
@@ -494,6 +533,9 @@ export const ROUTES = [
   ['POST', /^\/api\/runs\/(\d+)\/shell$/, shell],
   ['POST', /^\/api\/runs\/(\d+)\/put-back$/, restore],
   ['POST', /^\/api\/runs\/(\d+)\/wants$/, answer],
+  ['GET', /^\/api\/runs\/(\d+)$/, runDetails],
+  ['GET', '/api/folders', folderList],
+  ['POST', '/api/heads', heads],
   ['GET', /^\/api\/runs\/(\d+)\/steps$/, steps],
   ['GET', /^\/api\/runs\/(\d+)\/steps\/(\d+)$/, stepFile],
   ['GET', /^\/api\/runs\/(\d+)\/commit$/, commitInfo],

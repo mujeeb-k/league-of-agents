@@ -8,7 +8,7 @@ import path from 'node:path';
 import { logError, serial } from './util.mjs';
 import { HOOK_AGENT } from './hook.mjs';
 import { ROOT, CONFIG_FILE, gitAsync } from './repo.mjs';
-import { SKIP } from './files.mjs';
+import { SKIP, forgetFiles, isCode } from './files.mjs';
 import { writeTree, commitTree, headNow, pin, computeChanges, startIndex } from './snapshots.mjs';
 import { runs, working, newRun, finishRun } from './runs.mjs';
 import { emit } from './events.mjs';
@@ -39,6 +39,8 @@ const pending = new Set();
 const sameHead = (a, b) => a.commit === b.commit && a.ref === b.ref;
 /** Takes a new baseline; `fresh` restarts the snapshot index from HEAD, as when HEAD moved. */
 export async function rebase(fresh = false) {
+  // HEAD moved, or the bridge started: the files may be others.
+  forgetFiles();
   const head = await headNow(),
     tree = await writeTree(fresh);
   base = { head, tree, commit: await commitTree(tree, 'baseline', head) };
@@ -121,15 +123,18 @@ export async function watch() {
     await rebase();
   });
   try {
-    const watcher = fs.watch(ROOT, { recursive: true }, (_, f) => {
+    const watcher = fs.watch(ROOT, { recursive: true }, (type, f) => {
       const p = f ? String(f).split(path.sep).join('/') : '';
       // Inside .git only a moved HEAD or branch matters; the rest is git's own bookkeeping, ours included.
       if (p === '.git' || p.startsWith('.git/')) {
         if (!/^\.git\/(HEAD|packed-refs|refs\/heads\/)/.test(p)) return;
         pending.add('');
       } else if (SKIP.test(p)) return;
-      else if (pending.size < 5000) pending.add(p);
-      else pending.add('');
+      else {
+        // A file came or went (or moved): the list of code files is made again.
+        if (type === 'rename' && isCode(p)) forgetFiles();
+        pending.add(pending.size < 5000 ? p : '');
+      }
       armIdle();
       clearTimeout(quietTimer);
       quietTimer = setTimeout(onQuiet, QUIET_MS);

@@ -149,7 +149,7 @@ function Commands() {
             label={st.byAuthor ? t('Stop coloring by author') : t('Color by author')}
             icon={<Users />}
             keys="C"
-            onSelect={toggleByAuthor}
+            onSelect={() => void toggleByAuthor()}
           />
           <Item label={t('Write a prompt')} icon={<MessageSquareText />} keys="/" onSelect={() => dom.prompt.focus()} />
         </CommandGroup>

@@ -37,29 +37,50 @@ function conn(): Conn {
   return S.CONN;
 }
 
+/**
+ * Each run's files as it found them, by run and path, and its activity: what the state leaves out (bridges from 0.2.0),
+ * fetched when a run is opened or every run is needed (colored by author). A finished run's never change.
+ */
+const details = new Map<number, { pre: Map<string, string[]>; stream: RunDTO['stream'] }>();
+
 function liveRun(r: RunDTO): Run {
   const changes: Run['changes'] = new Map();
-  const renames = renamesOf(r.changes || []),
-    renamed = new Set(renames.values());
+  const known = details.get(r.id);
+  const preOf = (c: RunDTO['changes'][number]) => c.pre ?? known?.pre.get(c.path) ?? null;
+  // Renames as the bridge names them (git's -M); a bridge before 0.2.0 sends each file's text to find them from.
+  const named = r.changes.some(c => c.renamedFrom);
+  const renames = named
+    ? new Map(r.changes.flatMap(c => (c.renamedFrom ? [[c.path, c.renamedFrom] as const] : [])))
+    : r.changes.every(c => c.pre)
+      ? renamesOf(r.changes.map(c => ({ ...c, pre: c.pre! })))
+      : new Map<string, string>();
+  const renamed = new Set(renames.values());
   for (const c of r.changes || []) {
     if (renamed.has(c.path)) continue;
     const from = renames.get(c.path);
     // A renamed file is one change: from its old text to its new one, under its new name.
-    const pre = from ? r.changes.find(x => x.path === from)!.pre : null;
+    const old = from ? preOf(r.changes.find(x => x.path === from)!) : null;
     const block =
-      pre &&
+      old &&
       changedBlock(
-        pre,
+        old,
         c.hunks.flatMap(h => h.add),
       );
     changes.set(
       c.path,
-      pre
-        ? { created: false, deleted: false, pre, hunks: block ? [block] : [], lines: [], renamedFrom: from }
+      from
+        ? {
+            created: false,
+            deleted: false,
+            pre: old,
+            hunks: block ? [block] : old ? [] : c.hunks,
+            lines: [],
+            renamedFrom: from,
+          }
         : {
             created: c.created,
             deleted: c.deleted,
-            pre: c.pre,
+            pre: preOf(c),
             hunks: c.hunks,
             lines: c.created ? c.hunks.flatMap(h => h.add) : [],
           },
@@ -68,6 +89,7 @@ function liveRun(r: RunDTO): Run {
   if (!S.REVIEWED.has(r.id)) S.REVIEWED.set(r.id, new Set());
   return {
     ...r,
+    stream: r.stream ?? known?.stream,
     when: relTime(r.startedAt),
     dur: fmtDur(r.startedAt, r.endedAt),
     changes,
@@ -121,10 +143,46 @@ export function saveLayoutSoon() {
   }, 1000);
 }
 
+/** Whether a run from a bridge lacks what the state leaves out: a file as it found it, or its activity (0.2.0 on). */
+export const needsDetails = (run: Run) =>
+  !!S.CONN &&
+  run.status !== 'running' &&
+  (run.stream === undefined || [...run.changes.values()].some(c => c.pre === null && !c.created));
+
+/**
+ * Fetches the details of the runs that lack them, a few at a time, and puts them on the runs as the app has them.
+ * Every run (no ids): what coloring by author needs.
+ */
+export async function ensureDetails(ids = S.RUNS.map(r => r.id)) {
+  const missing = ids.filter(id => {
+    const run = S.RUNS.find(r => r.id === id);
+    return S.CONN && run && !details.has(id) && needsDetails(run);
+  });
+  for (let i = 0; i < missing.length; i += 8)
+    await Promise.all(
+      missing.slice(i, i + 8).map(async id => {
+        try {
+          const r = await bridge.run(conn(), id);
+          details.set(id, { pre: new Map(r.changes.flatMap(c => (c.pre ? [[c.path, c.pre]] : []))), stream: r.stream });
+        } catch {
+          // Pruned, or the bridge went: the run shows what the state had.
+        }
+      }),
+    );
+  // The same run objects, so what holds them (the open run) sees their details.
+  for (const run of S.RUNS) {
+    const dto = missing.includes(run.id) && last?.runs.find(r => r.id === run.id);
+    if (!dto) continue;
+    const full = liveRun(dto);
+    Object.assign(run, { changes: full.changes, stream: full.stream });
+  }
+}
+
 /** Writes who wrote each line to a git note on the last commit, once the person has said yes (ExportDialog). */
 export async function exportAttribution(format: 'agent-trace' | 'git-ai') {
   const c = S.CONN;
   if (!c) return;
+  await ensureDetails();
   const now = new Map([...S.FILES.values()].filter(f => !f.gone).map(f => [f.path, f.base]));
   const files = Object.fromEntries([...authorsOf(S.RUNS, now, S.RECORDED)].map(([p, o]) => [p, rangesOf(o)]));
   try {
@@ -332,10 +390,13 @@ function openFinished(run: Run, was: Run | null) {
     setTimeout(() => {
       const now = S.RUNS.find(r => r.id === run.id);
       if ((st.run?.id ?? null) !== (was?.id ?? null) || !now) return;
-      st.run = now;
-      st.mode = 'diff';
-      renderAll();
-      flyRun(now);
+      void ensureDetails([now.id]).then(() => {
+        if ((st.run?.id ?? null) !== (was?.id ?? null)) return;
+        st.run = now;
+        st.mode = 'diff';
+        renderAll();
+        flyRun(now);
+      });
     }),
   );
 }

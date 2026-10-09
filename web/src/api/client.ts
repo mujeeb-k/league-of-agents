@@ -91,6 +91,8 @@ export const bridge = {
   /** Answers a write a session asked to make outside its section: allowed, it joins the section. */
   answerWant: (c: Conn, id: number, path: string, allow: boolean) =>
     request<OkResponse>(c, `/api/runs/${id}/wants`, { method: 'POST', body: { path, allow } }),
+  /** A run with its details: each file as it found it, its activity. Bridges before 0.2.0 answer 404. */
+  run: (c: Conn, id: number) => request<RunDTO>(c, `/api/runs/${id}`),
   /** A run's steps from the `from`th on. Bridges before 0.2.0 answer 404. */
   steps: (c: Conn, id: number, from: number) => request<{ steps: StepDTO[] }>(c, `/api/runs/${id}/steps?from=${from}`),
   /** The text of a step's file as its edit left it. */

@@ -28,6 +28,7 @@ import {
   useDiskVersion,
 } from '../state/editing';
 import { runAction } from '../state/actions';
+import { ensureDetails, needsDetails } from '../api/live';
 import { agentOf } from '../lib/constants';
 import type { Run } from '../lib/types';
 import { bump, useRegion } from '../state/render';
@@ -262,6 +263,11 @@ export function Editor() {
   const review = path && !inRun && !drafts.has(path) ? reviewRun(path) : null;
   const shownDiff = useRef('');
   useEffect(() => {
+    // The file as the run found it comes with the run's details: fetched first, then the change shows.
+    if (review && needsDetails(review)) {
+      void ensureDetails([review.id]).then(() => bump('editor'));
+      return;
+    }
     const key = view && inRun ? `run|${inRun.id}|${st.mode}` : review && path ? `${review.id}|${ed.saved}` : '';
     if (!cm.current || key === shownDiff.current) return;
     shownDiff.current = key;

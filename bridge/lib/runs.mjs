@@ -62,7 +62,13 @@ export function pruneRuns() {
   }
 }
 export const saveRun = r => fs.writeFileSync(path.join(RUNS_DIR, r.id + '.json'), JSON.stringify(r));
-export const publicRun = r => ({ ...r, stream: (r.stream || []).slice(-60) });
+/**
+ * A run as the state and its events carry it: without its activity or each file as it found it, which grow with every
+ * run kept (GET /api/runs/:id has them, fullRun).
+ */
+export const publicRun = ({ stream, ...r }) => ({ ...r, changes: (r.changes || []).map(({ pre, ...c }) => c) });
+/** A run with everything: its activity's last 60 entries, and each file as it found it. */
+export const fullRun = r => ({ ...r, stream: (r.stream || []).slice(-60) });
 /** A run's title: the prompt's first line, shortened. */
 const title = s => {
   s = String(s || '')

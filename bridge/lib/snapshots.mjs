@@ -235,12 +235,33 @@ export async function computeChanges(before, after) {
       cur.hunks.push(h);
     } else if (h && line.startsWith('+')) h.add.push(line.slice(1));
   }
+  // Renames, as git finds them (half the lines in common, `git diff -M`): the run's records stay a file deleted and
+  // one created, which is what revert undoes; the created one names the file it came from.
+  const moved = new Map();
+  if (out.some(c => c.created) && out.some(c => c.deleted)) {
+    const fields = (
+      await gitAsync(['diff', '-M', '--name-status', '-z', '--no-ext-diff', before, after, '--', '.', ':(exclude).loa'])
+    ).split('\0');
+    for (let i = 0; i < fields.length; i++)
+      if (fields[i]?.startsWith('R')) {
+        moved.set(fields[i + 2], fields[i + 1]);
+        i += 2;
+      } else if (/^[ACDMTUX]/.test(fields[i] ?? '')) i += 1;
+  }
   return Promise.all(
     out
       .filter(c => c.path && !c.binary && !SKIP.test(c.path))
       .map(async c => {
         const pre = c.created ? [] : splitLines((await showAt(before, c.path)) || '');
-        return { path: c.path, created: c.created, deleted: c.deleted, pre: pre.slice(0, 4000), hunks: c.hunks };
+        const from = c.created ? moved.get(c.path) : undefined;
+        return {
+          path: c.path,
+          created: c.created,
+          deleted: c.deleted,
+          pre: pre.slice(0, 4000),
+          hunks: c.hunks,
+          ...(from ? { renamedFrom: from } : {}),
+        };
       }),
   );
 }
