@@ -10,7 +10,7 @@ import { buildModel, diffRows, existsNow, filesUnder, layout, linesAt, parseSamp
 import { area, clashOf, type Clash } from '../lib/sections';
 import type { FileNode, Mode, Run } from '../lib/types';
 import { clamp } from '../lib/util';
-import { setMoment } from '../lib/live';
+import { forgetAll, setMoment } from '../lib/live';
 import { DEMO_AGENTS, DEMO_STAYS, SAMPLE_BRANCH, SAMPLE_REPO, SAMPLE_RUNS, SAMPLE_TREE } from '../demo/sample';
 import { SAMPLE_TEXT } from '../demo/sampleText';
 import { startDemoSessions, stopDemoSession } from '../demo/sessions';
@@ -411,6 +411,7 @@ const listOf = (ids: number[]) => new Intl.ListFormat(locale(), { type: 'conjunc
 
 export function loadDemo() {
   st.unreachable = null;
+  forgetAll();
   S.REVIEWED.clear();
   S.WORKING = [];
   S.LIVE_AGENTS = null;

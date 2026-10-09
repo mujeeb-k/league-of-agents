@@ -6,11 +6,12 @@ import { S, st } from '../../src/state/app';
 import type { Run } from '../../src/lib/types';
 
 describe('edits drawn as they land', () => {
+  const at = (status: Run['status']) => (S.RUNS = [{ id: 7, status } as Run]);
   beforeEach(() => {
-    S.WORKING = [7];
+    at('done');
     st.run = null;
     forgetEnded();
-    S.WORKING = [7];
+    at('running');
   });
 
   it('draws the latest edit of a file against the file as the run found it', () => {
@@ -30,10 +31,10 @@ describe('edits drawn as they land', () => {
     expect(liveChange('a.ts')).toBeUndefined();
     st.run = { id: 7 } as Run;
     expect(liveChange('a.ts')).toBeDefined();
-    S.WORKING = [];
+    at('done');
     expect(liveChange('a.ts')).toBeUndefined();
     forgetEnded();
-    S.WORKING = [7];
+    at('running');
     expect(liveChange('a.ts')).toBeUndefined();
   });
 });

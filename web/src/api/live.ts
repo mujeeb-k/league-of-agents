@@ -12,7 +12,7 @@ import { fmtDur, relTime } from '../lib/util';
 import { S, st } from '../state/app';
 import { noteEnded, opensOnFinish } from '../state/sessions';
 import { landed, stepped } from '../state/watch';
-import { addSteps, forgetEnded, setMoment } from '../lib/live';
+import { addSteps, forgetAll, forgetEnded, setMoment } from '../lib/live';
 import { toLines } from '../lib/anchor';
 import { noticeAsks, noticeEnded } from '../state/notices';
 import { stopDemoTimers } from '../demo/sessions';
@@ -437,6 +437,9 @@ export async function connect(c: Conn, quiet = false): Promise<string | null> {
     st.tab = 'runs';
     // A repository is laid out as it was last time, or afresh; later state events keep this layout.
     S.LAYOUT = await loadLayout(c, s.repo.root);
+    forgetAll();
+    stepsFetched.clear();
+    foundAs.clear();
     applyState(s, true);
     toast(t('Connected to {repo}', { repo: s.repo.name }));
     void poll();

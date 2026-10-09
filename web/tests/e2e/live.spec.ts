@@ -733,7 +733,8 @@ test('run deltas: a finished run reaches the canvas without fetching the whole s
     await expect(page.locator('[data-mode="diff"]')).toHaveAttribute('aria-checked', 'true');
     await expect(page.locator('.card.k-mod[data-path="shared/allowlist.ts"]')).toHaveCount(1);
     await expect(page.locator('.card.k-add[data-path="shared/policy-cache.ts"]')).toHaveCount(1);
-    await expect(page.locator('.check .sm')).toHaveText('3 passed', { timeout: 15_000 });
+    // As a list: for a moment the check's result shows while checks are still said to run.
+    await expect(page.locator('.check .sm')).toHaveText(['3 passed'], { timeout: 15_000 });
     // The run's start fetches the state once (the bridge's own state event); its end and its checks don't.
     expect(fetches() - before).toBeLessThanOrEqual(1);
     const atEnd = fetches();
@@ -2640,6 +2641,26 @@ test.describe('sessions at once, in the app', () => {
       await page.mouse.up();
       await expect(follow).toHaveAttribute('aria-pressed', 'false');
       go(repo, 'b');
+      await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+    }));
+
+  test('one session ending leaves what the others reported since as it was: their cost, their activity', async ({
+    page,
+  }) =>
+    withHermes(page, async repo => {
+      await folder(page, 'shared').click();
+      await run(page, 'cost hold:h edit:shared/log.ts wait:a');
+      await page.keyboard.press('Escape');
+      await folder(page, 'apps').click();
+      await run(page, 'edit:apps/console/main.ts wait:b');
+      // Run 1 reports its cost after run 2 started, and before run 2 ends.
+      go(repo, 'h');
+      const one = page.locator('#sideList [data-run="1"]');
+      await expect(one.locator('.cost')).toHaveText('$0.004', { timeout: 15_000 });
+      go(repo, 'b');
+      await expect(page.locator('#sideList [data-run="2"]')).not.toHaveClass(/running/, { timeout: 15_000 });
+      await expect(one.locator('.cost')).toHaveText('$0.004');
+      go(repo, 'a');
       await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
     }));
 

@@ -33,6 +33,9 @@ export function readOnly(id: number): Set<string> {
   return read;
 }
 
+/** Whether a run is still at work, live or in the demo. */
+const working = (id: number) => S.RUNS.find(r => r.id === id)?.status === 'running';
+
 /**
  * Each file a session at work has edited, as its latest edit left it against the file as the run found it: drawn on
  * the map as it lands, until the run ends with its changes.
@@ -70,7 +73,7 @@ export function liveChange(path: string): Change | undefined {
   const m = momentOf(path);
   if (m) return m.change;
   const l = live.get(path);
-  if (!l || !S.WORKING.includes(l.run) || (st.run && st.run.id !== l.run)) return undefined;
+  if (!l || !working(l.run) || (st.run && st.run.id !== l.run)) return undefined;
   return l.change;
 }
 
@@ -87,5 +90,12 @@ export function setLive(run: number, i: number, path: string, before: string[], 
 
 /** The runs that ended: what their sessions drew goes, their changes take its place. */
 export function forgetEnded() {
-  for (const [p, l] of live) if (!S.WORKING.includes(l.run)) live.delete(p);
+  for (const [p, l] of live) if (!working(l.run)) live.delete(p);
+}
+
+/** Another repository, or the demo again: runs of the same number are other runs, so what was kept of them goes. */
+export function forgetAll() {
+  steps.clear();
+  live.clear();
+  moment = null;
 }
