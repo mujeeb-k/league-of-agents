@@ -103,6 +103,8 @@ export interface Run {
   outOfScope?: string[];
   /** Without a sandbox, files a shell command changed outside the section and the bridge put back (bridge/lib/shell.mjs). */
   putBack?: { path: string; restored: boolean }[];
+  /** Its colour on the map while it works (theme.css --session-1 to 5), given as it starts. */
+  slot?: number;
   /** Failed because the agent's provider stopped it at its rate or usage limit. */
   limited?: boolean;
   /** The commit the person made of the run's files, from the app (bridge/lib/commit.mjs). */

@@ -12,19 +12,8 @@ export function workingRuns(): Run[] {
   return S.WORKING.map(id => S.RUNS.find(r => r.id === id)).filter(r => !!r);
 }
 
-const slots = new Map<number, number>();
-/** A session's colour. It keeps it while it works, so another ending never changes it. */
-export function sessionColour(run: Run): string {
-  const at = new Set(workingRuns().map(r => r.id));
-  for (const id of slots.keys()) if (!at.has(id)) slots.delete(id);
-  let slot = slots.get(run.id);
-  if (slot === undefined) {
-    const taken = new Set(slots.values());
-    slot = [...Array(MAX_SESSIONS).keys()].find(i => !taken.has(i)) ?? run.id % MAX_SESSIONS;
-    slots.set(run.id, slot);
-  }
-  return `var(--session-${slot + 1})`;
-}
+/** A session's colour: the one it was given as it started, the same in every window and after a reload. */
+export const sessionColour = (run: Run) => `var(--session-${((run.slot ?? run.id) % MAX_SESSIONS) + 1})`;
 
 /** Whether two runs worked at the same time: sessions, one beside the other. */
 export function workedTogether(a: Pick<Run, 'startedAt' | 'endedAt'>, b: Pick<Run, 'startedAt' | 'endedAt'>) {

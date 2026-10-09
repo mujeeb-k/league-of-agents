@@ -154,6 +154,8 @@ export function simulateRun(prompt: string, scope = scopeFromSelection()): Run |
     when: t('Just now'),
     dur: '',
     status: 'running',
+    // The first colour free among the demo's sessions at work, as the bridge gives one.
+    slot: [0, 1, 2, 3, 4].find(i => !workingRuns().some(r => r.slot === i)) ?? 0,
     startedAt: Date.now(),
     endedAt: null,
     changes: new Map(),

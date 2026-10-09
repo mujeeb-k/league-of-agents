@@ -106,6 +106,10 @@ export function beginRun(opts) {
     if (lockOfRun(opts) === 'refuse') throw NO_SANDBOX();
     const before = await startingPoint(settle);
     const run = newRun(opts);
+    // Its colour on the map while it works: the first one free, kept with the run so every window and a reload
+    // show the same.
+    const taken = new Set([...working.values()].map(r => r.slot));
+    run.slot = [0, 1, 2, 3, 4, 5, 6, 7].find(i => !taken.has(i)) ?? working.size;
     run.before = before;
     joinEpoch(run);
     await pin(run.id, 'before', run.before);

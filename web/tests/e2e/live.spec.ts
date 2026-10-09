@@ -1983,6 +1983,39 @@ test.describe('sessions at once, in the app', () => {
       await expect(page.locator('#scopeRow .chip.all')).toHaveText('Whole repository');
     }));
 
+  test('a reload mid-run brings back every session: its section, its colour, its state', async ({ page }) =>
+    withHermes(page, async () => {
+      await folder(page, 'shared').click();
+      await run(page, 'edit:shared/log.ts wait:a');
+      await folder(page, 'apps').click();
+      await run(page, 'edit:apps/console/main.ts wait:b');
+      await expect(running(page)).toHaveCount(2);
+      // Run 1 stops; run 3 takes the colour it had, so colours aren't simply in order.
+      await page.locator('#sideList [data-run="1"] [data-stop]').click();
+      // Released once its agent has stopped: marked as ended.
+      await expect(page.locator('#sels .zone.ended')).toHaveCount(1, { timeout: 10_000 });
+      await page.keyboard.press('0');
+      await folder(page, 'shared').click();
+      await run(page, 'edit:shared/log.ts wait:c');
+      await expect(running(page)).toHaveCount(2);
+      const look = () =>
+        page
+          .locator('#sels .zone:not(.ended)')
+          .evaluateAll(els =>
+            els.map(el => `${el.querySelector('b')?.textContent} ${getComputedStyle(el).outlineColor}`),
+          );
+      const before = await look();
+      expect(before).toHaveLength(2);
+      await page.reload();
+      await expect(page.locator('#conn')).toHaveText('Live');
+      await expect(running(page)).toHaveCount(2);
+      await expect(page.locator('#sideList [data-run="2"]')).toContainText('Hermes is working');
+      await expect(page.locator('#sideList [data-run="3"]')).toContainText('Hermes is working');
+      await expect.poll(look).toEqual(before);
+      // Working sessions' cards keep their colour too.
+      await expect(page.locator('#sideList [data-run="1"] .tags')).toContainText('Cancelled');
+    }));
+
   test('a session finishing while another is reviewed leaves the view where it is', async ({ page }) =>
     withHermes(page, async repo => {
       await folder(page, 'shared').click();
