@@ -11,6 +11,7 @@ export const HOOK_AGENT = { claude: 'claude-terminal', codex: 'codex-terminal', 
 
 export async function runHook(kind, agent = 'claude') {
   let input = '';
+  process.stdin.setEncoding('utf8');
   for await (const d of process.stdin) input += d;
   let data = {};
   try {

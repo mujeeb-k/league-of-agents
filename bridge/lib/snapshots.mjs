@@ -194,45 +194,33 @@ export async function showAt(ref, p) {
   }
 }
 export async function computeChanges(before, after) {
-  const patch = await gitAsync([
-    'diff',
-    '--no-color',
-    '--no-renames',
-    '--no-ext-diff',
-    '-U0',
-    before,
-    after,
-    '--',
-    '.',
-    ':(exclude).loa',
+  const range = [before, after, '--', '.', ':(exclude).loa'];
+  // Each file's path and status from git's -z listing, which names any file exactly; its hunks from the patch, whose
+  // file blocks come in the same order (the patch's headers quote names beyond ASCII).
+  const [raw, patch] = await Promise.all([
+    gitAsync(['diff', '--no-renames', '--raw', '-z', ...range]),
+    gitAsync(['diff', '--no-color', '--no-renames', '--no-ext-diff', '-U0', ...range]),
   ]);
+  const fields = raw.split('\0');
   const out = [];
-  let cur = null,
+  for (let i = 0; i + 1 < fields.length; i += 2) {
+    const status = fields[i].trim().split(' ').at(-1);
+    out.push({ path: fields[i + 1], created: status === 'A', deleted: status === 'D', binary: false, hunks: [] });
+  }
+  let n = -1,
     h = null;
-  const unq = s => (s.startsWith('"') ? JSON.parse(s) : s);
   for (const line of patch.split('\n')) {
     if (line.startsWith('diff --git ')) {
-      cur = { path: null, created: false, deleted: false, binary: false, hunks: [] };
-      out.push(cur);
+      n++;
       h = null;
-      continue;
-    }
-    if (!cur) continue;
-    if (line.startsWith('new file mode')) cur.created = true;
-    else if (line.startsWith('deleted file mode')) cur.deleted = true;
-    else if (line.startsWith('Binary files')) cur.binary = true;
-    else if (line.startsWith('--- ')) {
-      const a = unq(line.slice(4));
-      if (a !== '/dev/null') cur.path = a.replace(/^a\//, '');
-    } else if (line.startsWith('+++ ')) {
-      const b = unq(line.slice(4));
-      if (b !== '/dev/null') cur.path = b.replace(/^b\//, '');
-    } else if (line.startsWith('@@')) {
+    } else if (n < 0 || !out[n]) continue;
+    else if (line.startsWith('Binary files')) out[n].binary = true;
+    else if (line.startsWith('@@')) {
       const m = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/);
       const a = +m[1],
         b = m[2] === undefined ? 1 : +m[2];
       h = { at: b === 0 ? a : a - 1, del: b, add: [] };
-      cur.hunks.push(h);
+      out[n].hunks.push(h);
     } else if (h && line.startsWith('+')) h.add.push(line.slice(1));
   }
   // Renames, as git finds them (half the lines in common, `git diff -M`): the run's records stay a file deleted and

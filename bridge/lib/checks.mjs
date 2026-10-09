@@ -134,6 +134,8 @@ export async function runChecks(run) {
         out += d;
         if (out.length > 200000) out = out.slice(-100000);
       };
+      ch.stdout.setEncoding('utf8');
+      ch.stderr.setEncoding('utf8');
       ch.stdout.on('data', add);
       ch.stderr.on('data', add);
       const timer = setTimeout(() => ch.kill('SIGTERM'), (c.timeout_s || 900) * 1000);

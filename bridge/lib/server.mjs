@@ -26,12 +26,17 @@ function send(res, code, body, headers = {}) {
 }
 function readBody(req) {
   return new Promise((r, j) => {
-    let b = '';
+    const parts = [];
+    let size = 0;
     req.on('data', d => {
-      b += d;
-      if (b.length > 1e6) req.destroy();
+      size += d.length;
+      if (size <= 1e6) return parts.push(d);
+      req.destroy();
+      j(Object.assign(new Error('Request too large'), { code: 413 }));
     });
     req.on('end', () => {
+      // Decoded once, whole: a character split between chunks stays one.
+      const b = Buffer.concat(parts).toString('utf8');
       try {
         r(b ? JSON.parse(b) : {});
       } catch (e) {

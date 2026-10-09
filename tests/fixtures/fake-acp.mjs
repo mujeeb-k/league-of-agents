@@ -58,6 +58,12 @@ async function turn(sessionId, text) {
       cost: { amount: 0.0042, currency: 'USD' },
     });
   if (!/\bhold:/.test(text)) cost();
+  // "long:<n>": a reply of n characters beyond ASCII, longer than a pipe carries in one piece.
+  const long = Number(/\blong:(\d+)/.exec(text)?.[1] ?? 0);
+  if (long) {
+    update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'é'.repeat(long) } });
+    return 'end_turn';
+  }
   say(sessionId, 'Reading the policy module.');
   update(sessionId, {
     sessionUpdate: 'tool_call',

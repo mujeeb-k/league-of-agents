@@ -2270,6 +2270,25 @@ test.describe('sessions at once', () => {
       expect(fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8')).toBe(await at(2));
     }));
 
+  test('files with names beyond ASCII: a run records, reverts and names them as they are', () =>
+    twoSessions(async (b, repo) => {
+      const name = 'shared/café ñ 日本.ts';
+      const h = (await start(b, ['shared/'], `exec: printf 'x\\n' > '${name}'; printf 'y\\n' >> shared/log.ts`))
+        .body as unknown as RunDTO;
+      await until(b, h.id, 'done');
+      const run = await runOf(b, h.id);
+      expect(run.changes.map(c => c.path).sort()).toEqual([name, 'shared/log.ts']);
+      expect((await call(b, `/api/runs/${h.id}/revert`, {})).status).toBe(200);
+      expect(fs.existsSync(path.join(repo, name))).toBe(false);
+    }));
+
+  test("an agent's output beyond ASCII arrives whole, however the pipe splits it", () =>
+    twoSessions(async b => {
+      const h = (await start(b, ['shared/'], 'long:70000')).body as unknown as RunDTO;
+      await until(b, h.id, 'done');
+      expect((await runOf(b, h.id)).summary).toBe('é'.repeat(70000));
+    }));
+
   test("Claude Code's steps: an edit refused, then allowed and made; a shell command as a step that runs", () =>
     twoSessions(async (b, repo) => {
       const c = (await call(b, '/api/runs', { agent: 'claude', prompt: 'want:apps/new.ts', scope: ['shared/'] }))

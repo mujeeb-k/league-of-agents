@@ -23,6 +23,9 @@ export function launch(run, argv, { env = {}, stdin = false, onLine, onStderr })
   const rawOut = fs.createWriteStream(path.join(RUNS_DIR, `${run.id}.stream.jsonl`), { flags: 'a' });
   const rawErr = fs.createWriteStream(path.join(RUNS_DIR, `${run.id}.stderr.log`), { flags: 'a' });
   let buf = '';
+  // Decoded as UTF-8 across chunks: a character split between two keeps its bytes together.
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
   child.stdout.on('data', d => {
     rawOut.write(d);
     buf += d;
