@@ -116,9 +116,15 @@ async function turn(sessionId, text) {
       });
     const r = await ask('session/request_permission', {
       sessionId,
+      // Hermes asks under an id of its own, not the edit's: the request names the file.
       toolCall: dsh
         ? { toolCallId }
-        : { toolCallId, title: `patch: ${path}`, kind: 'edit', content: [{ type: 'diff', path, oldText, newText }] },
+        : {
+            toolCallId: `approval-${toolCallId}`,
+            title: `Approve edit: ${path}`,
+            kind: 'edit',
+            content: [{ type: 'diff', path, oldText, newText }],
+          },
       options: [
         { optionId: 'yes', name: 'Allow edit', kind: 'allow_once' },
         { optionId: 'no', name: 'Deny', kind: 'reject_once' },
@@ -185,13 +191,12 @@ async function turn(sessionId, text) {
     for (const [i, file] of edits.entries()) {
       const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
       const after = `${before}// edited in ${sessionId}\n`;
-      if (await permit(`edit-${i}`, file, before, after)) {
-        fs.writeFileSync(file, after);
-        update(sessionId, { sessionUpdate: 'tool_call_update', toolCallId: `edit-${i}`, status: 'completed' });
-      }
+      // Allowed, it writes; as Hermes does, it says nothing more of the edit.
+      if (await permit(`edit-${i}`, file, before, after)) fs.writeFileSync(file, after);
     }
-    await held(text);
+    // It says so before any hold, as a harness carries on talking after an edit.
     say(sessionId, ` Edited ${edits.join(', ')}.`);
+    await held(text);
     return 'end_turn';
   }
   if (/outside/.test(text) && (await permit('edit-out', 'outside.txt', '', 'written outside the scope\n')))

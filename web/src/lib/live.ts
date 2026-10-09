@@ -4,6 +4,7 @@ import type { StepDTO } from '../api/types';
 import type { Change } from './types';
 import { S, st } from '../state/app';
 import { changedBlock } from './textdiff';
+import { tn } from '../i18n';
 
 const steps = new Map<number, StepDTO[]>();
 
@@ -98,4 +99,31 @@ export function forgetAll() {
   steps.clear();
   live.clear();
   moment = null;
+}
+
+/** What a run touched, in a line: the files it only read, the files it edited, the commands it ran. */
+export function touched(steps: StepDTO[]) {
+  const read = new Set<string>(),
+    edited = new Set<string>();
+  let ran = 0;
+  for (const s of steps) {
+    if (s.act === 'run') ran++;
+    else if (s.file && s.act === 'edit' && !s.refused) edited.add(s.file);
+    else if (s.file && s.act === 'read') read.add(s.file);
+  }
+  for (const f of edited) read.delete(f);
+  // Each part as it reads first in the line, or after another.
+  const parts: string[] = [];
+  if (read.size) parts.push(tn(read.size, 'Read {n} file', 'Read {n} files'));
+  if (edited.size)
+    parts.push(
+      parts.length
+        ? tn(edited.size, 'edited {n} file', 'edited {n} files')
+        : tn(edited.size, 'Edited {n} file', 'Edited {n} files'),
+    );
+  if (ran)
+    parts.push(
+      parts.length ? tn(ran, 'ran {n} command', 'ran {n} commands') : tn(ran, 'Ran {n} command', 'Ran {n} commands'),
+    );
+  return parts.join(' · ');
 }

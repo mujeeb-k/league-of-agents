@@ -4,7 +4,7 @@ import { VERSION } from '../paths.mjs';
 import { inScope } from '../scope.mjs';
 import { ROOT } from '../repo.mjs';
 import { blocked, commandBlocked, push } from '../runs.mjs';
-import { step, stepDone, stepRefused } from '../steps.mjs';
+import { step, stepDone, stepRefused, stepsOf } from '../steps.mjs';
 import { lockOfRun } from '../sandbox.mjs';
 import { emit } from '../events.mjs';
 import { noteLines } from './lines.mjs';
@@ -75,7 +75,23 @@ function startAcp(run, prompt, name, command, env) {
         noteLines(run, file, [text]);
       }
   };
+  // The steps a request to edit is about: its call's, or, as Hermes asks under an id of its own, the newest edit step
+  // of each file it names.
+  const stepsAsked = (id, tool) =>
+    steps.get(id) ??
+    filesOf(tool).flatMap(f => {
+      const i = stepsOf(run).findLastIndex(s => s?.act === 'edit' && s.file === f);
+      return i < 0 ? [] : [i];
+    });
+  // Edit steps allowed and not yet said to be done: Hermes says nothing after writing, so its next update, or the
+  // turn's end, says the edit is done.
+  const allowed = new Set();
+  const settle = () => {
+    for (const i of allowed) stepDone(run, i);
+    allowed.clear();
+  };
   const onUpdate = u => {
+    if (u.sessionUpdate !== 'usage_update' && u.sessionUpdate !== 'config_option_update') settle();
     // A harness may say what the turn has cost so far (ACP usage_update); Hermes and DeepSeek Harness don't.
     if (u.sessionUpdate === 'usage_update') {
       if (u.cost?.currency === 'USD' && typeof u.cost.amount === 'number') {
@@ -92,11 +108,12 @@ function startAcp(run, prompt, name, command, env) {
       flush();
       calls.set(u.toolCallId, u);
       push(run, { t: 'tool', text: acpToolLabel(u) });
-      const files = filesOf(u);
+      const files = filesOf(u).filter(insideRepo);
       const act = isEdit(u) ? 'edit' : u.kind === 'read' ? 'read' : u.kind === 'execute' ? 'run' : 'other';
+      const label = relPaths(String(u.title || u.kind)).slice(0, 120);
       steps.set(
         u.toolCallId,
-        (files.length ? files : [undefined]).map(f => step(run, act, String(u.title || u.kind), f)),
+        (files.length ? files : [undefined]).map(f => step(run, act, label, f)),
       );
       if (u.kind === 'edit') noteEdit(u.toolCallId, { content: u.content });
     } else if (u.sessionUpdate === 'tool_call_update') {
@@ -107,7 +124,11 @@ function startAcp(run, prompt, name, command, env) {
       else if (!isEdit(tool) && lockOfRun(run) === 'sandbox' && refusedWrite(textOf(u), true)) commandBlocked(run);
       // DeepSeek Harness's edit or write, done without asking (its full-access mode, in the sandbox): its arguments.
       else if (isEdit(tool) && u.status === 'completed') noteEdit(u.toolCallId, tool);
-      if (isEdit(tool) && u.status === 'completed') for (const i of steps.get(u.toolCallId) ?? []) stepDone(run, i);
+      if (isEdit(tool) && u.status === 'completed')
+        for (const i of steps.get(u.toolCallId) ?? []) {
+          allowed.delete(i);
+          stepDone(run, i);
+        }
       if (u.status === 'failed') {
         const said = textOf(u);
         const outside = isEdit(tool) ? filesOf(tool).filter(f => run.scope?.length && !inScope(run.scope, f)) : [];
@@ -139,9 +160,10 @@ function startAcp(run, prompt, name, command, env) {
         id = req.toolCall?.toolCallId;
       const tool = { ...calls.get(id), ...req.toolCall };
       const answer = permitAcp(run, tool, req.options || []);
-      if (answer.optionId && /^allow/.test(req.options.find(o => o.optionId === answer.optionId)?.kind))
+      if (answer.optionId && /^allow/.test(req.options.find(o => o.optionId === answer.optionId)?.kind)) {
         noteEdit(id, tool);
-      else if (isEdit(tool)) for (const i of steps.get(id) ?? []) stepRefused(run, i);
+        if (isEdit(tool)) for (const i of stepsAsked(id, tool)) allowed.add(i);
+      } else if (isEdit(tool)) for (const i of stepsAsked(id, tool)) stepRefused(run, i);
       send({ id: m.id, result: { outcome: answer } });
     } else if (m.id !== undefined) send({ id: m.id, error: { code: -32601, message: 'Not offered' } });
   };
@@ -165,6 +187,7 @@ function startAcp(run, prompt, name, command, env) {
     prompted = true;
     const r = await call('session/prompt', { sessionId: run.sessionId, prompt: [{ type: 'text', text: prompt }] });
     flush();
+    settle();
     if (r.stopReason === 'refusal') push(run, { t: 'err', text: `${name} refused the task` });
     if (r.stopReason === 'max_tokens' || r.stopReason === 'max_turn_requests')
       push(run, { t: 'warn', text: `${name} stopped at its limit before finishing` });
@@ -205,9 +228,7 @@ const isEdit = tool => tool.kind === 'edit' || (tool.kind === 'other' && ['edit'
  */
 function permitAcp(run, tool, options) {
   const rel = filesOf(tool);
-  const inRepo = rel.every(
-    r => r && !r.startsWith('../') && r !== '..' && !path.isAbsolute(r) && !/^\.(git|loa)\//.test(r),
-  );
+  const inRepo = rel.every(r => insideRepo(r) && !/^\.(git|loa)\//.test(r));
   const outside = run.scope?.length ? rel.filter(r => !inScope(run.scope, r)) : [];
   const ok = isEdit(tool) && rel.length > 0 && inRepo && !outside.length;
   const option = options.find(o => (ok ? /^allow/ : /^reject/).test(o.kind));
@@ -216,6 +237,8 @@ function permitAcp(run, tool, options) {
   else if (!ok) push(run, { t: 'deny', text: `Refused: ${acpToolLabel({ title: 'a request', ...tool })}` });
   return option ? { outcome: 'selected', optionId: option.optionId } : { outcome: 'cancelled' };
 }
+/** A path inside the repo: not above it, nor elsewhere on the machine. */
+const insideRepo = r => !!r && r !== '..' && !r.startsWith('../') && !path.isAbsolute(r);
 /** The files a tool call names, as the repo names them. */
 const filesOf = tool =>
   [

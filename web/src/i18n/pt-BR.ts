@@ -558,5 +558,7 @@ const catalogue: Catalogue = {
   'Read {n} files': { one: 'Read {n} file', other: 'Read {n} files' },
   'edited {n} files': { one: 'edited {n} file', other: 'edited {n} files' },
   'ran {n} commands': { one: 'ran {n} command', other: 'ran {n} commands' },
+  'Edited {n} files': { one: 'Edited {n} file', other: 'Edited {n} files' },
+  'Ran {n} commands': { one: 'Ran {n} command', other: 'Ran {n} commands' },
 };
 export default catalogue;

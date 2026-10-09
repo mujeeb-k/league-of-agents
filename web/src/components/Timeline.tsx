@@ -3,12 +3,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { StepDTO } from '../api/types';
 import { ensureSteps, openStep } from '../api/live';
-import { momentOf, stepsOf } from '../lib/live';
+import { momentOf, stepsOf, touched } from '../lib/live';
 import type { Run } from '../lib/types';
 import { cn } from '@/lib/utils';
 import { useRegion } from '../state/render';
 import { Label } from './Inspector';
-import { t, tn } from '../i18n';
+import { t } from '../i18n';
 
 /** Each row's height, and how many show before the list scrolls. */
 const ROW = 24,
@@ -30,26 +30,6 @@ const since = (ms: number) => {
   const sec = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 };
-
-/** What a run touched, in a line: the files it only read, the files it edited, the commands it ran. */
-export function touched(steps: StepDTO[]) {
-  const read = new Set<string>(),
-    edited = new Set<string>();
-  let ran = 0;
-  for (const s of steps) {
-    if (s.act === 'run') ran++;
-    else if (s.file && s.act === 'edit' && !s.refused) edited.add(s.file);
-    else if (s.file && s.act === 'read') read.add(s.file);
-  }
-  for (const f of edited) read.delete(f);
-  return [
-    read.size ? tn(read.size, 'Read {n} file', 'Read {n} files') : '',
-    edited.size ? tn(edited.size, 'edited {n} file', 'edited {n} files') : '',
-    ran ? tn(ran, 'ran {n} command', 'ran {n} commands') : '',
-  ]
-    .filter(Boolean)
-    .join(' · ');
-}
 
 export function Timeline({ run }: { run: Run }) {
   useRegion('watch');
@@ -105,8 +85,10 @@ export function Timeline({ run }: { run: Run }) {
                 )}
                 style={{ top: (from + k) * ROW, height: ROW }}
               >
-                <span className="w-9 shrink-0 text-muted-foreground tabular-nums">{since(s.at - start)}</span>
-                <span className={cn('w-24 shrink-0 truncate', s.refused ? 'text-mod' : 'text-ink2')}>{did(s)}</span>
+                <span className="w-8 shrink-0 text-muted-foreground tabular-nums">{since(s.at - start)}</span>
+                <span className={cn('w-14 shrink-0 truncate', s.refused ? 'text-mod' : 'text-ink2')} title={did(s)}>
+                  {did(s)}
+                </span>
                 {s.file ? (
                   <span className="min-w-0 truncate font-mono" title={s.file}>
                     {s.file}
