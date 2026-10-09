@@ -113,6 +113,7 @@ const Card = memo(function Card({ c }: { c: CardData }) {
       <header>
         <span className="fn">{c.name}</span>
         {c.from ? <span className="from">{t('renamed from {name}', { name: c.from })}</span> : null}
+        {c.at !== null ? <span className="at">{t('At step {n}', { n: c.at + 1 })}</span> : null}
         {c.stat ? <Stat a={c.stat.a} d={c.stat.d} /> : null}
       </header>
       <div className="code">

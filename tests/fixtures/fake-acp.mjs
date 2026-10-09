@@ -164,6 +164,16 @@ async function turn(sessionId, text) {
     say(sessionId, `exit ${r.status}: ${output.split('\n').slice(-3).join(' | ')}`);
     if (!edits.length) return 'end_turn';
   }
+  // "reads:<n>": read the first file it edits n times first, a long run's many steps.
+  const reads = Number(/\breads:(\d+)/.exec(text)?.[1] ?? 0);
+  for (let i = 0; i < reads; i++)
+    update(sessionId, {
+      sessionUpdate: 'tool_call',
+      toolCallId: `reads-${i}`,
+      title: `read: ${edits[0]}`,
+      kind: 'read',
+      locations: [{ path: edits[0] }],
+    });
   if (edits.length) {
     // "hold:<name>": wait before the edits, as "wait:" does after them.
     const before = /\bhold:(\S+)/.exec(text)?.[1];

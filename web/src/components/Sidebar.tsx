@@ -14,7 +14,8 @@ import { isOffline, runAction, selectRun, stopSessions, toggleSel } from '../sta
 import { renderSel, renderSide, useRegion } from '../state/render';
 import { asking, endedAs, holderOf, reachOf, sessionColour, sessionsCost, workingRuns } from '../state/sessions';
 import { answerWant } from '../api/live';
-import { follow, stepsOf } from '../state/watch';
+import { follow } from '../state/watch';
+import { stepsOf } from '../lib/live';
 import { money } from '../lib/util';
 import { notifying, toggleNotifying } from '../state/notices';
 import { cn } from '@/lib/utils';

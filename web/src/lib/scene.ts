@@ -13,6 +13,7 @@ import { area, overlaps } from './sections';
 import { ended, endedAs, sessionColour, workingRuns } from '../state/sessions';
 import { obstacles, pathOf, route, type Rect } from './route';
 import { allDirs, dirStat, filesUnder, linesAt, viewOf } from './model';
+import { momentOf, readOnly } from './live';
 import type { DirNode, FileView, RowKind } from './types';
 import { authorsOf, shareOf, type Author } from './attribution';
 import { t, tn } from '../i18n';
@@ -69,6 +70,8 @@ export type CardData =
       stat: { a: number; d: number } | null;
       /** In a run that renamed the file, its old name. */
       from: string | null;
+      /** The step of the open run's timeline it is shown at, if one is picked. */
+      at: number | null;
       above: number;
       rows: CodeRow[];
       rest: number;
@@ -162,6 +165,8 @@ export function computeScene(): SceneData {
       )
     : new Map();
   const out: SceneData = { frames: [], tiles: [], cards: [], wires: [], sels: [], zones: zonesOf() };
+  // With a run open, the files it only read: shown with its changes, the places it looked at.
+  const read = run ? readOnly(run.id) : null;
   // Import lines: between files as they are in the view on screen.
   const imports = importResolver({
     has: p => !!views.get(p)?.exists,
@@ -181,6 +186,7 @@ export function computeScene(): SceneData {
         v.ghost ? 'ghost' : '',
         run && st.cur === f.path ? 'cur' : '',
         drafts.has(f.path) ? 'dirty' : '',
+        read?.has(f.path) ? 'read' : '',
       ].join(' ');
       out.tiles.push({
         path: f.path,
@@ -255,10 +261,21 @@ export function computeScene(): SceneData {
       run && st.cur === f.path ? 'cur' : '',
     ].join(' ');
     const from = run?.changes.get(f.path)?.renamedFrom?.split('/').pop() ?? null;
+    const at = momentOf(f.path)?.i ?? null;
     // A card that shows what it showed last time is the same object: memoized, it isn't highlighted or drawn again.
     const key = byAuthor
       ? null
-      : JSON.stringify([f.x, f.y, cls, from, v.kind && [v.a, v.d], start, rest, slice.map(r => [r.k, r.n, r.t, r.wd])]);
+      : JSON.stringify([
+          f.x,
+          f.y,
+          cls,
+          from,
+          at,
+          v.kind && [v.a, v.d],
+          start,
+          rest,
+          slice.map(r => [r.k, r.n, r.t, r.wd]),
+        ]);
     const cached = key && cards.get(f.path);
     if (cached && cached.key === key) {
       out.cards.push(cached.card);
@@ -280,6 +297,7 @@ export function computeScene(): SceneData {
       cls,
       stat: v.kind ? { a: v.a!, d: v.d! } : null,
       from,
+      at,
       above: start,
       rows: slice.map(r => ({
         id: lineId(r.k, r.t || ''),

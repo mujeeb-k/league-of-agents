@@ -2005,6 +2005,18 @@ test.describe('sessions at once', () => {
       expect(((await call(b, `/api/runs/${h.id}/steps/1`)).body as unknown as { text: string }).text).toBe(at.text);
     }));
 
+  test('two edits of a file in a row: each step keeps the file as that edit left it', () =>
+    twoSessions(async (b, repo) => {
+      const h = (await start(b, ['shared/'], 'edit:shared/log.ts edit:shared/log.ts')).body as unknown as RunDTO;
+      await until(b, h.id, 'done');
+      const at = async (i: number) =>
+        ((await call(b, `/api/runs/${h.id}/steps/${i}`)).body as unknown as { text: string }).text;
+      const line = `// edited in ${(await runOf(b, h.id)).sessionId}\n`;
+      expect(await at(1)).toBe(SEED['shared/log.ts'] + line);
+      expect(await at(2)).toBe(SEED['shared/log.ts'] + line + line);
+      expect(fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8')).toBe(await at(2));
+    }));
+
   test("Claude Code's steps: an edit refused, then allowed and made; a shell command as a step that runs", () =>
     twoSessions(async (b, repo) => {
       const c = (await call(b, '/api/runs', { agent: 'claude', prompt: 'want:apps/new.ts', scope: ['shared/'] }))
@@ -2562,6 +2574,36 @@ test.describe('sessions at once, in the app', () => {
       go(repo, 'a');
       await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
       await expect(card.locator('.ln.add')).toHaveCount(1);
+    }));
+
+  test("a run's steps as a timeline: when, what, which file; a click shows the file as that step left it", async ({
+    page,
+  }) =>
+    withHermes(page, async () => {
+      await folder(page, 'shared').click();
+      await run(page, 'edit:shared/log.ts edit:shared/log.ts');
+      await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+      await expect(page.locator('#runbar b')).toHaveText('Run 1');
+      const rows = page.locator('#timeline [data-step]');
+      await expect(rows).toHaveCount(3);
+      await expect(rows.nth(0)).toHaveText(/^0:0\dReadshared\/allowlist\.ts$/);
+      await expect(rows.nth(1)).toHaveText(/^0:0\dEditedshared\/log\.ts$/);
+      // What it touched, at a glance: in words, and on the map the file it only read stays in view, outlined.
+      await expect(page.locator('#touched')).toHaveText('Read 1 file · edited 1 file');
+      await expect(page.locator('#nodes .fr.read')).toHaveCount(1);
+      await expect(page.locator('#nodes .fr.read')).toHaveAttribute('data-path', 'shared/allowlist.ts');
+      // The first edit: one line added so far; the second, two.
+      await rows.nth(1).click();
+      const card = page.locator('#nodes .card[data-path="shared/log.ts"]');
+      await expect(card.locator('.at')).toHaveText('At step 2');
+      await expect(card.locator('.ln.add')).toHaveCount(1);
+      await expect(rows.nth(1)).toHaveAttribute('aria-current', 'true');
+      await rows.nth(2).click();
+      await expect(card.locator('.at')).toHaveText('At step 3');
+      await expect(card.locator('.ln.add')).toHaveCount(2);
+      // A read step goes to its file, as the run left it.
+      await rows.nth(0).click();
+      await expect(page.locator('#nodes .card .at')).toHaveCount(0);
     }));
 
   test('following a session: the map goes to each file it turns to, until the person moves the map', async ({ page }) =>

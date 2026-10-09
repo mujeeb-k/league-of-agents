@@ -1,5 +1,5 @@
 // Live connection to the local bridge.
-import { applyView, flyRun, openingView } from '../lib/camera';
+import { applyView, flyFile, flyRun, openingView } from '../lib/camera';
 import { buildModel, specFromPaths } from '../lib/model';
 import { authorsOf, rangesOf } from '../lib/attribution';
 import { carryRenames, type SavedLayout } from '../lib/layout';
@@ -11,14 +11,14 @@ import { t, tn } from '../i18n';
 import { fmtDur, relTime } from '../lib/util';
 import { S, st } from '../state/app';
 import { noteEnded, opensOnFinish } from '../state/sessions';
-import { addSteps, landed, stepped } from '../state/watch';
-import { forgetEnded } from '../lib/live';
+import { landed, stepped } from '../state/watch';
+import { addSteps, forgetEnded, setMoment } from '../lib/live';
 import { toLines } from '../lib/anchor';
 import { noticeAsks, noticeEnded } from '../state/notices';
 import { stopDemoTimers } from '../demo/sessions';
 import { loadDemo, selectRun } from '../state/actions';
 import { refreshEditor } from '../state/editing';
-import { bump, renderAll, renderCrumb, renderInspector, renderSide, setConnUI } from '../state/render';
+import { bump, renderAll, renderCrumb, renderInspector, renderScene, renderSide, setConnUI } from '../state/render';
 import { toast } from '../ui/toast';
 import { BridgeError, bridge } from './client';
 import { explain } from './errors';
@@ -252,10 +252,8 @@ function applyState(s: StateResponse, first: boolean) {
 
 /** Each file as a run found it, by run and file: what its edits are drawn against while it works. */
 const foundAs = new Map<string, Promise<string[]>>();
-/** An edit landed: its file as the edit left it, drawn on the map against the file as the run found it. */
-async function landEdit(run: Run, s: StepDTO) {
-  const path = s.file;
-  if (!path || !S.FILES.has(path)) return;
+/** A file as the run found it, fetched once. */
+function foundIn(run: Run, path: string) {
   const key = `${run.id} ${path}`;
   if (!foundAs.has(key))
     foundAs.set(
@@ -265,13 +263,49 @@ async function landEdit(run: Run, s: StepDTO) {
         () => [],
       ),
     );
+  return foundAs.get(key)!;
+}
+/** An edit landed: its file as the edit left it, drawn on the map against the file as the run found it. */
+async function landEdit(run: Run, s: StepDTO) {
+  const path = s.file;
+  if (!path || !S.FILES.has(path)) return;
   try {
-    const [before, now] = await Promise.all([foundAs.get(key)!, bridge.stepText(conn(), run.id, s.i)]);
+    const [before, now] = await Promise.all([foundIn(run, path), bridge.stepText(conn(), run.id, s.i)]);
     landed(run, s.i, path, before, toLines(now.text));
   } catch {
     // Gone meanwhile (the run ended and was pruned): its changes show as it ends.
   }
 }
+
+/**
+ * A step picked in the open run's timeline: the map goes to its file, shown as that step left it when the step kept
+ * it (an edit), as the run left it otherwise.
+ */
+export async function openStep(run: Run, s: StepDTO) {
+  const path = s.file;
+  if (!path || !S.FILES.has(path)) return;
+  st.cur = path;
+  flyFile(path);
+  if (!s.text || !S.CONN) {
+    setMoment(null);
+    renderScene();
+    renderInspector();
+    return;
+  }
+  try {
+    const [before, now] = await Promise.all([foundIn(run, path), bridge.stepText(conn(), run.id, s.i)]);
+    if (st.run?.id !== run.id) return;
+    setMoment(run.id, s.i, path, before, toLines(now.text));
+  } catch {
+    setMoment(null);
+  }
+  // Only the map and the timeline change.
+  renderScene();
+  renderInspector();
+}
+
+/** A run's steps, fetched once the run is opened, if they weren't already. */
+export const ensureSteps = (id: number) => (S.CONN && !stepsFetched.has(id) ? loadSteps(id) : undefined);
 
 /** Runs whose steps were fetched whole: later ones come with progress events. */
 const stepsFetched = new Set<number>();

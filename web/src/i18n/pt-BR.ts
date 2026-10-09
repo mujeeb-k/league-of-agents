@@ -549,5 +549,14 @@ const catalogue: Catalogue = {
   Working: 'Working',
   'Follow run {id} on the map': 'Follow run {id} on the map',
   'Stop following run {id}': 'Stop following run {id}',
+  Steps: 'Steps',
+  Blocked: 'Blocked',
+  Read: 'Read',
+  Edited: 'Edited',
+  'Ran a command': 'Ran a command',
+  'At step {n}': 'At step {n}',
+  'Read {n} files': { one: 'Read {n} file', other: 'Read {n} files' },
+  'edited {n} files': { one: 'edited {n} file', other: 'edited {n} files' },
+  'ran {n} commands': { one: 'ran {n} command', other: 'ran {n} commands' },
 };
 export default catalogue;

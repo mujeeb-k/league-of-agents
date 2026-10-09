@@ -36,6 +36,7 @@ import { ScopeChip } from './ScopeChip';
 import { BetaTag, Dot, Spinner, Stat } from './bits';
 import { IntroSection } from './Intro';
 import { locale, t, tn } from '../i18n';
+import { Timeline } from './Timeline';
 
 const Section = ({ children, className }: { children: React.ReactNode; className?: string }) => (
   <section className={cn('border-b p-4', className)}>{children}</section>
@@ -319,6 +320,7 @@ function RunView({ run }: { run: Run }) {
           ) : null}
         </Section>
       )}
+      <Timeline run={run} />
       {run.checks?.length || run.checksRunning ? (
         <Section>
           <Label>{t('Checks')}</Label>

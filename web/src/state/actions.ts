@@ -10,6 +10,7 @@ import { buildModel, diffRows, existsNow, filesUnder, layout, linesAt, parseSamp
 import { area, clashOf, type Clash } from '../lib/sections';
 import type { FileNode, Mode, Run } from '../lib/types';
 import { clamp } from '../lib/util';
+import { setMoment } from '../lib/live';
 import { DEMO_AGENTS, DEMO_STAYS, SAMPLE_BRANCH, SAMPLE_REPO, SAMPLE_RUNS, SAMPLE_TREE } from '../demo/sample';
 import { SAMPLE_TEXT } from '../demo/sampleText';
 import { startDemoSessions, stopDemoSession } from '../demo/sessions';
@@ -35,6 +36,7 @@ export function selectRun(run: Run | null, fly = true) {
   if (run) seen(run.id);
   st.run = run;
   st.cur = null;
+  setMoment(null);
   if (!run) st.mode = 'after';
   renderAll();
   if (run && fly) flyRun(run);

@@ -61,7 +61,7 @@ export function git(args, opts = {}) {
 /**
  * git without blocking the bridge: snapshots, diffs and reverts run while requests are still answered.
  * @param {string[]} args
- * @param {{ input?: string } & import('node:child_process').ExecFileOptions} [opts]
+ * @param {{ input?: string | Buffer } & import('node:child_process').ExecFileOptions} [opts]
  * @returns {Promise<string>}
  */
 export function gitAsync(args, { input, ...opts } = {}) {

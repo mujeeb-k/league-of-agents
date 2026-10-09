@@ -82,16 +82,25 @@ export function stepRefused(run, i) {
 const keeping = new Map();
 
 /**
- * An edit step done: its file, as the edit left it, kept as a blob. Not a file git ignores or an untracked one that
- * usually holds secrets, as snapshots leave them out, nor one over the size the map opens.
+ * An edit step done: its file, as the edit left it, kept as a blob. Read at once, before the agent's next edit can
+ * change it, and kept only if git would snapshot it: not a file git ignores or an untracked one that usually holds
+ * secrets, nor one over the size the map opens.
  */
 export function stepDone(run, i) {
   const s = live.get(run.id)?.[i];
   if (!s?.file) return;
+  let text;
+  try {
+    const abs = path.join(ROOT, s.file);
+    if (fs.statSync(abs).size > MAX_BYTES) return;
+    text = fs.readFileSync(abs);
+  } catch {
+    return;
+  }
   const key = `${run.id} ${s.file}`;
   const kept = (keeping.get(key) ?? Promise.resolve()).then(async () => {
     if (!(await keepable(s.file))) return;
-    s.blob = (await gitAsync(['hash-object', '-w', '--', s.file])).trim();
+    s.blob = (await gitAsync(['hash-object', '-w', '--stdin'], { input: text })).trim();
     record(run, s);
   });
   keeping.set(
@@ -100,13 +109,8 @@ export function stepDone(run, i) {
   );
 }
 
-/** Whether a file's text may be kept: not ignored, not an untracked secret, not too large. */
+/** Whether a file's text may be kept: not ignored, and not an untracked file that usually holds secrets. */
 async function keepable(file) {
-  try {
-    if (fs.statSync(path.join(ROOT, file)).size > MAX_BYTES) return false;
-  } catch {
-    return false;
-  }
   const dir = path.posix.dirname(file) === '.' ? '' : `${path.posix.dirname(file)}/`;
   const [ignored, secret] = await Promise.all([
     gitAsync(['ls-files', '--others', '--ignored', '--exclude-standard', '--', file]),

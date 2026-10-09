@@ -731,6 +731,82 @@ async function measureReactRouter(page: Page, b: Bridge, repo: string, file: str
   return { mapVisible, panDropped, zoomDropped, selection, stateEvent: shown - event, marker };
 }
 
+test("a run's timeline of 1,000 steps scrolls at 60 fps, and a click shows its file within 200 ms", async ({
+  page,
+}) => {
+  test.setTimeout(300_000);
+  const repo = reactRouter();
+  const file = 'packages/react-router/index.ts';
+  const b = await startBridge(repo, undefined, { LOA_QUIET_MS: '300', LOA_HERMES_BIN: FAKE_ACP }, ['--no-hooks']);
+  try {
+    await expect
+      .poll(async () => ((await call(b, '/api/state')).body.agents as Record<string, { available: boolean }>).hermes)
+      .toMatchObject({ available: true });
+    const r = await call(b, '/api/runs', { agent: 'hermes', prompt: `reads:999 edit:${file}`, scope: ['packages/'] });
+    const id = (r.body as { id: number }).id;
+    await expect
+      .poll(
+        async () =>
+          ((await call(b, '/api/state')).body.runs as { id: number; status: string }[]).find(x => x.id === id)?.status,
+        {
+          timeout: 60_000,
+        },
+      )
+      .toBe('done');
+    await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.locator(`#sideList [data-run="${id}"]`).click();
+    await expect(page.locator('#timeline [data-step]').first()).toBeVisible();
+    const scrolled = await page.evaluate(
+      () =>
+        new Promise<number[]>(resolve => {
+          const el = document.getElementById('timeline')!;
+          el.scrollTop = 0;
+          const times: number[] = [];
+          let last = 0;
+          const tick = (t: number) => {
+            if (last) times.push(t - last);
+            last = t;
+            if (times.length >= 240) return resolve(times);
+            el.scrollTop += 96;
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    const scroll = stats('timeline, 1,000 steps', scrolled);
+    // The last step, its edit: from the click to the first frame with its file shown as that step left it.
+    await page.locator('#timeline').evaluate(el => (el.scrollTop = el.scrollHeight));
+    const last = page.locator('#timeline [data-step]').last();
+    await expect(last).toContainText('Edited');
+    const shown = page.evaluate(
+      file =>
+        new Promise<number>(resolve =>
+          document.addEventListener(
+            'pointerdown',
+            e => {
+              const look = () =>
+                document.querySelector(`.card[data-path="${file}"] .at`)
+                  ? requestAnimationFrame(() => resolve(performance.now() - e.timeStamp))
+                  : requestAnimationFrame(look);
+              requestAnimationFrame(look);
+            },
+            { once: true, capture: true },
+          ),
+        ),
+      file,
+    );
+    await last.click();
+    const click = await shown;
+    report([scroll, { name: 'timeline click to its file', ms: +click.toFixed(1) }]);
+    expect(scroll.dropped / scroll.frames, 'frames dropped scrolling the timeline').toBeLessThanOrEqual(0.02);
+    expect(click, 'click to its file').toBeLessThan(200);
+  } finally {
+    b.stop();
+    git(repo, 'checkout', '-q', '--', '.');
+  }
+});
+
 // Measured as it opens; colored by author (spec 017), every line of every file labelled on each state; and with
 // three sessions at work on sections of their own, each drawn on the map.
 for (const mode of ['as it opens', 'colored by author', 'three sessions at once'] as Mode[])
