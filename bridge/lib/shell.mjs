@@ -6,13 +6,32 @@
 // window is the whole command: a save of the person's outside every section while it runs is put back too.
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
-import { ROOT, git } from './repo.mjs';
+import { ROOT, git, gitAsync } from './repo.mjs';
 import { blobAt, computeChanges, pin, snapshotNow } from './snapshots.mjs';
 import { noteLines } from './agents/lines.mjs';
 import { push, saveRun, working } from './runs.mjs';
 import { lockOfRun } from './sandbox.mjs';
+
+/**
+ * How a session's hooks reach the bridge: its port, and a token good only for that run's shell route. A session in
+ * the sandbox can't read the bridge's own token (.loa/bridge.json), so it can't ask the bridge to write for it.
+ */
+let port = 0;
+export const setShellPort = p => (port = p);
+const tokens = new Map();
+export function shellAccess(run) {
+  if (!tokens.has(run.id)) tokens.set(run.id, crypto.randomBytes(24).toString('hex'));
+  return { LOA_BRIDGE_PORT: String(port), LOA_SHELL_TOKEN: tokens.get(run.id) };
+}
+/** Whether a request is a run's hooks calling its own shell route with its token. */
+export function shellTokenFits(pathname, token) {
+  const id = Number(/^\/api\/runs\/(\d+)\/shell$/.exec(pathname)?.[1]);
+  const t = tokens.get(id);
+  return !!t && t.length === token.length && crypto.timingSafeEqual(Buffer.from(t), Buffer.from(token));
+}
 
 /** The snapshot before each shell command under way, by run and tool call. */
 const before = new Map();
@@ -58,8 +77,14 @@ export function shellEnds(run, tool) {
       // What the command wrote stays in a snapshot of the run's own, to restore (restorePutBack).
       const n = (run.putBack ??= []).length;
       await pin(run.id, `put-back-${n}`, to);
+      // `put`: the file as put back, so a restore can tell whether it changed since.
       for (const p of undone)
-        run.putBack.push({ path: p, ref: `refs/loa/runs/${run.id}/put-back-${n}`, restored: false });
+        run.putBack.push({
+          path: p,
+          ref: `refs/loa/runs/${run.id}/put-back-${n}`,
+          put: await blobAt(from, p),
+          restored: false,
+        });
       saveRun(run);
       push(run, { t: 'warn', text: `Put back what a shell command changed outside the section: ${undone.join(', ')}` });
     }
@@ -67,13 +92,23 @@ export function shellEnds(run, tool) {
   });
 }
 
-/** Writes back a file as the shell command left it, before it was put back. */
+/**
+ * Writes back a file as the shell command left it, before it was put back; refused if the file changed since it was
+ * put back, so nothing written later is lost.
+ */
 export function restorePutBack(run, file) {
   const kept = run.putBack?.find(k => k.path === file && !k.restored);
   if (!kept) return Promise.resolve(false);
   return serial(async () => {
-    const was = await blobAt(kept.ref, file),
-      abs = path.join(ROOT, file);
+    const abs = path.join(ROOT, file);
+    const now = fs.existsSync(abs) ? (await gitAsync(['hash-object', '--', file])).trim() : null;
+    if (now !== kept.put)
+      throw Object.assign(new Error(`${file} changed since it was put back.`), {
+        code: 409,
+        reason: 'changed-since-put-back',
+        args: { name: file },
+      });
+    const was = await blobAt(kept.ref, file);
     if (was === null) fs.rmSync(abs, { force: true });
     else {
       fs.mkdirSync(path.dirname(abs), { recursive: true });

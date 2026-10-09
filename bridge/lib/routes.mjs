@@ -130,7 +130,7 @@ async function startRun({ body }) {
     resumeFrom: parent?.id ?? null,
     sessionId: parent?.agent === b.agent ? parent.sessionId : null,
   });
-  startSession(run, found.read);
+  await startSession(run, found.read);
   return [200, publicRun(run)];
 }
 /**

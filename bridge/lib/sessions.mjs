@@ -5,7 +5,8 @@ import path from 'node:path';
 import { logError } from './util.mjs';
 import { scopeEntry } from './scope.mjs';
 import { ROOT, LOA } from './repo.mjs';
-import { finishRun, working } from './runs.mjs';
+import { finishRun, push, working } from './runs.mjs';
+import { lockOfRun, prepareSandbox } from './sandbox.mjs';
 import { connectorOf, lockOf } from './agents/registry.mjs';
 
 /** Each run's agent at work, and its run finishing once the agent stops. */
@@ -40,7 +41,7 @@ function scopePreamble(run) {
  * ranges each file as the run found it (`read`: as read when its lines were found). When the agent stops, its run is
  * finished, as cancelled or interrupted if it was stopped so, or as the agent's outcome.
  */
-export function startSession(run, read = {}) {
+export async function startSession(run, read = {}) {
   const prompt = scopePreamble(run) + run.prompt;
   // Each run's own: Claude Code's hooks find it by the environment the run starts them with.
   const scopeFile = path.join(LOA, `scope-${run.id}.json`);
@@ -53,6 +54,15 @@ export function startSession(run, read = {}) {
         before: read[e.path] ?? fs.readFileSync(path.join(ROOT, e.path), 'utf8'),
       };
   fs.writeFileSync(scopeFile, JSON.stringify({ scope: run.scope || [], ranges }));
+  if (lockOfRun(run) === 'sandbox')
+    try {
+      await prepareSandbox(run);
+    } catch (e) {
+      push(run, { t: 'err', text: `The sandbox for this section couldn't be set up: ${e.message}` });
+      fs.rmSync(scopeFile, { force: true });
+      await finishRun(run, 'failed');
+      return;
+    }
   const { cancel, done } = connectorOf(run.agent).start(run, prompt, scopeFile);
   const finished = done
     .then(outcome => {

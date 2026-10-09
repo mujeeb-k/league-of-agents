@@ -21,6 +21,16 @@ if (loggedOut) {
 }
 // "shell:<path>" in the prompt: append a line to that file with a shell command instead of the usual edit, run between
 // the PreToolUse and PostToolUse hooks the repo's .claude/settings.local.json holds for Bash, as Claude Code runs them.
+// "abuse": try the run's shell token on another route, as a session reaching past its hooks would.
+if (/\babuse\b/.test(prompt)) {
+  const r = await fetch(`http://127.0.0.1:${process.env.LOA_BRIDGE_PORT}/api/save`, {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + process.env.LOA_SHELL_TOKEN, 'content-type': 'application/json' },
+    body: JSON.stringify({ path: 'README.md', text: 'taken over\n' }),
+  });
+  out({ type: 'result', result: `save: ${r.status}`, session_id: 'sess-123', total_cost_usd: 0 });
+  process.exit(0);
+}
 const shells = [...prompt.matchAll(/\bshell:(\S+)/g)].map(m => m[1]);
 if (shells.length) {
   const hooks = JSON.parse(fs.readFileSync('.claude/settings.local.json', 'utf8')).hooks || {};

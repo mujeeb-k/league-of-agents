@@ -456,7 +456,8 @@ export async function openCommit(run: Run | null) {
   }
   try {
     const preview = await bridge.commitPreview(conn(), run.id);
-    st.commit = { ...preview, run, message: run.title, include: new Set() };
+    // The prompt's first line in full: the title is shortened for the run list.
+    st.commit = { ...preview, run, message: run.prompt?.split('\n')[0]?.trim() || run.title, include: new Set() };
     bump('dialog');
   } catch (e) {
     toast(explain(e));

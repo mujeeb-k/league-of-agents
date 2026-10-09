@@ -18,6 +18,7 @@ export const BY_CODE: Record<string, string> = {
   'run-active': 'Run {id} is still active',
   'sections-overlap': 'Run {id} is working on {path}. Pick a section outside it, or wait for it to finish.',
   'changed-since': '{files} changed since the run. Review it again before committing.',
+  'changed-since-put-back': '{name} changed since it was put back. Restoring it would lose that change.',
   'detached-head': 'HEAD is detached. Check out a branch to commit to.',
   'already-committed': 'Run {id} is already committed.',
   'not-committable': 'Only a finished run can be committed.',

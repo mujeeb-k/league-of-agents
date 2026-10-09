@@ -459,5 +459,7 @@ const catalogue: Catalogue = {
   'Only a finished run can be committed.': 'Only a finished run can be committed.',
   'Write a commit message first.': 'Write a commit message first.',
   'Nothing to commit. Tick a file to include it.': 'Nothing to commit. Tick a file to include it.',
+  '{name} changed since it was put back. Restoring it would lose that change.':
+    '{name} changed since it was put back. Restoring it would lose that change.',
 };
 export default catalogue;

@@ -1503,7 +1503,15 @@ test.describe('sessions at once', () => {
         expect(run.summary).toContain('notes.md: League of Agents scope lock: a shell command changed notes.md');
         expect(run.stream.map(e => e.text).join('\n')).toContain('Put back what a shell command changed outside');
         // Kept: restored as the command left it, once asked.
-        expect(run.putBack).toEqual([{ path: 'notes.md', ref: `refs/loa/runs/${c.id}/put-back-0`, restored: false }]);
+        expect(run.putBack).toEqual([
+          { path: 'notes.md', ref: `refs/loa/runs/${c.id}/put-back-0`, put: null, restored: false },
+        ]);
+        // A file written there since it was put back: restoring would lose it, so it is refused.
+        fs.writeFileSync(path.join(repo, 'notes.md'), 'mine\n');
+        expect((await call(b, `/api/runs/${c.id}/put-back`, { path: 'notes.md' })).body).toMatchObject({
+          code: 'changed-since-put-back',
+        });
+        fs.rmSync(path.join(repo, 'notes.md'));
         expect((await call(b, `/api/runs/${c.id}/put-back`, { path: 'notes.md' })).status).toBe(200);
         expect(fs.readFileSync(path.join(repo, 'notes.md'), 'utf8')).toBe('// written by a shell command\n');
         expect((await runOf(b, c.id)).putBack?.[0]?.restored).toBe(true);
@@ -1612,6 +1620,51 @@ test.describe('sessions at once', () => {
         dep: 'file:../vendor/dep',
       });
     }));
+
+  test("a session can't reach past the sandbox: the bridge's token, its shell token elsewhere, or what runs later", () =>
+    twoSessions(async (b, repo) => {
+      const home = homeOf(repo);
+      fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+      const cmd = [
+        'cat .loa/bridge.json',
+        `printf x >> "$HOME/.gitconfig"`,
+        `mkdir -p "$HOME/.config/league-of-agents" && printf x > "$HOME/.config/league-of-agents/approved.json"`,
+        `printf x > "$HOME/.claude/settings.json"`,
+        'printf x >> .git/config',
+      ].join('; ');
+      const h = (await start(b, ['shared/'], `exec: ${cmd}`)).body as unknown as RunDTO;
+      await until(b, h.id, 'done');
+      expect((await runOf(b, h.id)).summary).toMatch(/^exit 1: .*Operation not permitted/);
+      expect(fs.existsSync(path.join(home, '.gitconfig'))).toBe(false);
+      expect(fs.existsSync(path.join(home, '.config/league-of-agents/approved.json'))).toBe(false);
+      expect(fs.existsSync(path.join(home, '.claude/settings.json'))).toBe(false);
+      expect(git(repo, 'config', '--list', '--local')).not.toContain('x');
+      // A run's shell token opens its own shell route and nothing else.
+      const c = (await call(b, '/api/runs', { agent: 'claude', prompt: 'abuse', scope: ['shared/'] }))
+        .body as unknown as RunDTO;
+      await until(b, c.id, 'done');
+      expect((await runOf(b, c.id)).summary).toBe('save: 401');
+      expect(fs.existsSync(path.join(repo, 'README.md'))).toBe(false);
+    }));
+
+  test("in a worktree, a session can't write the repo's git folder outside it", async () => {
+    const main = makeRepo(),
+      wt = path.join(path.dirname(main), 'wt');
+    git(main, 'worktree', 'add', '-q', wt);
+    const b = await startBridge(wt, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP });
+    try {
+      await expect
+        .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).agents.hermes?.available)
+        .toBe(true);
+      const cmd = 'printf "[core]\\n\\tfsmonitor = touch /tmp/x\\n" >> "$(git rev-parse --git-common-dir)/config"';
+      const r = await runToEnd(b, { agent: 'hermes', prompt: `exec: ${cmd}`, scope: ['shared/'], resumeFrom: null });
+      expect(r.summary).toMatch(/^exit 1: .*Operation not permitted/);
+      expect(fs.readFileSync(path.join(main, '.git/config'), 'utf8')).not.toContain('fsmonitor');
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(main), { recursive: true, force: true });
+    }
+  });
 
   test("a session on a section never runs unlocked: if the sandbox can't start, it is refused", () =>
     twoSessions(

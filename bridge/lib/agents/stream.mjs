@@ -4,6 +4,7 @@ import { claudeLoggedOut } from './claude.mjs';
 import { noteWrites } from './lines.mjs';
 import { relPaths, toolError, toolLabel } from './labels.mjs';
 import { launch } from './process.mjs';
+import { shellAccess } from '../shell.mjs';
 import { push } from '../runs.mjs';
 import { emit } from '../events.mjs';
 
@@ -16,7 +17,7 @@ export function streamConnector(bin, argsOf) {
   return {
     start(run, prompt, scopeFile) {
       const { child, closed } = launch(run, [bin(), ...argsOf(prompt, run)], {
-        env: { LOA_SCOPE_FILE: scopeFile },
+        env: { LOA_SCOPE_FILE: scopeFile, ...shellAccess(run) },
         onLine: line => onAgentLine(run, line),
         onStderr: d => {
           const t = d.trim();

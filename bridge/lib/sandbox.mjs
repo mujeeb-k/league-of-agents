@@ -5,9 +5,10 @@
 // parameters, never as text in it. Where there is no sandbox, shell.mjs puts back what a shell command changed
 // outside the section instead.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { ROOT, git } from './repo.mjs';
+import { ROOT, git, gitAsync } from './repo.mjs';
 import { scopeEntry } from './scope.mjs';
 
 const SANDBOX_EXEC = process.env.LOA_SANDBOX_EXEC || '/usr/bin/sandbox-exec';
@@ -49,6 +50,19 @@ export const NO_SANDBOX = () =>
     reason: 'no-sandbox',
     args: {},
   });
+
+/**
+ * A path as the sandbox sees it, through symlinks (macOS's /var is /private/var), also for a file not created yet: its
+ * nearest folder that exists, resolved, and the rest.
+ */
+function realish(p) {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    const up = path.dirname(p);
+    return up === p ? p : path.join(realish(up), path.basename(p));
+  }
+}
 
 const escape = s => s.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&');
 
@@ -93,12 +107,50 @@ export function ignoredPatterns(root = ROOT) {
   return out;
 }
 
-/**
- * The sandbox-exec arguments that lock a run to its section: writes inside the repo only to the section, to what the
- * repo ignores, and to the temporary files an editor writes beside a file before renaming it over the file (Claude
- * Code's Edit tool does); no tracked file outside the section, even one that matches an ignore rule.
- */
+/** Each run's sandbox-exec arguments, prepared before it starts (prepareSandbox) and taken as it starts (sandboxArgs). */
+const prepared = new Map();
+
+/** The sandbox-exec arguments prepared for a run, used once as its agent starts. */
 export function sandboxArgs(run) {
+  const args = prepared.get(run.id);
+  prepared.delete(run.id);
+  if (!args) throw NO_SANDBOX();
+  return args;
+}
+
+/**
+ * Outside the repo, files something runs later without the sandbox, so a session must not write them: git's settings
+ * (a filter or fsmonitor set there runs at the bridge's next snapshot) and a worktree's git folder, the bridge's own
+ * settings (approved checks), and the agents' settings and hooks, which later sessions run.
+ * @returns {[string, string][]} [kind, path]
+ */
+function runLater(gitDir, commonDir) {
+  const home = os.homedir();
+  const hermes = process.env.HERMES_HOME || path.join(home, '.hermes');
+  return [
+    ['subpath', gitDir],
+    ['subpath', commonDir],
+    ['literal', path.join(home, '.gitconfig')],
+    ['subpath', path.join(home, '.config/git')],
+    ['subpath', path.join(home, '.config/league-of-agents')],
+    ['literal', path.join(home, '.claude/settings.json')],
+    ['literal', path.join(home, '.claude/settings.local.json')],
+    ['literal', path.join(home, '.codex/config.toml')],
+    ['literal', path.join(home, '.codex/hooks.json')],
+    ['literal', path.join(home, '.cursor/hooks.json')],
+    ['literal', path.join(hermes, 'config.yaml')],
+    ['subpath', path.join(hermes, 'hooks')],
+  ];
+}
+
+/**
+ * Prepares the sandbox that locks a run to its section: writes inside the repo only to the section, to what the
+ * repo ignores, and to the temporary files an editor writes beside a file before renaming it over the file (Claude
+ * Code's Edit tool does); no tracked file outside the section, even one that matches an ignore rule; nothing that runs
+ * later outside the sandbox (runLater); and no reading the bridge's own token. Asynchronous: in a repo the size of
+ * llvm, git's listings take a second.
+ */
+export async function prepareSandbox(run) {
   const real = fs.realpathSync(ROOT);
   const params = [['ROOT', real]];
   const allow = [],
@@ -121,25 +173,32 @@ export function sandboxArgs(run) {
   }
   const patterns = ignoredPatterns(real);
   for (const rx of patterns) allow.push(add('regex', rx));
-  for (const p of String(
-    git(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'], { cwd: real }),
-  )
-    .split('\0')
-    .filter(Boolean))
+  const opts = { cwd: real };
+  const [ignored, tracked, gitDir, commonDir] = await Promise.all([
+    gitAsync(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'], opts),
+    gitAsync(['ls-files', '-z'], opts),
+    gitAsync(['rev-parse', '--absolute-git-dir'], opts),
+    gitAsync(['rev-parse', '--git-common-dir'], opts),
+  ]);
+  for (const p of ignored.split('\0').filter(Boolean))
     allow.push(add(p.endsWith('/') ? 'subpath' : 'literal', path.join(real, p).replace(/\/$/, '')));
   // Tracked files the allows above would reach: one named like a file in the section, or one an ignore pattern
   // matches though it is committed. Matched here in one pass; git's own matching takes seconds in llvm.
   const files = run.scope.map(s => scopeEntry(s).path).filter(e => !e.endsWith('/'));
   const ignoredRx = patterns.length ? new RegExp(patterns.join('|')) : null;
-  for (const p of String(git(['ls-files', '-z'], { cwd: real })).split('\0'))
+  for (const p of tracked.split('\0'))
     if (p && !inSection.some(f => f(p)) && (files.some(f => p.startsWith(f)) || ignoredRx?.test(path.join(real, p))))
       deny.push(add('literal', path.join(real, p)));
+  for (const [kind, p] of runLater(gitDir.trim(), path.resolve(real, commonDir.trim())))
+    deny.push(add(kind, realish(p)));
+  const token = add('literal', path.join(real, '.loa/bridge.json'));
   const profile = [
     '(version 1)',
     '(allow default)',
     '(deny file-write* (subpath (param "ROOT")))',
     ...(allow.length ? [`(allow file-write* ${allow.join(' ')})`] : []),
-    ...(deny.length ? [`(deny file-write* ${deny.join(' ')})`] : []),
+    `(deny file-write* ${deny.join(' ')})`,
+    `(deny file-read* ${token})`,
   ].join('\n');
-  return [SANDBOX_EXEC, '-p', profile, ...params.flatMap(([k, v]) => ['-D', `${k}=${v}`])];
+  prepared.set(run.id, [SANDBOX_EXEC, '-p', profile, ...params.flatMap(([k, v]) => ['-D', `${k}=${v}`])]);
 }

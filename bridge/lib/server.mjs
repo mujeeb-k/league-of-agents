@@ -11,6 +11,7 @@ import { AGENTS } from './agents/registry.mjs';
 import { CLAUDE_FIX } from './agents/claude.mjs';
 import { linkOf } from './cli.mjs';
 import { ROUTES } from './routes.mjs';
+import { setShellPort, shellTokenFits } from './shell.mjs';
 
 // An error the app shows carries a `code`, and the values for its sentence in `args`: the app words it in the
 // person's language by that code (web/src/api/errors.ts). `error` is the same sentence in English, for older apps.
@@ -101,7 +102,7 @@ async function handle(req, res) {
   if (locked()) return send(res, 423, { error: LOCKED }, cors);
   const auth = (req.headers.authorization || '').replace(/^Bearer /, '');
   if (!auth) return send(res, 401, { error: 'Missing token' }, cors);
-  if (!safeEq(auth, TOKEN)) {
+  if (!safeEq(auth, TOKEN) && !shellTokenFits(url.pathname, auth)) {
     wrongTokens++;
     if (locked()) console.error(`\n  ${LOCKED}\n`);
     const wait = Math.min(100 * 2 ** (wrongTokens - 1), 5000);
@@ -185,6 +186,7 @@ export async function firstFreePort(from) {
 /** The bridge's HTTP server, answering only to this machine at this port: the app, and the API it calls. */
 export function createBridgeServer(port) {
   OWN_HOSTS = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
+  setShellPort(port);
   const server = http.createServer(handle);
   server.on('error', (/** @type {NodeJS.ErrnoException} */ e) => {
     console.error(e.code === 'EADDRINUSE' ? `Port ${port} is busy. Use --port <n>.` : e.message);

@@ -19,7 +19,7 @@ export async function runHook(kind, agent = 'claude') {
   // Cursor also runs Claude Code's hook files; its payload says it is Cursor's.
   if (data.cursor_version) agent = 'cursor';
   const cwd = data.cwd || data.workspace_roots?.[0] || process.cwd();
-  if (kind === 'post' || (kind === 'pre' && data.tool_name === 'Bash')) await shellBracket(kind, data, cwd);
+  if (kind === 'post' || (kind === 'pre' && data.tool_name === 'Bash')) await shellBracket(kind, data);
   if (kind === 'pre') {
     const scopeFile = process.env.LOA_SCOPE_FILE;
     if (!scopeFile || !fs.existsSync(scopeFile)) process.exit(0);
@@ -110,17 +110,17 @@ export async function runHook(kind, agent = 'claude') {
  * What it changed outside the section is put back, and Claude Code is told so (exit 2). Anything else, a terminal
  * session among them, passes at once.
  */
-async function shellBracket(kind, data, cwd) {
+async function shellBracket(kind, data) {
   const scopeFile = process.env.LOA_SCOPE_FILE || '';
   const id = /scope-(\d+)\.json$/.exec(scopeFile)?.[1];
   const scope = id ? (readJson(scopeFile, null)?.scope ?? []) : [];
-  const root = scope.length && repoOf(cwd);
-  const b = root && liveBridge(root);
-  if (!b) process.exit(0);
+  // The run's own port and token, from the bridge that started it (lib/shell.mjs shellAccess).
+  const { LOA_BRIDGE_PORT: port, LOA_SHELL_TOKEN: token } = process.env;
+  if (!scope.length || !port || !token) process.exit(0);
   try {
-    const res = await fetch(`http://127.0.0.1:${b.port}/api/runs/${id}/shell`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/runs/${id}/shell`, {
       method: 'POST',
-      headers: { authorization: 'Bearer ' + b.token, 'content-type': 'application/json' },
+      headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
       body: JSON.stringify({ phase: kind === 'pre' ? 'start' : 'end', tool: data.tool_use_id }),
       signal: AbortSignal.timeout(60000),
     });
