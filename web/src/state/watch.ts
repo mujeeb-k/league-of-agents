@@ -6,7 +6,8 @@ import type { Run } from '../lib/types';
 import { centreOn, fileBox } from '../lib/camera';
 import { drawMini } from '../lib/minimap';
 import { S, st } from './app';
-import { bump } from './render';
+import { bump, renderScene } from './render';
+import { setLive } from '../lib/live';
 import { workingRuns } from './sessions';
 
 const steps = new Map<number, StepDTO[]>();
@@ -49,6 +50,18 @@ export function stepped(run: Run) {
   drawMini();
   if (st.following === run.id) centreOnHere(run);
 }
+
+/** An edit landed: its step's file against the file as the run found it, drawn on the map. */
+export function landed(run: Run, i: number, path: string, before: string[], now: string[]) {
+  if (setLive(run.id, i, path, before, now)) redraw();
+}
+
+let pending = 0;
+/** Edits that land together are drawn in one frame. */
+const redraw = () => {
+  cancelAnimationFrame(pending);
+  pending = requestAnimationFrame(renderScene);
+};
 
 /** The map follows a session from file to file, or stops. */
 export function follow(run: Run | null) {

@@ -4,6 +4,7 @@ import { wordDiff } from './worddiff';
 import { bounds, layoutTree } from './layout';
 import type { Change, DirNode, FileNode, FileView, Hunk, Row, Run, SampleRunDef, Stat, TreeSpec } from './types';
 import { t } from '../i18n';
+import { liveChange } from './live';
 
 /** Parses the "@@ path" sample format. */
 export function parseSample(text: string): Record<string, string> {
@@ -196,7 +197,8 @@ export function diffRows(pre: string[], hunks: Hunk[]): Row[] {
 
 export function viewOf(f: FileNode): FileView {
   const ri = st.run ? S.RUNS.indexOf(st.run) : S.RUNS.length;
-  const ch = st.run && st.run.changes.get(f.path);
+  // A session at work: what it has changed so far, drawn as it lands (state/watch.ts).
+  const ch = (st.run && st.run.changes.get(f.path)) || liveChange(f.path);
   const pre = ch && ch.pre ? { L: ch.pre, exists: !ch.created } : linesAt(f, ri);
   if (!ch) return { exists: pre.exists, rows: pre.L.map((t, i) => ({ t, k: '', n: i + 1 })), kind: '', lines: pre.L };
   const d: Row[] = ch.created ? ch.lines.map((t, i) => ({ t, k: 'add', na: i + 1 })) : diffRows(pre.L, ch.hunks);

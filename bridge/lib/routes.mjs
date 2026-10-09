@@ -301,7 +301,9 @@ async function revert({ params, body }) {
 async function runFileBefore({ params, url }) {
   const run = runOf(params),
     rel = url.searchParams.get('path');
-  if (!run?.before || !run.changes?.some(c => c.path === rel)) return [404, { error: 'That file is not in this run' }];
+  // A file it changed, or while it works, one its steps named (what its edits are drawn against).
+  const named = run && (run.changes?.some(c => c.path === rel) || stepsOf(run).some(s => s.file === rel));
+  if (!run?.before || !named) return [404, { error: 'That file is not in this run' }];
   return [200, { text: (await showAt(run.before, rel)) ?? '' }];
 }
 

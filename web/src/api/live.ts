@@ -11,7 +11,9 @@ import { t, tn } from '../i18n';
 import { fmtDur, relTime } from '../lib/util';
 import { S, st } from '../state/app';
 import { noteEnded, opensOnFinish } from '../state/sessions';
-import { addSteps, stepped } from '../state/watch';
+import { addSteps, landed, stepped } from '../state/watch';
+import { forgetEnded } from '../lib/live';
+import { toLines } from '../lib/anchor';
 import { noticeAsks, noticeEnded } from '../state/notices';
 import { stopDemoTimers } from '../demo/sessions';
 import { loadDemo, selectRun } from '../state/actions';
@@ -22,7 +24,7 @@ import { BridgeError, bridge } from './client';
 import { explain } from './errors';
 import { showConflict } from '../components/ConflictDialog';
 import { clearConn, saveConn } from './conn';
-import type { Conn, RunDTO, StateDelta, StateResponse } from './types';
+import type { Conn, RunDTO, StateDelta, StateResponse, StepDTO } from './types';
 
 export const live = { pendingSelect: null as number | null };
 let refreshTimer = 0,
@@ -223,6 +225,7 @@ function applyState(s: StateResponse, first: boolean) {
   }
   S.RUNS = runs;
   S.WORKING = workingOf(s);
+  forgetEnded();
   const wanted = S.RUNS.find(r => r.id === live.pendingSelect) ?? null;
   // A session that just finished opens once the canvas has shown it finished (openFinished), not in the same frame.
   const opening =
@@ -245,6 +248,29 @@ function applyState(s: StateResponse, first: boolean) {
   } else if (opening) openFinished(opening, st.run);
   // Sessions already at work when the app connected or reloaded: their steps so far.
   for (const id of S.WORKING) if (!stepsFetched.has(id)) void loadSteps(id);
+}
+
+/** Each file as a run found it, by run and file: what its edits are drawn against while it works. */
+const foundAs = new Map<string, Promise<string[]>>();
+/** An edit landed: its file as the edit left it, drawn on the map against the file as the run found it. */
+async function landEdit(run: Run, s: StepDTO) {
+  const path = s.file;
+  if (!path || !S.FILES.has(path)) return;
+  const key = `${run.id} ${path}`;
+  if (!foundAs.has(key))
+    foundAs.set(
+      key,
+      bridge.runBefore(conn(), run.id, path).then(
+        r => toLines(r.text),
+        () => [],
+      ),
+    );
+  try {
+    const [before, now] = await Promise.all([foundAs.get(key)!, bridge.stepText(conn(), run.id, s.i)]);
+    landed(run, s.i, path, before, toLines(now.text));
+  } catch {
+    // Gone meanwhile (the run ended and was pruned): its changes show as it ends.
+  }
 }
 
 /** Runs whose steps were fetched whole: later ones come with progress events. */
@@ -324,6 +350,7 @@ async function poll() {
               // A step that came ahead of others means an event was missed: all of them, fetched again.
               if (addSteps(run.id, p.steps)) void loadSteps(run.id);
               stepped(run);
+              for (const s of p.steps) if (s.text && s.act === 'edit') void landEdit(run, s);
             }
             // A run that just ended needs the whole state, unless its delta came with it.
             if (wasRunning && run.status !== 'running' && !deltas.some(d => d.run.id === run.id)) needState = true;

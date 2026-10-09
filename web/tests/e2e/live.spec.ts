@@ -1983,6 +1983,10 @@ test.describe('sessions at once', () => {
       expect((await call(b, `/api/runs/${h.id}/steps/2`)).status).toBe(404);
       expect((await call(b, `/api/runs/${h.id}/steps/0`)).status).toBe(404);
       expect((await stepsOf(b, h.id, 2)).map(s => s.i)).toEqual([2]);
+      // While it works, a file a step named is served as the run found it, to draw its edits against.
+      const found = await call(b, `/api/runs/${h.id}/before?path=shared/log.ts`);
+      expect(found.body).toEqual({ text: SEED['shared/log.ts'] });
+      expect((await call(b, `/api/runs/${h.id}/before?path=apps/console/main.ts`)).status).toBe(404);
       // The steps reached the app as they came: in progress events, with the model.
       const events = (await call(b, '/api/events?since=0')).body as unknown as {
         events: { type: string; run?: { id: number; steps?: Step[]; model?: string } }[];
@@ -2534,6 +2538,30 @@ test.describe('sessions at once, in the app', () => {
       await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
       await expect(page.locator('#markers .marker')).toHaveCount(0);
       await expect(page.locator('#mini')).toHaveAttribute('data-here', '');
+    }));
+
+  test("a session's edits are drawn as they land: the file's changed lines marked while it still works", async ({
+    page,
+  }) =>
+    withHermes(page, async (repo, b) => {
+      await folder(page, 'shared').click();
+      await run(page, 'edit:shared/log.ts wait:a');
+      // Back on the map, as a person watching would be.
+      await expect(page.locator('#markers .marker[data-run="1"]')).toHaveAttribute('data-path', 'shared/log.ts', {
+        timeout: 15_000,
+      });
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Escape');
+      const tile = page.locator('#nodes .fr[data-path="shared/log.ts"]');
+      await expect(tile.locator('.tk i.add')).toHaveCount(1);
+      // Zoomed in, the card shows the line it added.
+      await tile.dblclick();
+      const card = page.locator('#nodes .card[data-path="shared/log.ts"]');
+      await expect(card.locator('.ln.add')).toContainText('// edited in fake-session-');
+      expect(((await call(b, '/api/state')).body as unknown as StateResponse).runs[0]!.status).toBe('running');
+      go(repo, 'a');
+      await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+      await expect(card.locator('.ln.add')).toHaveCount(1);
     }));
 
   test('following a session: the map goes to each file it turns to, until the person moves the map', async ({ page }) =>
