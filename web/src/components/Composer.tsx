@@ -3,13 +3,14 @@ import { ArrowUp, ChevronDown } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { agentOf } from '../lib/constants';
 import { examplePrompt } from '../lib/examplePrompt';
-import { DEMO_AGENTS } from '../demo/sample';
+import { DEMO_AGENTS, DEMO_STAYS } from '../demo/sample';
 import { S, dom, st } from '../state/app';
 import { eachSection, followTarget, isOffline, selectRun, send, sendEach } from '../state/actions';
 import type { Run } from '../lib/types';
 import { cn } from '@/lib/utils';
 import { clearLines, ed, rangeScope, staleSelection } from '../state/editing';
 import { renderComposer, renderSel, useRegion } from '../state/render';
+import { reachOf } from '../state/sessions';
 import { Button } from './ui/button';
 import {
   DropdownMenu,
@@ -316,6 +317,7 @@ export function Composer() {
     if (eachBtn.current) eachBtn.current.disabled = dom.sendBtn.disabled;
   });
   const each = !blocked && eachSection();
+  const stays = S.CONN ? S.LIVE_AGENTS?.[st.agent]?.stays : DEMO_STAYS.includes(st.agent);
   return (
     <div
       id="composer"
@@ -327,6 +329,12 @@ export function Composer() {
         </div>
         <AgentPicker />
       </div>
+      {/* With a selection: whether the agent picked stays inside it. */}
+      {!blocked && st.sel.size && stays !== undefined ? (
+        <p id="reach" className="px-1 pb-2 text-right text-xs text-muted-foreground text-pretty">
+          {reachOf(stays)}
+        </p>
+      ) : null}
       {claudeProblem ? <ClaudeProblem problem={claudeProblem} /> : null}
       {stale ? (
         <p id="staleSelection" role="status" className="px-1 pb-2 text-xs text-ink2 text-pretty">

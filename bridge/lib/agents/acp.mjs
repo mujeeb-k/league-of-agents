@@ -3,10 +3,11 @@ import path from 'node:path';
 import { VERSION } from '../paths.mjs';
 import { inScope } from '../scope.mjs';
 import { ROOT } from '../repo.mjs';
-import { push } from '../runs.mjs';
+import { blocked, push } from '../runs.mjs';
+import { lockOfRun } from '../sandbox.mjs';
 import { emit } from '../events.mjs';
 import { noteLines } from './lines.mjs';
-import { relPaths, repoRelative } from './labels.mjs';
+import { refusedWrite, relPaths, repoRelative } from './labels.mjs';
 import { launch } from './process.mjs';
 
 /**
@@ -97,13 +98,14 @@ function startAcp(run, prompt, name, command, env) {
       else if (isEdit(tool) && u.status === 'completed') noteEdit(u.toolCallId, tool);
       if (u.status === 'failed') {
         const said = (u.content || []).map(c => c?.content?.text || '').join(' ');
+        const outside = isEdit(tool) ? filesOf(tool).filter(f => run.scope?.length && !inScope(run.scope, f)) : [];
         // DeepSeek Harness's read-only mode denies each write until it asks (dsh-sandbox-policy): expected.
-        push(
-          run,
-          /\[sandbox: file access denied/.test(said)
-            ? { t: 'warn', text: `Needs permission: ${acpToolLabel(tool)}` }
-            : { t: 'err', text: `${acpToolLabel(tool)} failed` },
-        );
+        if (/\[sandbox: file access denied/.test(said))
+          push(run, { t: 'warn', text: `Needs permission: ${acpToolLabel(tool)}` });
+        // An edit outside the section the system refused (DeepSeek Harness's full-access mode, in the sandbox).
+        else if (outside.length && refusedWrite(said, lockOfRun(run) === 'sandbox'))
+          for (const f of outside) blocked(run, f);
+        else push(run, { t: 'err', text: `${acpToolLabel(tool)} failed` });
       }
     } else if (u.sessionUpdate === 'config_option_update') {
       run.model = acpModel(u) ?? run.model;
@@ -183,26 +185,30 @@ const isEdit = tool => tool.kind === 'edit' || (tool.kind === 'other' && ['edit'
 /**
  * What an ACP harness asks before doing it (the tool call, as told so far): an edit is allowed when every file it
  * names is in the repo (not its .git or .loa) and in the run's scope, if it has one. Anything else is refused, and
- * the run says what.
+ * the run says what; an edit outside the scope is asked of the person.
  */
 function permitAcp(run, tool, options) {
-  const files = [
-    ...(tool.locations || []).map(l => l?.path),
-    ...(tool.content || []).filter(c => c?.type === 'diff').map(c => c.path),
-    tool.rawInput?.file_path,
-  ].filter(f => typeof f === 'string');
-  const rel = files.map(f => repoRelative(f).split(path.sep).join('/'));
+  const rel = filesOf(tool);
   const inRepo = rel.every(
     r => r && !r.startsWith('../') && r !== '..' && !path.isAbsolute(r) && !/^\.(git|loa)\//.test(r),
   );
-  const ok = isEdit(tool) && rel.length > 0 && inRepo && (!run.scope?.length || rel.every(r => inScope(run.scope, r)));
+  const outside = run.scope?.length ? rel.filter(r => !inScope(run.scope, r)) : [];
+  const ok = isEdit(tool) && rel.length > 0 && inRepo && !outside.length;
   const option = options.find(o => (ok ? /^allow/ : /^reject/).test(o.kind));
-  if (!ok) {
-    const what = acpToolLabel({ title: 'a request', ...tool });
-    push(run, { t: 'deny', text: rel.length && inRepo ? `Refused, outside the scope: ${what}` : `Refused: ${what}` });
-  }
+  // An edit outside the section: the person is asked (runs.mjs blocked).
+  if (!ok && isEdit(tool) && inRepo && outside.length) for (const f of outside) blocked(run, f);
+  else if (!ok) push(run, { t: 'deny', text: `Refused: ${acpToolLabel({ title: 'a request', ...tool })}` });
   return option ? { outcome: 'selected', optionId: option.optionId } : { outcome: 'cancelled' };
 }
+/** The files a tool call names, as the repo names them. */
+const filesOf = tool =>
+  [
+    ...(tool.locations || []).map(l => l?.path),
+    ...(tool.content || []).filter(c => c?.type === 'diff').map(c => c.path),
+    tool.rawInput?.file_path,
+  ]
+    .filter(f => typeof f === 'string')
+    .map(f => repoRelative(f).split(path.sep).join('/'));
 /** A tool call as an activity entry: its title, with the file or command it names when the title doesn't. */
 function acpToolLabel(u) {
   const title = relPaths(String(u.title || u.kind || 'tool')).slice(0, 120);

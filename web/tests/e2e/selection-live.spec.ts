@@ -9,6 +9,8 @@ import { anchorAt, toLines } from '../../src/lib/anchor';
 import { BRIDGE, PROBE_AGENT, SEED, SLOW_AGENT, git, makeRepo, startBridge, type Bridge } from '../support/live';
 import { TOAST } from '../support/targets';
 
+/** macOS: a session on a section runs in the system's sandbox (bridge/lib/sandbox.mjs). */
+const SANDBOX = process.platform === 'darwin';
 const FILE = 'shared/allowlist.ts';
 const linkFor = (b: Bridge) => `http://127.0.0.1:${b.port}/#t=${b.token}`;
 // Lines 3 to 5 of the seeded file: loadPolicy.
@@ -290,7 +292,7 @@ test('an agent removes every selected line while a copy of them sits elsewhere: 
     repo => ({ PROBE_DELETE: `${path.join(repo, FILE)}:3-5` }),
   ));
 
-test('each agent is told to edit only inside the scope; Claude Code is told its edit tools are blocked only when the hooks are on', () =>
+test('each agent is told to edit only inside the scope; one whose writes outside are refused is told it may ask', () =>
   withProbe(
     async (b, _repo, log) => {
       const settle = () =>
@@ -320,11 +322,17 @@ test('each agent is told to edit only inside the scope; Claude Code is told its 
         'Scope for this task:',
         `- ${FILE}, lines 3 to 5 only: keep every other line of this file as it is`,
         '- apps/',
-        'Edit only inside this scope. Changes outside it are reported to the user and can be undone.',
+        'Edit only inside this scope. ',
       ].join('\n');
-      // This bridge runs without the hooks, so nothing blocks Claude Code either.
-      for (const args of lines) expect(told(args)).toBe(common + '\n\nProbe');
-      // With the hooks on, the scope lock blocks Claude Code's edit tools, and it is told so.
+      const reported = 'Changes outside it are reported to the user and can be undone.';
+      const asked =
+        'A write outside it is refused, and the user is asked whether you may make it. If you need a file outside it, ' +
+        "try the edit once, then carry on inside the scope; you'll be told if they allow it.";
+      // This bridge runs without the hooks: only macOS's sandbox refuses Claude Code's writes outside.
+      const [claude, ...others] = lines;
+      expect(told(claude!)).toBe(common + (SANDBOX ? asked : reported) + '\n\nProbe');
+      for (const args of others) expect(told(args)).toBe(common + reported + '\n\nProbe');
+      // With the hooks on, the scope lock refuses Claude Code's edit tools outside, and it is told so.
       // One bridge per repo: this one stops so a bridge with the hooks can start there.
       b.stop();
       await expect
@@ -349,7 +357,7 @@ test('each agent is told to edit only inside the scope; Claude Code is told its 
         expect(r.status).toBe(200);
         await expect.poll(() => fs.readFileSync(log, 'utf8').trim().split('\n').length, { timeout: 15_000 }).toBe(4);
         const last = (JSON.parse(fs.readFileSync(log, 'utf8').trim().split('\n')[3]!) as { args: string[] }).args;
-        expect(told(last)).toBe(common + '\nEdits outside it made with edit tools are blocked.\n\nProbe');
+        expect(told(last)).toBe(common + asked + '\n\nProbe');
       } finally {
         hooked.stop();
       }

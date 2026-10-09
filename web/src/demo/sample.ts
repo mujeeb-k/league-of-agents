@@ -10,6 +10,8 @@ export const SAMPLE_REPO = 'relay';
 export const SAMPLE_BRANCH = 'main';
 /** Agents offered in demo mode. Only agents the bridge can run. */
 export const DEMO_AGENTS = ['claude', 'cursor', 'codex'];
+/** The agents the demo shows kept inside their selection, as macOS's sandbox keeps them (bridge/lib/sandbox.mjs). */
+export const DEMO_STAYS = ['claude', 'hermes'];
 
 const D = (n: string, note: string, c: (string | TreeSpec)[]): TreeSpec => ({ n, note, c });
 

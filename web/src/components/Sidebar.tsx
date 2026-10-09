@@ -12,7 +12,8 @@ import { drafts, openEditor } from '../state/editing';
 import { panels, setPinned, sideVisibleAt } from '../state/panels';
 import { isOffline, runAction, selectRun, stopSessions, toggleSel } from '../state/actions';
 import { renderSel, renderSide, useRegion } from '../state/render';
-import { endedAs, sessionColour, sessionsCost, workingRuns } from '../state/sessions';
+import { asking, endedAs, holderOf, reachOf, sessionColour, sessionsCost, workingRuns } from '../state/sessions';
+import { answerWant } from '../api/live';
 import { money } from '../lib/util';
 import { notifying, toggleNotifying } from '../state/notices';
 import { cn } from '@/lib/utils';
@@ -195,15 +196,27 @@ function RunRow({ r }: { r: Run }) {
           ) : null}
         </div>
         <div className="m mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          <Dot c={a.c} className={cn('size-1.5', running && 'animate-pulse')} />
+          <Dot c={a.c} className={cn('size-1.5 shrink-0', running && !r.waiting && 'animate-pulse')} />
           {/* The model is in the inspector; here, in the row's tooltip, so the time stays readable. */}
-          <span className="truncate" title={r.model ? `${a.name} · ${r.model}` : undefined}>
-            {running ? t('{agent} is working', { agent: a.name }) : `${a.name} · ${r.when}`}
+          {/* At work, what it is doing is the point: it wraps rather than cut off. */}
+          <span
+            className={cn('min-w-0', running ? 'text-pretty' : 'truncate')}
+            title={r.model ? `${a.name} · ${r.model}` : undefined}
+          >
+            {r.waiting
+              ? t('{agent} is waiting for you', { agent: a.name })
+              : running
+                ? t('{agent} is working', { agent: a.name })
+                : `${a.name} · ${r.when}`}
           </span>
           {r.cost != null ? <span className="cost shrink-0 tabular-nums">{money(r.cost)}</span> : null}
           {/* While it works, the stop button takes the room: "Beta" shows once it ends. */}
           {a.beta && !running ? <BetaTag /> : null}
         </div>
+        {running && r.scope?.length && r.stays !== undefined ? (
+          <p className="reach mt-1 text-xs text-muted-foreground text-pretty">{reachOf(r.stays)}</p>
+        ) : null}
+        {running ? <Asks r={r} /> : null}
         {running ? null : (
           <>
             {/* One line per idea: what changed, then tags that never break inside. */}
@@ -233,6 +246,47 @@ function RunRow({ r }: { r: Run }) {
       </div>
     </div>
   );
+}
+
+/**
+ * The writes a session was refused outside its section, each asked of the person: Allow adds the file to the section
+ * and the session carries on; Refuse keeps it out. A file another session's section holds waits for that one to end.
+ */
+function Asks({ r }: { r: Run }) {
+  return asking(r).map(w => {
+    const holder = holderOf(r, w.path);
+    return (
+      <div key={w.path} data-want={w.path} className="mt-2 rounded-lg border bg-card px-2.5 py-2 text-xs">
+        <p className="text-foreground text-pretty [overflow-wrap:anywhere]">
+          {t('Wants to change {file}', { file: w.path })}
+        </p>
+        {holder ? (
+          <p className="held mt-0.5 text-muted-foreground text-pretty">
+            {t('Run {id} is working on it.', { id: holder.id })}
+          </p>
+        ) : null}
+        <div className="mt-2 flex gap-1.5">
+          <Button
+            size="xs"
+            data-allow
+            disabled={!!holder || !!st.busy || isOffline()}
+            onClick={() => void answerWant(r, w.path, true)}
+          >
+            {t('Allow')}
+          </Button>
+          <Button
+            size="xs"
+            variant="outline"
+            data-refuse
+            disabled={!!st.busy || isOffline()}
+            onClick={() => void answerWant(r, w.path, false)}
+          >
+            {t('Refuse')}
+          </Button>
+        </div>
+      </div>
+    );
+  });
 }
 
 /** Selects a file or folder and flies to it, as a click on the canvas does; with add, toggles it in the scope. */

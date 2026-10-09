@@ -28,6 +28,8 @@ export const BY_CODE: Record<string, string> = {
   'nothing-to-commit': 'Nothing to commit. Tick a file to include it.',
   'no-sandbox':
     "A session on a section runs in macOS's sandbox, which can't start here. Start the bridge from a regular terminal.",
+  held: 'Run {id} is working on {path}. Allow it once that run ends.',
+  answered: 'That was already answered.',
   'wait-for-run': 'Wait for the run to finish',
   'hooks-run-active': 'A run is in progress. Remove the hooks once it finishes.',
   'no-commit': 'There is no commit yet.',

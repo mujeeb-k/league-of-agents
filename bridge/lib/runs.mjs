@@ -106,6 +106,8 @@ export function beginRun(opts) {
     if (lockOfRun(opts) === 'refuse') throw NO_SANDBOX();
     const before = await startingPoint(settle);
     const run = newRun(opts);
+    // Said on its card: whether the system keeps it inside its section.
+    if (run.scope.length) run.stays = lockOfRun(run) === 'sandbox';
     // Its colour on the map while it works: the first one free, kept with the run so every window and a reload
     // show the same.
     const taken = new Set([...working.values()].map(r => r.slot));
@@ -137,6 +139,7 @@ export async function finishRun(run, status = 'done', { checks = true } = {}) {
   const out = await scopeViolations(run);
   if (out.length) run.stream.push({ t: 'warn', text: `Changed outside scope: ${out.join(', ')}` });
   run.outOfScope = out;
+  run.waiting = null;
   working.delete(run.id);
   if (checks) checksFor(run);
   // The last run of sessions that overlapped is said to be finished once what none of them made is recorded.
@@ -166,6 +169,18 @@ async function scopeViolations(run) {
       out.push(`${c.path} outside lines ${range.from}–${range.to}`);
   }
   return out;
+}
+/**
+ * A write the session was refused outside its section, its file named by the edit tool that tried it. Said in the
+ * activity, and for a session at work on a section, asked of the person once per file: allowed, the file joins the
+ * section and the session carries on (sessions.mjs answerWant).
+ */
+export function blocked(run, file) {
+  push(run, { t: 'deny', text: `Tried to change ${file}. Blocked.`, file });
+  if (!run.scope?.length || !working.has(run.id) || run.wants?.some(w => w.path === file)) return;
+  (run.wants ??= []).push({ path: file });
+  saveRun(run);
+  emitRun(run);
 }
 export function push(run, entry) {
   run.stream.push(entry);

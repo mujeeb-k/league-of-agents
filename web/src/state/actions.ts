@@ -10,7 +10,7 @@ import { buildModel, diffRows, existsNow, filesUnder, layout, linesAt, parseSamp
 import { area, clashOf, type Clash } from '../lib/sections';
 import type { FileNode, Mode, Run } from '../lib/types';
 import { clamp } from '../lib/util';
-import { DEMO_AGENTS, SAMPLE_BRANCH, SAMPLE_REPO, SAMPLE_RUNS, SAMPLE_TREE } from '../demo/sample';
+import { DEMO_AGENTS, DEMO_STAYS, SAMPLE_BRANCH, SAMPLE_REPO, SAMPLE_RUNS, SAMPLE_TREE } from '../demo/sample';
 import { SAMPLE_TEXT } from '../demo/sampleText';
 import { startDemoSessions, stopDemoSession } from '../demo/sessions';
 import { toast } from '../ui/toast';
@@ -152,6 +152,7 @@ export function simulateRun(prompt: string, scope = scopeFromSelection()): Run |
     prompt,
     summary: '',
     scope,
+    stays: DEMO_STAYS.includes(st.agent),
     when: t('Just now'),
     dur: '',
     status: 'running',

@@ -1,4 +1,4 @@
-import type { AgentInfo, Check, RunStatus, StreamEntry, TurnSummary } from '../api/types';
+import type { AgentInfo, Check, RunStatus, StreamEntry, TurnSummary, Want } from '../api/types';
 
 export type Mode = 'before' | 'after' | 'diff';
 export type Tab = 'files' | 'runs';
@@ -118,6 +118,12 @@ export interface Run {
   scope?: string[];
   /** Claude Code's verdict on its last turn: blocked, or what it needs from you. */
   turn?: TurnSummary;
+  /** Writes refused outside its section, asked of the person. */
+  wants?: Want[];
+  /** Its agent stopped, waiting for the person to answer a want. */
+  waiting?: 'done' | 'failed' | null;
+  /** On a section: whether the system kept it inside. */
+  stays?: boolean;
   startedAt?: number;
   endedAt?: number | null;
 }

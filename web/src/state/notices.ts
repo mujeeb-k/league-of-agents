@@ -3,7 +3,7 @@
 import type { Run } from '../lib/types';
 import { needsYou } from '../lib/model';
 import { t } from '../i18n';
-import { S } from './app';
+import { S, st } from './app';
 import { bump } from './render';
 
 const KEY = 'loa.notify';
@@ -70,6 +70,36 @@ export function noticeEnded(
       open(id);
     };
   }
+}
+
+/** Each write already told, by run and file: told once. */
+const told = new Set<string>();
+
+/**
+ * A session that asks to change a file outside its section, told to a person who isn't looking, as a session that
+ * ended is: a count in the title, and a notification that shows the runs, where its card asks.
+ */
+export function noticeAsks(runs: Run[]) {
+  for (const r of runs)
+    for (const w of r.status === 'running' ? (r.wants ?? []) : []) {
+      const key = `${r.id} ${w.path}`;
+      if (w.answer || told.has(key)) continue;
+      told.add(key);
+      if (!away()) continue;
+      unseen++;
+      base ??= document.title;
+      document.title = `(${unseen}) ${base}`;
+      if (!notifying()) continue;
+      const n = new Notification(t('Run {id} needs you', { id: r.id }), {
+        body: t('Wants to change {file}', { file: w.path }),
+        tag: `loa-want-${S.repoRoot}-${r.id}-${w.path}`,
+      });
+      n.onclick = () => {
+        window.focus();
+        st.tab = 'runs';
+        bump('side');
+      };
+    }
 }
 
 /** Back on the page: the count goes. */

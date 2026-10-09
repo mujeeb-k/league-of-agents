@@ -11,7 +11,7 @@ import { t, tn } from '../i18n';
 import { fmtDur, relTime } from '../lib/util';
 import { S, st } from '../state/app';
 import { noteEnded, opensOnFinish } from '../state/sessions';
-import { noticeEnded } from '../state/notices';
+import { noticeAsks, noticeEnded } from '../state/notices';
 import { stopDemoTimers } from '../demo/sessions';
 import { loadDemo, selectRun } from '../state/actions';
 import { refreshEditor } from '../state/editing';
@@ -316,6 +316,7 @@ async function poll() {
         noteEnded(S.WORKING, workingOf(s), s.runs);
         noticeEnded(S.WORKING, workingOf(s), s.runs, id => selectRun(S.RUNS.find(r => r.id === id) ?? null));
         applyState(s, false);
+        noticeAsks(S.RUNS);
         S.EVSEQ = Math.max(S.EVSEQ, s.seq || 0);
       } else renderSide();
     } catch (e) {
@@ -539,6 +540,24 @@ export async function restorePutBack(run: Run, path: string) {
   } finally {
     st.busy = null;
     renderInspector();
+  }
+}
+
+/** Allows a session to change a file outside its section, or refuses it; allowed, the session carries on. */
+export async function answerWant(run: Run, path: string, allow: boolean) {
+  if (st.busy) return;
+  st.busy = `want:${run.id}`;
+  renderSide();
+  try {
+    await bridge.answerWant(conn(), run.id, path, allow);
+    const w = run.wants?.find(x => x.path === path && !x.answer);
+    if (w) w.answer = allow ? 'allowed' : 'refused';
+    queueRefresh();
+  } catch (e) {
+    toast(explain(e));
+  } finally {
+    st.busy = null;
+    renderSide();
   }
 }
 

@@ -6,6 +6,8 @@ export type RunStatus = 'running' | 'done' | 'failed' | 'cancelled' | 'interrupt
 export interface StreamEntry {
   t: 'text' | 'tool' | 'err' | 'warn' | 'deny';
   text: string;
+  /** A write refused outside the section: the file, worded by the app (bridges from 0.2.0). */
+  file?: string;
 }
 
 /**
@@ -26,6 +28,20 @@ export interface AgentInfo {
   available: boolean;
   /** Why Claude Code can't run: not installed, or not logged in (bridges before 0.1.0 don't send it). */
   problem?: 'missing' | 'loggedOut' | null;
+  /**
+   * On a section, whether the system keeps it inside (macOS's sandbox) or its changes outside are flagged after it
+   * (bridges before 0.2.0 don't send it).
+   */
+  stays?: boolean;
+}
+
+/**
+ * A write a session was refused outside its section, asked of the person (bridges from 0.2.0): allowed, it joins the
+ * section and the session carries on; refused, it stays out.
+ */
+export interface Want {
+  path: string;
+  answer?: 'allowed' | 'refused';
 }
 
 export interface HunkDTO {
@@ -82,6 +98,11 @@ export interface RunDTO {
   slot?: number;
   checksRunning?: boolean;
   turn?: TurnSummary;
+  wants?: Want[];
+  /** Its agent stopped, waiting for the person to answer a want: how the agent's last turn ended. */
+  waiting?: 'done' | 'failed' | null;
+  /** On a section: whether the system kept it inside, as AgentInfo.stays said when it started. */
+  stays?: boolean;
 }
 
 /** Claude Code's verdict on its last turn (post_turn_summary): completed or blocked, and what it needs. */

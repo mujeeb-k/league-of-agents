@@ -48,7 +48,9 @@ export async function runHook(kind, agent = 'claude') {
       process.stderr.write(`League of Agents scope lock: ${why}`);
       process.exit(2);
     };
-    if (!inScope(scope, rel)) block(`${rel} is outside the selected scope. Only edit: ${scope.join(', ')}`);
+    // The person is asked whether it may (runs.mjs blocked), and the session told to carry on if they allow it.
+    const asked = " The user is asked whether you may; you'll be told if they allow it. Carry on inside the scope.";
+    if (!inScope(scope, rel)) block(`${rel} is outside the selected scope. Only edit: ${scope.join(', ')}.${asked}`);
     const range = ranges[rel];
     if (range) {
       // The file as this edit would leave it, held against the file as the run found it.
@@ -61,7 +63,7 @@ export async function runHook(kind, agent = 'claude') {
           : text.replace(e.old_string, () => e.new_string);
       if (!rangeKept(splitLines(range.before), splitLines(text), range))
         block(
-          `this edit changes ${rel} outside lines ${range.from}–${range.to}. Only edit those lines; keep every other line as it is.`,
+          `this edit changes ${rel} outside lines ${range.from}–${range.to}. Only edit those lines; keep every other line as it is.${asked}`,
         );
     }
     process.exit(0);

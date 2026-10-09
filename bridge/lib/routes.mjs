@@ -26,7 +26,7 @@ import { recordedAuthors, exportAttribution } from './authorship.mjs';
 import { runs, working, saveRun, publicRun, beginRun, finishRun, push, revertRun } from './runs.mjs';
 import { armIdle, ownWrite, writeConfig, watchOff } from './watch.mjs';
 import { seq, events, waiters, emit, emitRun } from './events.mjs';
-import { cancelSession, startSession } from './sessions.mjs';
+import { answerWant, cancelSession, startSession } from './sessions.mjs';
 import { restorePutBack, shellEnds, shellStarts } from './shell.mjs';
 import { commitPreview, commitRun } from './commit.mjs';
 
@@ -221,6 +221,18 @@ async function restore({ params, body }) {
   const { path: file } = await body();
   if (!(await restorePutBack(run, file))) return [404, { error: 'Nothing kept to restore' }];
   emitRun(run);
+  return [200, { ok: true }];
+}
+/**
+ * The person allows a write a session asked to make outside its section, or refuses it (lib/sessions.mjs answerWant).
+ * @param {Request} request
+ * @returns {Promise<Reply>}
+ */
+async function answer({ params, body }) {
+  const run = runOf(params);
+  if (!run) return noRun;
+  const { path: file, allow } = await body();
+  await answerWant(run, String(file ?? ''), allow === true);
   return [200, { ok: true }];
 }
 /**
@@ -457,6 +469,7 @@ export const ROUTES = [
   ['GET', /^\/api\/runs\/(\d+)\/before$/, runFileBefore],
   ['POST', /^\/api\/runs\/(\d+)\/shell$/, shell],
   ['POST', /^\/api\/runs\/(\d+)\/put-back$/, restore],
+  ['POST', /^\/api\/runs\/(\d+)\/wants$/, answer],
   ['GET', /^\/api\/runs\/(\d+)\/commit$/, commitInfo],
   ['POST', /^\/api\/runs\/(\d+)\/commit$/, commit],
   ['POST', '/api/attribution/export', exportNote],

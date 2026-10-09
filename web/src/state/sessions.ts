@@ -1,5 +1,6 @@
 // Sessions at work: runs under way at the same time, each on a section of its own (lib/sections.ts).
 import type { Run } from '../lib/types';
+import { covers } from '../lib/sections';
 import { t } from '../i18n';
 import { S, st } from './app';
 
@@ -13,6 +14,17 @@ export function workingRuns(): Run[] {
 }
 
 /** A session's colour: the one it was given as it started, the same in every window and after a reload. */
+/** Where a session on a section can change files: kept inside by the system, or anywhere, each change outside flagged. */
+export const reachOf = (stays: boolean) =>
+  stays ? t('Stays inside your selection') : t("Can change files outside your selection. You'll see each one flagged.");
+
+/** The writes a session at work asked to make outside its section, not yet answered. */
+export const asking = (r: Run) => (r.status === 'running' ? (r.wants ?? []).filter(w => !w.answer) : []);
+
+/** The other session at work whose section holds a file: until it ends, the file can't join another section. */
+export const holderOf = (r: Run, path: string) =>
+  workingRuns().find(o => o !== r && !!o.scope?.length && covers(o.scope, path));
+
 export const sessionColour = (run: Run) => `var(--session-${((run.slot ?? run.id) % MAX_SESSIONS) + 1})`;
 
 /**

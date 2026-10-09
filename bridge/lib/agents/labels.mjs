@@ -3,13 +3,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from '../repo.mjs';
 
-/** A failed tool call, as an activity entry: blocked by the scope lock, denied, or an error. */
-export function toolError(content) {
-  const text = relPaths(Array.isArray(content) ? content.map(c => c.text || '').join(' ') : content || '');
-  const lock =
-    text.match(/League of Agents scope lock: (\S+) is outside the selected scope/) ||
-    text.match(/League of Agents scope lock: this edit changes (\S+ outside lines \S+)\./);
-  if (lock) return { t: 'warn', text: `Blocked by the scope lock: ${lock[1]}` };
+/** What a failed tool call said, as text with the repo's paths made relative. */
+export const toolText = content =>
+  relPaths(Array.isArray(content) ? content.map(c => c.text || '').join(' ') : content || '');
+/**
+ * Whether a failed write was refused, not wrong: by the scope lock (lib/hook.mjs words it so), or by the system
+ * (macOS's sandbox, in a session that runs in it).
+ */
+export const refusedWrite = (text, sandboxed) =>
+  text.includes('League of Agents scope lock:') || (sandboxed && /\bEPERM\b|operation not permitted/i.test(text));
+/** A failed tool call, as an activity entry: denied, or an error. */
+export function toolError(text) {
   const line = text.split('\n')[0].slice(0, 300);
   return /requires approval|permission/i.test(line) ? { t: 'deny', text: line } : { t: 'err', text: line };
 }

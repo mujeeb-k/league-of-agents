@@ -154,6 +154,11 @@ function runLater(gitDir, commonDir) {
   ];
 }
 
+/** What the repo ignored as each run at work started, by run (prepareSandbox). */
+const ignoredAtStart = new Map();
+/** A run ended: what it was held by goes. */
+export const forgetSandbox = run => ignoredAtStart.delete(run.id);
+
 /** The agents' settings and hook files a repo may hold. */
 const REPO_SETTINGS = [
   '.claude/settings.json',
@@ -180,7 +185,8 @@ export async function prepareSandbox(run) {
     params.push([name, value]);
     return `(${kind} (param "${name}"))`;
   };
-  const inSection = [];
+  const inSection = [],
+    folders = [];
   for (const e of run.scope.map(s => scopeEntry(s).path)) {
     const abs = path.join(real, e);
     if (e.endsWith('/')) {
@@ -190,13 +196,23 @@ export async function prepareSandbox(run) {
       allow.push(add('literal', abs));
       allow.push(add('regex', TEMP_BESIDE[run.agent](escape(path.dirname(abs)), escape(path.basename(abs)))));
       inSection.push(p => p === e);
+      // A new file the person allowed, in folders not made yet: those folders may be made, as folders only.
+      for (let dir = path.dirname(abs); dir !== real && !fs.existsSync(dir); dir = path.dirname(dir))
+        folders.push(`(require-all ${add('literal', dir)} (vnode-type DIRECTORY))`);
     }
   }
-  const patterns = ignoredPatterns(real);
-  for (const rx of patterns) allow.push(add('regex', rx));
   const opts = { cwd: real };
+  // What the repo ignored as the run started: a run carrying on (sessions.mjs) is held by that, not by ignore rules it
+  // wrote since.
+  if (!ignoredAtStart.has(run.id))
+    ignoredAtStart.set(run.id, {
+      patterns: ignoredPatterns(real),
+      ignored: gitAsync(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'], opts),
+    });
+  const { patterns, ignored: listed } = ignoredAtStart.get(run.id);
+  for (const rx of patterns) allow.push(add('regex', rx));
   const [ignored, tracked, gitDir, commonDir] = await Promise.all([
-    gitAsync(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'], opts),
+    listed,
     gitAsync(['ls-files', '-z'], opts),
     gitAsync(['rev-parse', '--absolute-git-dir'], opts),
     gitAsync(['rev-parse', '--git-common-dir'], opts),
@@ -221,6 +237,7 @@ export async function prepareSandbox(run) {
     '(allow default)',
     '(deny file-write* (subpath (param "ROOT")))',
     ...(allow.length ? [`(allow file-write* ${allow.join(' ')})`] : []),
+    ...(folders.length ? [`(allow file-write-create ${folders.join(' ')})`] : []),
     `(deny file-write* ${deny.join(' ')})`,
     `(deny file-read* ${token})`,
   ].join('\n');

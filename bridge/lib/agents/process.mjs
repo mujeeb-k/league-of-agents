@@ -19,8 +19,9 @@ export function launch(run, argv, { env = {}, stdin = false, onLine, onStderr })
     env: { ...process.env, LOA_MANAGED: '1', ...env },
     stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   });
-  const rawOut = fs.createWriteStream(path.join(RUNS_DIR, `${run.id}.stream.jsonl`));
-  const rawErr = fs.createWriteStream(path.join(RUNS_DIR, `${run.id}.stderr.log`));
+  // A run's later turns (it carried on once allowed a file) add to its logs.
+  const rawOut = fs.createWriteStream(path.join(RUNS_DIR, `${run.id}.stream.jsonl`), { flags: 'a' });
+  const rawErr = fs.createWriteStream(path.join(RUNS_DIR, `${run.id}.stderr.log`), { flags: 'a' });
   let buf = '';
   child.stdout.on('data', d => {
     rawOut.write(d);

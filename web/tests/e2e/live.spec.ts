@@ -895,6 +895,16 @@ async function runToEnd(b: Bridge, body: object) {
   return ((await api('/api/state')) as StateResponse).runs.find(r => r.id === run.id)!;
 }
 
+/** Waits for a run to ask to change files outside its section, answers each, and waits for it to end. */
+async function answered(b: Bridge, id: number, allow: boolean) {
+  const now = async () => ((await call(b, '/api/state')).body as unknown as StateResponse).runs.find(r => r.id === id)!;
+  await expect.poll(async () => (await now()).waiting, { timeout: 15_000 }).toBeTruthy();
+  for (const w of (await now()).wants ?? [])
+    if (!w.answer) expect((await call(b, `/api/runs/${id}/wants`, { path: w.path, allow })).status).toBe(200);
+  await expect.poll(async () => (await now()).status, { timeout: 15_000 }).toBe('done');
+  return now();
+}
+
 test('bridge keeps deny rules, records raw agent output, and keeps secret files out of snapshots', async () => {
   const repo = makeRepo();
   // Untracked files whose names usually hold secrets, at the top and deeper down.
@@ -1190,7 +1200,7 @@ test('an ACP harness (Hermes): asks before editing, reports its model, is refuse
     // Found once `hermes acp --check` passes; the state names it and says nothing of its command.
     await expect
       .poll(async () => ((await api('/api/state')).body as unknown as StateResponse).agents.hermes)
-      .toEqual({ name: 'Hermes', available: true });
+      .toEqual({ name: 'Hermes', available: true, stays: SANDBOX });
     const first = await runToEnd(b, {
       agent: 'hermes',
       prompt: 'Record who reviewed it',
@@ -1209,20 +1219,23 @@ test('an ACP harness (Hermes): asks before editing, reports its model, is refuse
     expect(first.agentLines).toEqual({ [FILE]: [[at, at]] });
     const log = () => fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8');
     expect(log()).toContain('Scope for this task:\\n- shared/');
-    // A follow-up resumes the same session. Asked to edit outside the scope, it is refused, and the run says so.
-    const second = await runToEnd(b, {
-      agent: 'hermes',
-      prompt: 'Note it outside too',
-      scope: ['shared/'],
-      resumeFrom: first.id,
-    });
+    // A follow-up resumes the same session. Asked to edit outside the scope, it is refused, and the person asked.
+    const asked = (
+      await api('/api/runs', {
+        agent: 'hermes',
+        prompt: 'Note it outside too',
+        scope: ['shared/'],
+        resumeFrom: first.id,
+      })
+    ).body as unknown as RunDTO;
+    const second = await answered(b, asked.id, false);
     expect(second.sessionId).toBe(first.sessionId);
     expect(log()).toContain(`resume ${first.sessionId}`);
     // What the harness replays on resuming is the earlier run's, not this one's.
     expect(second.stream.map(e => e.text)).not.toContain('replayed: an earlier call');
     expect(second.stream.map(e => e.text)).not.toContain('Replayed from before.');
     expect(fs.existsSync(path.join(repo, 'outside.txt'))).toBe(false);
-    expect(second.stream.map(e => `${e.t} ${e.text}`)).toContain('deny Refused, outside the scope: patch: outside.txt');
+    expect(second.stream.map(e => `${e.t} ${e.text}`)).toContain('deny Tried to change outside.txt. Blocked.');
     // Cancel asks the harness to stop its turn.
     const slow = (await api('/api/runs', { agent: 'hermes', prompt: 'Take it slow', scope: [], resumeFrom: null }))
       .body;
@@ -1250,19 +1263,22 @@ test("without a sandbox, DeepSeek Harness runs in its read-only mode, so each ed
     FILE = 'shared/allowlist.ts';
   const b = await startBridge(repo, FAKE_CLAUDE, { LOA_DSH_BIN: FAKE_ACP, FAKE_ACP_STYLE: 'dsh', LOA_SANDBOX: 'off' });
   try {
-    const run = await runToEnd(b, {
-      agent: 'dsh',
-      prompt: 'Record it outside too, and run a command',
-      scope: ['shared/'],
-      resumeFrom: null,
-    });
+    const started = (
+      await call(b, '/api/runs', {
+        agent: 'dsh',
+        prompt: 'Record it outside too, and run a command',
+        scope: ['shared/'],
+        resumeFrom: null,
+      })
+    ).body as unknown as RunDTO;
+    const run = await answered(b, started.id, false);
     expect(fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8')).toMatch(/^new \S+ mode=read-only$/m);
     expect(run.changes.map(c => c.path)).toEqual([FILE]);
     const at = SEED[FILE]!.split('\n').length - 1;
     expect(run.agentLines).toEqual({ [FILE]: [[at, at]] });
     expect(fs.existsSync(path.join(repo, 'outside.txt'))).toBe(false);
     const entries = run.stream.map(e => `${e.t} ${e.text}`);
-    expect(entries).toContain('deny Refused, outside the scope: edit outside.txt');
+    expect(entries).toContain('deny Tried to change outside.txt. Blocked.');
     // A command it asks to run is refused, by what it would run.
     expect(entries).toContain('deny Refused: bash rm -rf build');
     // Its sandbox holds each write until it asks: said as that, not as a failure.
@@ -1281,18 +1297,24 @@ onMac(
       FILE = 'shared/allowlist.ts';
     const b = await startBridge(repo, FAKE_CLAUDE, { LOA_DSH_BIN: FAKE_ACP, FAKE_ACP_STYLE: 'dsh' });
     try {
-      const run = await runToEnd(b, {
-        agent: 'dsh',
-        prompt: 'Record it outside too',
-        scope: ['shared/'],
-        resumeFrom: null,
-      });
+      const started = (
+        await call(b, '/api/runs', {
+          agent: 'dsh',
+          prompt: 'Record it outside too',
+          scope: ['shared/'],
+          resumeFrom: null,
+        })
+      ).body as unknown as RunDTO;
+      const run = await answered(b, started.id, false);
       expect(fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8')).toMatch(/^new \S+ mode=danger-full-access$/m);
       expect(run.changes.map(c => c.path)).toEqual([FILE]);
       const at = SEED[FILE]!.split('\n').length - 1;
       expect(run.agentLines).toEqual({ [FILE]: [[at, at]] });
       expect(fs.existsSync(path.join(repo, 'outside.txt'))).toBe(false);
-      expect(run.stream.map(e => e.text).join('\n')).toContain('outside.txt: EPERM');
+      // Refused by the system, and asked of the person; not a failure.
+      const entries = run.stream.map(e => `${e.t} ${e.text}`);
+      expect(entries).toContain('deny Tried to change outside.txt. Blocked.');
+      expect(entries.filter(e => e.startsWith('err'))).toEqual([]);
     } finally {
       b.stop();
       fs.rmSync(path.dirname(repo), { recursive: true, force: true });
@@ -1794,6 +1816,142 @@ test.describe('sessions at once', () => {
       }),
   );
 
+  const MAIN = 'apps/console/main.ts';
+  const waitsOn = (b: Bridge, id: number) =>
+    expect.poll(async () => (await runOf(b, id)).waiting, { timeout: 15_000 }).toBe('done');
+  const answer = (b: Bridge, id: number, file: string, allow: boolean) =>
+    call(b, `/api/runs/${id}/wants`, { path: file, allow });
+  const acpLog = (repo: string) => fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8');
+
+  test('a write refused outside the section is asked; allowed, the file joins the section and the same session carries on', () =>
+    twoSessions(async (b, repo) => {
+      const h = (await start(b, ['shared/'], `edit:${MAIN}`)).body as unknown as RunDTO;
+      await waitsOn(b, h.id);
+      let run = await runOf(b, h.id);
+      // Waiting for the person: still at work on its section, which no other session may take.
+      expect(run.status).toBe('running');
+      expect(run.wants).toEqual([{ path: MAIN }]);
+      expect(run.stream.map(e => `${e.t} ${e.text}`)).toContain(`deny Tried to change ${MAIN}. Blocked.`);
+      expect(fs.readFileSync(path.join(repo, MAIN), 'utf8')).toBe(SEED[MAIN]);
+      expect((await start(b, ['shared/log.ts'], 'Log it')).status).toBe(409);
+      expect((await answer(b, h.id, MAIN, true)).status).toBe(200);
+      await until(b, h.id, 'done');
+      run = await runOf(b, h.id);
+      expect(run.scope).toEqual(['shared/', MAIN]);
+      expect(run.wants).toMatchObject([{ path: MAIN, answer: 'allowed' }]);
+      expect(fs.readFileSync(path.join(repo, MAIN), 'utf8')).toBe(SEED[MAIN] + `// edited in ${run.sessionId}\n`);
+      expect(run.changes.map(c => c.path)).toEqual([MAIN]);
+      expect(run.outOfScope).toEqual([]);
+      // The same session, resumed, and told what it may now change.
+      expect(acpLog(repo)).toContain(`resume ${run.sessionId}`);
+      expect(acpLog(repo)).toContain(`You may now change ${MAIN}. Carry on where you stopped.`);
+      // Answered once: a second answer is refused.
+      expect((await answer(b, h.id, MAIN, false)).body).toMatchObject({ code: 'answered' });
+    }));
+
+  test('refused, the file stays out and the session ends as its turn did; stopped while it waits, it ends at once', () =>
+    twoSessions(async (b, repo) => {
+      const h = (await start(b, ['shared/'], `edit:${MAIN}`)).body as unknown as RunDTO;
+      await waitsOn(b, h.id);
+      expect((await answer(b, h.id, MAIN, false)).status).toBe(200);
+      await until(b, h.id, 'done');
+      const run = await runOf(b, h.id);
+      expect(run.scope).toEqual(['shared/']);
+      expect(run.wants).toMatchObject([{ path: MAIN, answer: 'refused' }]);
+      expect(fs.readFileSync(path.join(repo, MAIN), 'utf8')).toBe(SEED[MAIN]);
+      expect(acpLog(repo)).not.toContain('resume');
+      const s = (await start(b, ['shared/'], `edit:${MAIN}`)).body as unknown as RunDTO;
+      await waitsOn(b, s.id);
+      expect((await call(b, `/api/runs/${s.id}/cancel`, {})).status).toBe(200);
+      await until(b, s.id, 'cancelled');
+      expect(fs.existsSync(path.join(repo, `.loa/scope-${s.id}.json`))).toBe(false);
+      expect((await answer(b, s.id, MAIN, true)).body).toMatchObject({ code: 'answered' });
+    }));
+
+  test('a file another session is working on waits for that session to end; the refusal names it', () =>
+    twoSessions(async (b, repo) => {
+      const a = (await start(b, ['apps/'], `edit:${MAIN} wait:a`)).body as unknown as RunDTO;
+      const h = (await start(b, ['shared/'], `edit:${MAIN}`)).body as unknown as RunDTO;
+      await waitsOn(b, h.id);
+      const held = await answer(b, h.id, MAIN, true);
+      expect(held.status).toBe(409);
+      expect(held.body).toMatchObject({ code: 'held', args: { id: a.id, path: MAIN } });
+      go(repo, 'a');
+      await until(b, a.id, 'done');
+      expect((await answer(b, h.id, MAIN, true)).status).toBe(200);
+      await until(b, h.id, 'done');
+      expect((await runOf(b, h.id)).changes.map(c => c.path)).toEqual([MAIN]);
+    }));
+
+  test("Claude Code's edit refused outside its section: asked, and once allowed, resumed in its own session", () =>
+    twoSessions(async (b, repo) => {
+      const c = (await call(b, '/api/runs', { agent: 'claude', prompt: 'want:apps/new.ts', scope: ['shared/'] }))
+        .body as unknown as RunDTO;
+      await waitsOn(b, c.id);
+      expect((await runOf(b, c.id)).wants).toEqual([{ path: 'apps/new.ts' }]);
+      expect(fs.existsSync(path.join(repo, 'apps/new.ts'))).toBe(false);
+      expect((await answer(b, c.id, 'apps/new.ts', true)).status).toBe(200);
+      await until(b, c.id, 'done');
+      const run = await runOf(b, c.id);
+      expect(run.summary).toBe('apps/new.ts: written (resumed sess-123)');
+      expect(fs.readFileSync(path.join(repo, 'apps/new.ts'), 'utf8')).toBe('// written by a resumed session\n');
+      expect(run.changes.map(ch => ch.path)).toEqual(['apps/new.ts']);
+      expect(run.agentLines).toEqual({ 'apps/new.ts': [[0, 0]] });
+    }));
+
+  test('allowed a new file in a folder not made yet, the session makes that folder and writes the file', () =>
+    twoSessions(async (b, repo) => {
+      const c = (await call(b, '/api/runs', { agent: 'claude', prompt: 'want:notes/todo.md', scope: ['shared/'] }))
+        .body as unknown as RunDTO;
+      await waitsOn(b, c.id);
+      expect((await answer(b, c.id, 'notes/todo.md', true)).status).toBe(200);
+      await until(b, c.id, 'done');
+      expect((await runOf(b, c.id)).summary).toBe('notes/todo.md: written (resumed sess-123)');
+      expect(fs.readFileSync(path.join(repo, 'notes/todo.md'), 'utf8')).toBe('// written by a resumed session\n');
+    }));
+
+  onMac(
+    'a file in a folder not made yet: the sandbox lets the session make that folder, as a folder, and nothing else in it',
+    () =>
+      twoSessions(async (b, repo) => {
+        const cmd = [
+          'printf n > notes',
+          "mkdir -p notes/deep && printf 'x' > notes/deep/todo.md",
+          "printf 'y' > notes/other.md",
+          "printf 'z' > notes/deep/other.md",
+          'mkdir notes2',
+        ].join('; ');
+        const h = (await start(b, ['shared/', 'notes/deep/todo.md'], `exec: ${cmd}`)).body as unknown as RunDTO;
+        await until(b, h.id, 'done');
+        expect(fs.readFileSync(path.join(repo, 'notes/deep/todo.md'), 'utf8')).toBe('x');
+        expect(fs.readdirSync(path.join(repo, 'notes'))).toEqual(['deep']);
+        expect(fs.readdirSync(path.join(repo, 'notes/deep'))).toEqual(['todo.md']);
+        expect(fs.existsSync(path.join(repo, 'notes2'))).toBe(false);
+      }),
+  );
+
+  onMac(
+    'carrying on, a session is held by the ignore rules the repo had when it started, not ones it wrote since',
+    () =>
+      twoSessions(async (b, repo) => {
+        fs.writeFileSync(path.join(repo, '.gitignore'), 'dist/\n');
+        git(repo, 'add', '.gitignore');
+        git(repo, '-c', 'user.name=t', '-c', 'user.email=t@e.t', 'commit', '-qm', 'ignore');
+        const prompt = [
+          "exec: printf 'apps/\\n' >> .gitignore",
+          'later: printf n > apps/new.ts; mkdir -p dist && printf m > dist/x.js',
+          'edit:loa.config.json',
+        ].join('\n');
+        const h = (await start(b, ['shared/', '.gitignore'], prompt)).body as unknown as RunDTO;
+        await waitsOn(b, h.id);
+        expect(fs.readFileSync(path.join(repo, '.gitignore'), 'utf8')).toBe('dist/\napps/\n');
+        expect((await answer(b, h.id, 'loa.config.json', true)).status).toBe(200);
+        await until(b, h.id, 'done');
+        expect(fs.existsSync(path.join(repo, 'apps/new.ts'))).toBe(false);
+        expect(fs.readFileSync(path.join(repo, 'dist/x.js'), 'utf8')).toBe('m');
+      }),
+  );
+
   onMac("in a worktree, a session can't write the repo's git folder outside it", async () => {
     const main = makeRepo(),
       wt = path.join(path.dirname(main), 'wt');
@@ -1921,9 +2079,9 @@ test.describe('sessions at once', () => {
 
 test.describe('sessions at once, in the app', () => {
   /** The app on a repo whose stand-in Hermes edits what each prompt names, holding its turn until told to go. */
-  async function withHermes(page: Page, fn: (repo: string, b: Bridge) => Promise<void>) {
+  async function withHermes(page: Page, fn: (repo: string, b: Bridge) => Promise<void>, env = {}) {
     const repo = makeRepo();
-    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP });
+    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP, ...env });
     try {
       await page.goto(linkFor(b));
       await expect(page.locator('#conn')).toHaveText('Live');
@@ -2202,6 +2360,71 @@ test.describe('sessions at once, in the app', () => {
       await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
     }));
 
+  test('before a run and on its card, plain words say whether the session stays inside the selection', async ({
+    page,
+  }) =>
+    withHermes(
+      page,
+      async repo => {
+        const STAYS = 'Stays inside your selection';
+        const FLAGGED = "Can change files outside your selection. You'll see each one flagged.";
+        // With nothing selected there is nothing to stay inside: no line.
+        await expect(page.locator('#reach')).toHaveCount(0);
+        await folder(page, 'shared').click();
+        await expect(page.locator('#reach')).toHaveText(SANDBOX ? STAYS : FLAGGED);
+        await page.locator('#agentBtn').click();
+        await page.locator('#agentMenu [data-agent="codex"]').click();
+        await expect(page.locator('#reach')).toHaveText(FLAGGED);
+        await page.locator('#agentBtn').click();
+        await page.locator('#agentMenu [data-agent="hermes"]').click();
+        await run(page, 'Add a header comment. wait:a');
+        await expect(running(page).locator('.reach')).toHaveText(SANDBOX ? STAYS : FLAGGED);
+        go(repo, 'a');
+        await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+      },
+      { LOA_CODEX_BIN: FAKE_CODEX },
+    ));
+
+  test('a session that wants a file outside its section asks on its card: Allow, and it carries on; held, it says by which run', async ({
+    page,
+  }) =>
+    withHermes(page, async (repo, b) => {
+      await folder(page, 'apps').click();
+      await run(page, 'edit:apps/console/main.ts wait:a');
+      await expect(running(page)).toHaveCount(1);
+      await page.keyboard.press('Escape');
+      await folder(page, 'shared').click();
+      await run(page, 'edit:apps/console/main.ts');
+      const card = page.locator('#sideList [data-run="2"]');
+      const ask = card.locator('[data-want="apps/console/main.ts"]');
+      await expect(ask).toContainText('Wants to change apps/console/main.ts', { timeout: 15_000 });
+      await expect(card).toContainText('Hermes is waiting for you');
+      // Run 1 holds the file: Allow waits for it, and the card says so.
+      await expect(ask.locator('.held')).toHaveText('Run 1 is working on it.');
+      await expect(ask.locator('[data-allow]')).toBeDisabled();
+      go(repo, 'a');
+      await expect(ask.locator('.held')).toHaveCount(0, { timeout: 15_000 });
+      await ask.locator('[data-allow]').click();
+      await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+      const two = (await call(b, '/api/state')).body as unknown as StateResponse;
+      expect(two.runs.find(r => r.id === 2)!.scope).toEqual(['shared/', 'apps/console/main.ts']);
+      // Its activity says what was blocked; it carried on from there.
+      await card.click();
+      await expect(page.locator('#runbar b')).toHaveText('Run 2');
+      await expect(page.locator('#insp .acts')).toContainText('Tried to change apps/console/main.ts. Blocked.');
+      // Refused: the file stays out, and the card asks no more.
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('0');
+      await folder(page, 'shared').click();
+      await run(page, 'edit:apps/console/main.ts');
+      const three = page.locator('#sideList [data-run="3"] [data-want="apps/console/main.ts"]');
+      await three.locator('[data-refuse]').click();
+      await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+      const after = (await call(b, '/api/state')).body as unknown as StateResponse;
+      expect(after.runs.find(r => r.id === 3)!.scope).toEqual(['shared/']);
+    }));
+
   test('several sections and one prompt start a session on each; sections that overlap start none', async ({ page }) =>
     withHermes(page, async (repo, b) => {
       await folder(page, 'shared').click();
@@ -2215,6 +2438,8 @@ test.describe('sessions at once, in the app', () => {
       const runs = ((await call(b, '/api/state')).body as unknown as StateResponse).runs;
       expect(runs.map(r => r.scope)).toEqual([['shared/'], ['apps/']]);
       go(repo, 'a');
+      // The stand-in edits shared/ whatever its section: the session on apps/ asks, and is refused.
+      await answered(b, runs[1]!.id, false);
       await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
       // A file inside a folder also picked: refused, nothing started. (Closing the run that opened, back to the map.)
       await page.keyboard.press('Escape');
@@ -2249,7 +2474,7 @@ test('harnesses the person adds in their own settings are listed by name and run
   const b = await startBridge(repo);
   try {
     const agents = ((await call(b, '/api/state')).body as unknown as StateResponse).agents;
-    expect(agents.goose).toEqual({ name: 'Goose', available: true });
+    expect(agents.goose).toEqual({ name: 'Goose', available: true, stays: false });
     expect(agents.claude!.name).toBe('Claude Code');
     expect(Object.keys(agents)).not.toContain('Not an id');
     await page.goto(linkFor(b));
@@ -2330,7 +2555,7 @@ for (const name of fs.readdirSync(AGENT_FIXTURES).filter(f => f.endsWith('.jsonl
         expect(run.turn?.status).toBe('blocked');
         expect(run.turn?.needs).not.toBe('');
         expect(lines).toContain('tool: Edit backend/app/main.py');
-        expect(lines).toContain('warn: Blocked by the scope lock: backend/app/main.py');
+        expect(lines).toContain('deny: Tried to change backend/app/main.py. Blocked.');
       }
       if (name === 'claude-canvas-permission-denied.jsonl')
         expect(lines.some(l => l.startsWith('deny: This Bash command contains multiple operations.'))).toBe(true);

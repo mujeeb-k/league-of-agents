@@ -8,7 +8,7 @@ import { S, st } from '../state/app';
 import { selectRun } from '../state/actions';
 import { renderAll, renderInspector, renderSide } from '../state/render';
 import { markEnded, opensOnFinish } from '../state/sessions';
-import { SAMPLE_RUNS } from './sample';
+import { DEMO_STAYS, SAMPLE_RUNS } from './sample';
 
 /** Each session's timers, by run: its steps, then its end. */
 const timers = new Map<number, number[]>();
@@ -20,6 +20,7 @@ export function startDemoSessions() {
   for (const def of SAMPLE_RUNS) {
     const run = def.working && S.RUNS.find(r => r.id === def.id);
     if (!run || !def.working) continue;
+    run.stays = DEMO_STAYS.includes(run.agent);
     const { after, steps } = def.working;
     if (still) {
       for (const text of steps.slice(0, Math.ceil(steps.length / 2))) step(run, text);

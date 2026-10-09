@@ -37,18 +37,61 @@ if (/\babuse\b/.test(prompt)) {
   out({ type: 'result', result: `save: ${r.status}`, session_id: 'sess-123', total_cost_usd: 0 });
   process.exit(0);
 }
+/** Runs the hooks the repo's .claude/settings.local.json holds for a tool, as Claude Code does: what one refused with. */
+const runHooks = (event, payload) => {
+  const hooks = fs.existsSync('.claude/settings.local.json')
+    ? JSON.parse(fs.readFileSync('.claude/settings.local.json', 'utf8')).hooks || {}
+    : {};
+  for (const entry of hooks[event] || [])
+    if (new RegExp(`^(${entry.matcher || '.*'})$`).test(payload.tool_name))
+      for (const h of entry.hooks) {
+        const r = spawnSync(h.command, { shell: true, input: JSON.stringify(payload), encoding: 'utf8' });
+        if (r.status === 2) return r.stderr;
+      }
+  return null;
+};
+// "want:<path>" in the prompt: write that file with the Write tool, which the scope lock or the sandbox may refuse; and
+// when resumed with "You may now change <paths>.", write those, as Claude Code carries on once allowed.
+const resumed = args.includes('--resume');
+const allowed = /You may now change (.+?)\. /.exec(prompt)?.[1].split(', ') ?? [];
+const wants = [...[...prompt.matchAll(/\bwant:(\S+)/g)].map(m => m[1]), ...allowed];
+if (wants.length) {
+  const results = [];
+  for (const [i, file] of wants.entries()) {
+    const id = `toolu_write_${i}`;
+    const input = {
+      file_path: `${process.cwd()}/${file}`,
+      content: `// written by ${resumed ? 'a resumed' : 'a'} session\n`,
+    };
+    out({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Write', input }] } });
+    const refused = runHooks('PreToolUse', {
+      tool_name: 'Write',
+      tool_input: input,
+      tool_use_id: id,
+      cwd: process.cwd(),
+    });
+    // Claude Code 2.1 puts the hook's own words after its own.
+    let error = refused && `PreToolUse:Write hook error: [node .loa/bridge.mjs hook pre]: ${refused}`;
+    if (!error)
+      try {
+        // As Claude Code's Write does: the file's folders made first.
+        fs.mkdirSync(file.split('/').slice(0, -1).join('/') || '.', { recursive: true });
+        fs.writeFileSync(file, input.content);
+      } catch (e) {
+        error = `${e.code}: operation not permitted, open '${input.file_path}'`;
+      }
+    out({
+      type: 'user',
+      message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: !!error, content: error || 'Done' }] },
+    });
+    results.push(`${file}: ${error ? 'refused' : 'written'}`);
+  }
+  const resume = resumed ? ` (resumed ${args[args.indexOf('--resume') + 1]})` : '';
+  out({ type: 'result', result: results.join('\n') + resume, session_id: 'sess-123', total_cost_usd: 0.0123 });
+  process.exit(0);
+}
 const shells = [...prompt.matchAll(/\bshell:(\S+)/g)].map(m => m[1]);
 if (shells.length) {
-  const hooks = JSON.parse(fs.readFileSync('.claude/settings.local.json', 'utf8')).hooks || {};
-  const runHooks = (event, payload) => {
-    for (const entry of hooks[event] || [])
-      if (new RegExp(`^(${entry.matcher || '.*'})$`).test('Bash'))
-        for (const h of entry.hooks) {
-          const r = spawnSync(h.command, { shell: true, input: JSON.stringify(payload), encoding: 'utf8' });
-          if (r.status === 2) return r.stderr;
-        }
-    return null;
-  };
   const results = [];
   for (const [i, file] of shells.entries()) {
     const command = `printf '// written by a shell command\\n' >> ${file}`;

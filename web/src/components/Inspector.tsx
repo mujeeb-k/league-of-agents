@@ -298,7 +298,9 @@ function RunView({ run }: { run: Run }) {
                     >
                       {k.label}
                     </b>
-                    <span className="min-w-0 leading-[18px] [overflow-wrap:anywhere]">{e.text}</span>
+                    <span className="min-w-0 leading-[18px] [overflow-wrap:anywhere]">
+                      {e.file ? t('Tried to change {file}. Blocked.', { file: e.file }) : e.text}
+                    </span>
                   </li>
                 );
               })}

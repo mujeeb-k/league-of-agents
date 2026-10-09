@@ -62,6 +62,9 @@ export function loadAgents() {
     )
       ACP[a.id] = { name: typeof a.name === 'string' && a.name ? a.name : a.id, command: a.command };
   for (const [id, a] of Object.entries(ACP)) AGENTS[id] = { name: a.name, available: !a.check && onPath(a.command[0]) };
+  // On a section, whether the system keeps each agent the bridge starts inside it (the app says so before a run).
+  for (const id of [...Object.keys(STREAMED), ...Object.keys(ACP)])
+    AGENTS[id].stays = lockOfRun({ agent: id, scope: ['/'] }) === 'sandbox';
 }
 /**
  * @typedef {'done' | 'failed' | 'cancelled'} Outcome

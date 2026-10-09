@@ -533,5 +533,17 @@ const catalogue: Catalogue = {
     "Some tenants set hundreds of retry attempts. Cap them at 12, whatever a tenant's settings say.",
   "Retries are capped at **12** attempts per tenant, even when a tenant's settings ask for more.":
     "Retries are capped at **12** attempts per tenant, even when a tenant's settings ask for more.",
+  'Stays inside your selection': 'Stays inside your selection',
+  "Can change files outside your selection. You'll see each one flagged.":
+    "Can change files outside your selection. You'll see each one flagged.",
+  'Wants to change {file}': 'Wants to change {file}',
+  'Run {id} is working on it.': 'Run {id} is working on it.',
+  Allow: 'Allow',
+  Refuse: 'Refuse',
+  '{agent} is waiting for you': '{agent} is waiting for you',
+  'Tried to change {file}. Blocked.': 'Tried to change {file}. Blocked.',
+  'Run {id} is working on {path}. Allow it once that run ends.':
+    'Run {id} is working on {path}. Allow it once that run ends.',
+  'That was already answered.': 'That was already answered.',
 };
 export default catalogue;

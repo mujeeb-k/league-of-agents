@@ -1,11 +1,13 @@
 // Claude Code, Cursor and Codex: each run is the agent's command line, with its stream of JSON events read as it works.
+import path from 'node:path';
 import { AGENTS } from './registry.mjs';
 import { claudeLoggedOut } from './claude.mjs';
 import { noteWrites } from './lines.mjs';
-import { relPaths, toolError, toolLabel } from './labels.mjs';
+import { refusedWrite, relPaths, repoRelative, toolError, toolLabel, toolText } from './labels.mjs';
 import { launch } from './process.mjs';
 import { shellAccess } from '../shell.mjs';
-import { push } from '../runs.mjs';
+import { blocked, push } from '../runs.mjs';
+import { lockOfRun } from '../sandbox.mjs';
 import { emit } from '../events.mjs';
 
 /**
@@ -33,6 +35,14 @@ export function streamConnector(bin, argsOf) {
     },
   };
 }
+/** Claude Code's tools that write a file they name. */
+const EDIT_TOOLS = /^(Edit|Write|MultiEdit|NotebookEdit)$/;
+/** Each run's edit tool calls so far, by id: the file each names, for its result. */
+const edits = new Map();
+const editsOf = run => {
+  if (!edits.has(run.id)) edits.set(run.id, new Map());
+  return edits.get(run.id);
+};
 /** One line of a Claude Code, Cursor or Codex stream (or a captured terminal turn's), read into the run. */
 export function onAgentLine(run, line) {
   let m;
@@ -58,10 +68,20 @@ export function onAgentLine(run, line) {
       if (c.type === 'tool_use') {
         push(run, { t: 'tool', text: toolLabel(c.name, c.input) });
         noteWrites(run, c.name, c.input);
+        const file = c.input?.file_path || c.input?.notebook_path;
+        if (EDIT_TOOLS.test(c.name) && typeof file === 'string')
+          editsOf(run).set(c.id, repoRelative(file).split(path.sep).join('/'));
       }
     }
   } else if (m.type === 'user' && Array.isArray(m.message?.content)) {
-    for (const c of m.message.content) if (c.type === 'tool_result' && c.is_error) push(run, toolError(c.content));
+    for (const c of m.message.content)
+      if (c.type === 'tool_result' && c.is_error) {
+        const text = toolText(c.content),
+          file = editsOf(run).get(c.tool_use_id);
+        // An edit refused outside the section: the person is asked (runs.mjs blocked).
+        if (file && refusedWrite(text, lockOfRun(run) === 'sandbox')) blocked(run, file);
+        else push(run, toolError(text));
+      }
   } else if (m.type === 'system' && m.subtype === 'post_turn_summary') {
     // Claude Code's own verdict on the turn: completed or blocked, and what it needs from you. A later
     // turn's verdict replaces an earlier one.
