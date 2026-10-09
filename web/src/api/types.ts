@@ -77,6 +77,7 @@ export interface RunDTO {
    * under `ref`, to restore (POST /api/runs/:id/put-back).
    */
   putBack?: { path: string; ref: string; restored: boolean }[];
+  committed?: { sha: string; at: number; files: string[] };
   checksRunning?: boolean;
   turn?: TurnSummary;
 }
@@ -213,4 +214,16 @@ export type SaveResponse = RunDTO | { unchanged: true };
 export interface Conn {
   base: string;
   token: string;
+}
+
+/** What committing a run would hold (GET /api/runs/:id/commit). */
+export interface CommitPreview {
+  /** The run's own files. */
+  files: string[];
+  /** Files it changed that the person had changed too before it started: left out unless ticked. */
+  yours: string[];
+  /** Files changed since the run ended: nothing commits until they are reviewed again. */
+  changed: string[];
+  /** The branch HEAD is on, or null when detached. */
+  branch: string | null;
 }

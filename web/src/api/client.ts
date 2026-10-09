@@ -4,6 +4,7 @@ import type {
   ErrorBody,
   EventsResponse,
   FileResponse,
+  CommitPreview,
   OkResponse,
   RecordedLine,
   RevertResponse,
@@ -79,6 +80,10 @@ export const bridge = {
   startRun: (c: Conn, body: StartRunBody) => request<RunDTO>(c, '/api/runs', { method: 'POST', body }),
   cancel: (c: Conn, id: number) => request<OkResponse>(c, `/api/runs/${id}/cancel`, { method: 'POST' }),
   keep: (c: Conn, id: number) => request<OkResponse>(c, `/api/runs/${id}/keep`, { method: 'POST' }),
+  commitPreview: (c: Conn, id: number) => request<CommitPreview>(c, `/api/runs/${id}/commit`),
+  /** Commits the run's files, and the person's own files they ticked, with their message. */
+  commit: (c: Conn, id: number, body: { message: string; include: string[] }) =>
+    request<{ sha: string; files: string[] }>(c, `/api/runs/${id}/commit`, { method: 'POST', body }),
   /** Writes back a file as the run's shell command left it, before the bridge put it back. */
   restorePutBack: (c: Conn, id: number, path: string) =>
     request<OkResponse>(c, `/api/runs/${id}/put-back`, { method: 'POST', body: { path } }),

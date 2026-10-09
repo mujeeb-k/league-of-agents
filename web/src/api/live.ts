@@ -13,7 +13,7 @@ import { S, st } from '../state/app';
 import { opensOnFinish } from '../state/sessions';
 import { loadDemo } from '../state/actions';
 import { refreshEditor } from '../state/editing';
-import { renderAll, renderCrumb, renderInspector, renderSide, setConnUI } from '../state/render';
+import { bump, renderAll, renderCrumb, renderInspector, renderSide, setConnUI } from '../state/render';
 import { toast } from '../ui/toast';
 import { BridgeError, bridge } from './client';
 import { explain } from './errors';
@@ -444,6 +444,43 @@ export async function liveAction(act: string, run: Run) {
   } finally {
     st.busy = null;
     renderInspector();
+  }
+}
+
+/** Opens the commit dialog for a run, with what the bridge says would go in; null closes it. */
+export async function openCommit(run: Run | null) {
+  if (!run) {
+    st.commit = null;
+    bump('dialog');
+    return;
+  }
+  try {
+    const preview = await bridge.commitPreview(conn(), run.id);
+    st.commit = { ...preview, run, message: run.title, include: new Set() };
+    bump('dialog');
+  } catch (e) {
+    toast(explain(e));
+  }
+}
+
+/** Commits what the commit dialog holds. */
+export async function commitDraft() {
+  const c = st.commit;
+  if (!c || st.busy) return;
+  st.busy = 'commit';
+  bump('dialog');
+  try {
+    const r = await bridge.commit(conn(), c.run.id, { message: c.message, include: [...c.include] });
+    c.run.committed = { sha: r.sha, at: Date.now(), files: r.files };
+    st.commit = null;
+    toast(t('Committed {sha} to {branch}', { sha: r.sha.slice(0, 7), branch: c.branch ?? '' }));
+    renderInspector();
+    queueRefresh();
+  } catch (e) {
+    toast(explain(e));
+  } finally {
+    st.busy = null;
+    bump('dialog');
   }
 }
 

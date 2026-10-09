@@ -1287,6 +1287,144 @@ test('in the sandbox, DeepSeek Harness runs in its full-access mode: held to the
   }
 });
 
+test.describe('commit a session', () => {
+  async function committing(fn: (repo: string, b: Bridge) => Promise<void>) {
+    const repo = makeRepo();
+    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP });
+    try {
+      await expect
+        .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).agents.hermes?.available)
+        .toBe(true);
+      await fn(repo, b);
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+    }
+  }
+  const session = (b: Bridge, prompt: string) =>
+    runToEnd(b, { agent: 'hermes', prompt, scope: ['shared/'], resumeFrom: null });
+  const commit = (b: Bridge, id: number, body: object) => call(b, `/api/runs/${id}/commit`, body);
+  const head = (repo: string) => git(repo, 'rev-parse', 'HEAD').trim();
+
+  test("commits only the session's files, with its message; what you staged stays exactly as it was", () =>
+    committing(async (repo, b) => {
+      // Staged by the person, and one file changed but not staged: neither is the session's.
+      fs.appendFileSync(path.join(repo, 'apps/console/main.ts'), '// staged by me\n');
+      git(repo, 'add', 'apps/console/main.ts');
+      fs.writeFileSync(path.join(repo, 'notes.md'), 'mine\n');
+      const staged = git(repo, 'diff', '--cached');
+      const index = git(repo, 'ls-files', '-s');
+      const was = head(repo);
+      const run = await session(b, 'edit:shared/log.ts');
+      const preview = await call(b, `/api/runs/${run.id}/commit`);
+      expect(preview.body).toMatchObject({ files: ['shared/log.ts'], yours: [], changed: [], branch: 'main' });
+      const r = await commit(b, run.id, { message: 'Log the session\n\nEdited by Hermes.' });
+      expect(r.status).toBe(200);
+      expect(git(repo, 'rev-parse', 'HEAD~1').trim()).toBe(was);
+      expect(git(repo, 'log', '-1', '--format=%B').trim()).toBe('Log the session\n\nEdited by Hermes.');
+      expect(git(repo, 'show', '--name-only', '--format=', 'HEAD').trim()).toBe('shared/log.ts');
+      expect(git(repo, 'symbolic-ref', 'HEAD').trim()).toBe('refs/heads/main');
+      // The staging area: the same, apart from the committed file, now clean.
+      expect(git(repo, 'diff', '--cached')).toBe(staged);
+      const entries = (t: string) => t.split('\n').filter(l => !l.endsWith('\tshared/log.ts'));
+      expect(entries(git(repo, 'ls-files', '-s'))).toEqual(entries(index));
+      expect(git(repo, 'status', '--porcelain')).toBe('M  apps/console/main.ts\n?? notes.md\n');
+      expect(
+        ((await call(b, '/api/state')).body as unknown as StateResponse).runs.find(x => x.id === run.id),
+      ).toMatchObject({
+        committed: { sha: head(repo) },
+      });
+    }));
+
+  test('a file you had changed before the session is listed and left out unless you tick it', () =>
+    committing(async (repo, b) => {
+      fs.appendFileSync(path.join(repo, 'shared/allowlist.ts'), '// mine, before the session\n');
+      const run = await session(b, 'edit:shared/allowlist.ts edit:shared/log.ts');
+      const preview = await call(b, `/api/runs/${run.id}/commit`);
+      expect(preview.body).toMatchObject({ files: ['shared/log.ts'], yours: ['shared/allowlist.ts'] });
+      expect((await commit(b, run.id, { message: 'Only the session' })).status).toBe(200);
+      expect(git(repo, 'show', '--name-only', '--format=', 'HEAD').trim()).toBe('shared/log.ts');
+      expect(git(repo, 'status', '--porcelain')).toBe(' M shared/allowlist.ts\n');
+      // Ticked: committed too, with the person's own lines in it.
+      const second = await session(b, 'edit:shared/allowlist.ts');
+      expect((await commit(b, second.id, { message: 'With mine', include: ['shared/allowlist.ts'] })).status).toBe(200);
+      expect(git(repo, 'show', 'HEAD:shared/allowlist.ts')).toContain('// mine, before the session');
+      expect(git(repo, 'status', '--porcelain')).toBe('');
+    }));
+
+  test('refused when a file changed since the session, on a detached HEAD, or twice', () =>
+    committing(async (repo, b) => {
+      const run = await session(b, 'edit:shared/log.ts');
+      fs.appendFileSync(path.join(repo, 'shared/log.ts'), '// later\n');
+      expect((await commit(b, run.id, { message: 'x' })).body).toMatchObject({
+        code: 'changed-since',
+        args: { files: 'shared/log.ts' },
+      });
+      // As the session left it again.
+      fs.writeFileSync(
+        path.join(repo, 'shared/log.ts'),
+        git(repo, 'show', `refs/loa/runs/${run.id}/after:shared/log.ts`),
+      );
+      git(repo, 'checkout', '-q', '--detach');
+      expect((await commit(b, run.id, { message: 'x' })).body).toMatchObject({ code: 'detached-head' });
+      git(repo, 'checkout', '-q', 'main');
+      expect((await commit(b, run.id, { message: 'x' })).status).toBe(200);
+      expect((await commit(b, run.id, { message: 'x' })).body).toMatchObject({ code: 'already-committed' });
+    }));
+
+  test('in the app: keep, then Commit opens the message and files; your earlier changes stay out unless ticked', ({
+    page,
+  }) =>
+    committing(async (repo, b) => {
+      fs.appendFileSync(path.join(repo, 'shared/allowlist.ts'), '// mine, before the session\n');
+      await page.goto(linkFor(b));
+      await expect(page.locator('#conn')).toHaveText('Live');
+      await page.locator('#agentBtn').click();
+      await page.locator('#agentMenu [data-agent="hermes"]').click();
+      await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+      await page.locator('#prompt').fill('Tidy the log. edit:shared/log.ts edit:shared/allowlist.ts');
+      await page.locator('#prompt').press('Enter');
+      // The person's edit before it is recorded first, as its own run: the session is run 2.
+      await expect(page.locator('#runbar b')).toHaveText('Run 2', { timeout: 15_000 });
+      await page.locator('[data-act="keep"]').click();
+      await page.locator('#commitBtn').click();
+      const dlg = page.locator('#commitDlg');
+      await expect(dlg.locator('h2')).toHaveText('Commit run 2 to main');
+      await expect(page.locator('#commitMessage')).toHaveValue(
+        'Tidy the log. edit:shared/log.ts edit:shared/allowlist.ts',
+      );
+      await expect(dlg.locator('#commitFiles li')).toHaveText([
+        'shared/log.ts',
+        'shared/allowlist.tsChanged before this session, not committed',
+      ]);
+      await expect(dlg.locator('[data-include="shared/allowlist.ts"]')).not.toBeChecked();
+      await page.locator('#commitMessage').fill('Tidy the log');
+      await page.locator('#commitConfirm').click();
+      await expect(page.locator(TOAST)).toHaveText(/^Committed [0-9a-f]{7} to main$/);
+      await expect(dlg).toHaveCount(0);
+      await expect(page.locator('#insp .outcome')).toContainText('Committed');
+      expect(git(repo, 'log', '-1', '--format=%B').trim()).toBe('Tidy the log');
+      expect(git(repo, 'show', '--name-only', '--format=', 'HEAD').trim()).toBe('shared/log.ts');
+      expect(git(repo, 'status', '--porcelain')).toBe(' M shared/allowlist.ts\n');
+    }));
+
+  test('signs the commit when git is set to sign', () =>
+    committing(async (repo, b) => {
+      const gpg = path.join(path.dirname(repo), 'fake-gpg.sh');
+      fs.writeFileSync(
+        gpg,
+        '#!/bin/sh\ncat >/dev/null\necho "[GNUPG:] SIG_CREATED D 1 8 00 0 0 0" >&2\nprintf -- "-----BEGIN PGP SIGNATURE-----\\nfake\\n-----END PGP SIGNATURE-----\\n"\n',
+        { mode: 0o755 },
+      );
+      git(repo, 'config', 'commit.gpgsign', 'true');
+      git(repo, 'config', 'gpg.program', gpg);
+      git(repo, 'config', 'user.signingkey', 'TEST');
+      const run = await session(b, 'edit:shared/log.ts');
+      expect((await commit(b, run.id, { message: 'Signed' })).status).toBe(200);
+      expect(git(repo, 'cat-file', '-p', 'HEAD')).toContain('-----BEGIN PGP SIGNATURE-----');
+    }));
+});
+
 test.describe('sessions at once', () => {
   /** A repo whose stand-in Hermes edits what each prompt names, and holds its turn until the test says go. */
   async function twoSessions(fn: (b: Bridge, repo: string) => Promise<void>, env: Record<string, string> = {}) {

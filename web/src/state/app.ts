@@ -1,7 +1,7 @@
 // The app's mutable state, as plain module-level objects. React components read it
 // while rendering; actions change it and then call the render functions in
 // state/render.ts (renderScene(), renderSide() and so on).
-import type { Conn, RecordedLine } from '../api/types';
+import type { CommitPreview, Conn, RecordedLine } from '../api/types';
 import type { Owner } from '../lib/attribution';
 import type { SavedLayout } from '../lib/layout';
 import type { AgentMap, Box, Conflict, DirNode, FileNode, Mode, Run, Tab, View } from '../lib/types';
@@ -10,6 +10,9 @@ export interface Graph {
   out: Map<string, string[]>;
   in: Map<string, string[]>;
 }
+
+/** A commit being written: what the bridge says it would hold, the message, and the person's own files ticked. */
+export type CommitDraft = CommitPreview & { run: Run; message: string; include: Set<string> };
 
 export const S = {
   LIVE: false,
@@ -82,6 +85,8 @@ export const st = {
   busy: null as string | null,
   /** A revert that would undo later edits, shown as a dialog (ConflictDialog.tsx). */
   conflict: null as Conflict | null,
+  /** The commit being written in the commit dialog (CommitDialog.tsx). */
+  commit: null as CommitDraft | null,
   /** Quick open (⌘P) or the command menu (⌘K), when one is open. */
   palette: null as 'files' | 'commands' | null,
   /** Expanded folders in the explorer, and the repo they belong to. */

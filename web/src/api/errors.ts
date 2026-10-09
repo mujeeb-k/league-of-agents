@@ -17,6 +17,12 @@ export const BY_CODE: Record<string, string> = {
   'lines-changed': 'The lines you selected in {name} changed. Select them again.',
   'run-active': 'Run {id} is still active',
   'sections-overlap': 'Run {id} is working on {path}. Pick a section outside it, or wait for it to finish.',
+  'changed-since': '{files} changed since the run. Review it again before committing.',
+  'detached-head': 'HEAD is detached. Check out a branch to commit to.',
+  'already-committed': 'Run {id} is already committed.',
+  'not-committable': 'Only a finished run can be committed.',
+  'no-message': 'Write a commit message first.',
+  'nothing-to-commit': 'Nothing to commit. Tick a file to include it.',
   'no-sandbox':
     "A session on a section runs in macOS's sandbox, which can't start here. Start the bridge from a regular terminal.",
   'wait-for-run': 'Wait for the run to finish',

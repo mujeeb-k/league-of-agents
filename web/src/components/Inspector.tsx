@@ -6,6 +6,7 @@ import {
   CircleCheck,
   CircleDashed,
   CircleSlash,
+  GitCommitHorizontal,
   Hand,
   Minus,
   TriangleAlert,
@@ -13,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { enableChecks, restorePutBack, turnOffCheck } from '../api/live';
+import { enableChecks, openCommit, restorePutBack, turnOffCheck } from '../api/live';
 import { flyFile } from '../lib/camera';
 import { shareOf, type Author, type Owner } from '../lib/attribution';
 import { runsRepoCode } from '../lib/checks';
@@ -439,9 +440,38 @@ function RunView({ run }: { run: Run }) {
 
               {t('Reverted. Its changes are gone from your working tree.')}
             </div>
+          ) : run.committed ? (
+            <div className="outcome mt-4 flex items-center gap-2">
+              <GitCommitHorizontal className="size-4 text-add" />
+              <span className="font-medium">{t('Committed')}</span>
+              <span className="font-mono text-xs text-muted-foreground">{run.committed.sha.slice(0, 7)}</span>
+            </div>
           ) : files.length ? (
             <>
-              {run.kept ? (
+              {run.kept && S.CONN ? (
+                // Kept, live: next is a commit of the run's files, or a revert after all.
+                <>
+                  <div className="outcome mt-4 flex items-center gap-2">
+                    <CircleCheck className="size-4 shrink-0 text-add" />
+                    <span className="font-medium">{t('Kept')}</span>
+                    <span className="text-muted-foreground">{t('Changes stay in your working tree.')}</span>
+                  </div>
+                  <div className="actions mt-3 flex gap-2">
+                    <ActButton run={run} act="revert" variant="outline" className="flex-1">
+                      {t('Revert run')}
+                    </ActButton>
+                    <Button
+                      id="commitBtn"
+                      className="flex-1"
+                      disabled={!!st.busy || isOffline()}
+                      title={t('Commit only this run’s files, with a message you write. Nothing is pushed.')}
+                      onClick={() => void openCommit(run)}
+                    >
+                      {t('Commit')}
+                    </Button>
+                  </div>
+                </>
+              ) : run.kept ? (
                 // A kept run shows that it was kept; revert stays available.
                 <div className="outcome mt-4 flex items-center gap-2">
                   <CircleCheck className="size-4 text-add" />

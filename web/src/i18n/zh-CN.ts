@@ -441,5 +441,23 @@ const catalogue: Catalogue = {
   Restore: 'Restore',
   'Restored {name}': 'Restored {name}',
   'Write {name} back as the shell command left it': 'Write {name} back as the shell command left it',
+  'Commit run {id} to {branch}': 'Commit run {id} to {branch}',
+  'Commit run {id}': 'Commit run {id}',
+  'Only these files go in. Nothing else you have staged or changed is touched, and nothing is pushed.':
+    'Only these files go in. Nothing else you have staged or changed is touched, and nothing is pushed.',
+  'Commit message': 'Commit message',
+  'Changed before this session, not committed': 'Changed before this session, not committed',
+  '{files} changed since the run. Review it again before committing.':
+    '{files} changed since the run. Review it again before committing.',
+  'HEAD is detached. Check out a branch to commit to.': 'HEAD is detached. Check out a branch to commit to.',
+  Commit: 'Commit',
+  Committed: 'Committed',
+  'Commit only this run’s files, with a message you write. Nothing is pushed.':
+    'Commit only this run’s files, with a message you write. Nothing is pushed.',
+  'Committed {sha} to {branch}': 'Committed {sha} to {branch}',
+  'Run {id} is already committed.': 'Run {id} is already committed.',
+  'Only a finished run can be committed.': 'Only a finished run can be committed.',
+  'Write a commit message first.': 'Write a commit message first.',
+  'Nothing to commit. Tick a file to include it.': 'Nothing to commit. Tick a file to include it.',
 };
 export default catalogue;

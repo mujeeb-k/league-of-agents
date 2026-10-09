@@ -18,7 +18,7 @@ It runs on your computer, works with the agents you already use, and is open sou
 - **Point an agent at exact lines.** Select a file, a folder, or a few lines, and describe the change. With the hooks on, Claude Code is blocked from editing outside your selection with its edit tools. The hooks are off until you say yes: the first `npx leagueofagents-cli@latest` in a terminal asks once and remembers, and without a terminal they stay off unless you pass `--hooks`. To check, look for `"hooks": true` in `.loa/bridge.json`. On macOS, a session on a section also runs inside the system's own sandbox: Claude Code, Hermes and DeepSeek Harness, and every program they start, can write only inside the section, to files the repo ignores (build output, installed packages) and outside the repo. Codex and Cursor edits outside your selection are flagged after the run, and so are Claude Code's when the hooks are off and there's no sandbox.
 - **Edit files yourself.** Double-click a file's code to open it in the editor. Saved edits are recorded and can be undone like any agent run.
 - **Update what depends on a change.** Rename a function, then ask the agent to update every file that uses it. The diff of your change goes into the agent's prompt. The map shows each file it touched.
-- **Review before you keep.** Switch between Before, After and Diff, step through changed files, then keep the run or undo it in one click.
+- **Review before you keep.** Switch between Before, After and Diff, step through changed files, then keep the run or undo it in one click. Once kept, commit just that run's files with a message you write; nothing is pushed.
 - **Run your checks automatically.** Tests and type checks run after each run that changes files, so you know if it still works.
 
 ## Quick start
@@ -88,7 +88,7 @@ If your repo has none set up, League of Agents looks for test and typecheck scri
 In your repo:
 
 - `.loa/`: run records, the bridge's port and token, a private snapshot index, a copy of the bridge the hooks run, the map's layout, and a log. It's kept out of git through `.git/info/exclude`, and the bridge won't start in a repo that commits it.
-- Snapshots: git commits under private `refs/loa/` refs, stored in `.git/objects`. They never touch your branch or staging area.
+- Snapshots: git commits under private `refs/loa/` refs, stored in `.git/objects`. They never touch your branch or staging area. The bridge never commits or stages on its own. A commit happens only when you click Commit, and only for that session's files.
 - `loa.config.json`, only if you choose to share your checks with your team.
 
 In your home folder:
@@ -153,7 +153,7 @@ Snapshots stay on your computer unless you send them: `git push`, `git push --al
 
 - macOS. Linux passes the full test suite in CI, but hasn't been tried with a real agent yet; there, it opens the local app. Windows isn't supported yet.
 - Remote machines, SSH and dev containers aren't supported. League of Agents must run on the same computer as your browser.
-- The map shows up to 1,500 code files, and the first 400 lines of each. Files over 400 KB aren't on the map. Diffs keep a file's first 4,000 lines.
+- The map shows up to 1,500 code files, and the first 400 lines of each on its card; a file opens in full, before, after and diff. Files over 16 MB aren't on the map.
 - Non-code files, such as images, are in snapshots and undo, but not on the map.
 - Files git ignores and new files that usually hold secrets are never recorded.
 - Runs on sections that don't overlap work at the same time; a run on the whole repository works alone.
@@ -194,7 +194,7 @@ Snapshots stay on your computer unless you send them: `git push`, `git push --al
 
 League of Agents has two parts:
 
-- **The bridge** (`bridge/loa.mjs`) runs on your computer, inside your repo. Node 20 or later, no dependencies. Before and after each run, it snapshots your files into a git commit using a private index, so your branch and staging area are never touched. Diffs come from comparing the two snapshots. Undo restores the "before" snapshot, and asks first if a file changed again since.
+- **The bridge** (`bridge/loa.mjs`) runs on your computer, inside your repo. Node 20 or later, no dependencies. Before and after each run, it snapshots your files into a git commit using a private index, so your branch and staging area are never touched. Diffs come from comparing the two snapshots. Undo restores the "before" snapshot, and asks first if a file changed again since. The bridge never commits or stages on its own. A commit happens only when you click Commit, and only for that session's files: it's built in a private index from your last commit plus those files as the session left them, your branch moves only if it is still where it was, and in your staging area only those files' entries change, so they show clean and everything else you staged stays as it was. A file you had changed before the session is listed and left out unless you tick it, and nothing commits if a file changed since the session. Git's commit hooks don't run, since they belong to `git commit`; if git is set to sign commits, the commit is signed.
 - **The app** (`web/`, built with Vite, React and TypeScript) is the map you use. It's served at leagueofagents.dev and by the bridge itself.
 
 More detail is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

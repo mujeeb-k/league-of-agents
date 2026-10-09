@@ -1,4 +1,5 @@
 import { useLayoutEffect } from 'react';
+import { CommitDialog } from './components/CommitDialog';
 import { ConflictDialog } from './components/ConflictDialog';
 import { ExportDialog } from './components/ExportDialog';
 import { ConnectDialog } from './components/ConnectDialog';
@@ -28,6 +29,7 @@ export function App() {
       <IconSprite />
       <ConnectDialog />
       <ConflictDialog />
+      <CommitDialog />
       <ExportDialog />
       <Palette />
       <Toasts />

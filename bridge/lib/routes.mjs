@@ -28,6 +28,7 @@ import { armIdle, ownWrite, writeConfig, watchOff } from './watch.mjs';
 import { seq, events, waiters, emit, emitRun } from './events.mjs';
 import { cancelSession, startSession } from './sessions.mjs';
 import { restorePutBack, shellEnds, shellStarts } from './shell.mjs';
+import { commitPreview, commitRun } from './commit.mjs';
 
 /**
  * @typedef {{ url: URL; params: string[]; body: () => Promise<any> }} Request  `params`: what the route's pattern
@@ -188,6 +189,26 @@ async function shell({ params, body }) {
     return [200, { undone: [] }];
   }
   return [200, { undone: await shellEnds(run, tool) }];
+}
+/**
+ * What committing a run would hold (lib/commit.mjs).
+ * @param {Request} request
+ * @returns {Promise<Reply>}
+ */
+async function commitInfo({ params }) {
+  const run = runOf(params);
+  return run ? [200, await commitPreview(run)] : noRun;
+}
+/**
+ * Commits a run's files, when the person clicks Commit.
+ * @param {Request} request
+ * @returns {Promise<Reply>}
+ */
+async function commit({ params, body }) {
+  const run = runOf(params);
+  if (!run) return noRun;
+  const { message, include } = await body();
+  return [200, await commitRun(run, { message, include })];
 }
 /**
  * Restores a file a shell command wrote outside its section, as the command left it, once the person asks.
@@ -436,6 +457,8 @@ export const ROUTES = [
   ['GET', /^\/api\/runs\/(\d+)\/before$/, runFileBefore],
   ['POST', /^\/api\/runs\/(\d+)\/shell$/, shell],
   ['POST', /^\/api\/runs\/(\d+)\/put-back$/, restore],
+  ['GET', /^\/api\/runs\/(\d+)\/commit$/, commitInfo],
+  ['POST', /^\/api\/runs\/(\d+)\/commit$/, commit],
   ['POST', '/api/attribution/export', exportNote],
   ['GET', '/api/authors', authors],
   ['GET', '/api/layout', layout],
