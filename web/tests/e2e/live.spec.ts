@@ -55,6 +55,10 @@ function gitRows(repo: string, file: string) {
     .filter(l => l.length > 1);
 }
 
+/** The section lock's sandbox is macOS's own (bridge/lib/sandbox.mjs): its tests run on a Mac. */
+const SANDBOX = process.platform === 'darwin';
+const onMac = SANDBOX ? test : test.skip;
+
 // Keep the sidebar open: these tests use it at every zoom.
 test.beforeEach(({ page }) =>
   page.addInitScript(() => localStorage.setItem('loa.panels', JSON.stringify({ side: 'pinned' }))),
@@ -1270,28 +1274,31 @@ test("without a sandbox, DeepSeek Harness runs in its read-only mode, so each ed
   }
 });
 
-test('in the sandbox, DeepSeek Harness runs in its full-access mode: held to the section by the system, its edits its own', async () => {
-  const repo = makeRepo(),
-    FILE = 'shared/allowlist.ts';
-  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_DSH_BIN: FAKE_ACP, FAKE_ACP_STYLE: 'dsh' });
-  try {
-    const run = await runToEnd(b, {
-      agent: 'dsh',
-      prompt: 'Record it outside too',
-      scope: ['shared/'],
-      resumeFrom: null,
-    });
-    expect(fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8')).toMatch(/^new \S+ mode=danger-full-access$/m);
-    expect(run.changes.map(c => c.path)).toEqual([FILE]);
-    const at = SEED[FILE]!.split('\n').length - 1;
-    expect(run.agentLines).toEqual({ [FILE]: [[at, at]] });
-    expect(fs.existsSync(path.join(repo, 'outside.txt'))).toBe(false);
-    expect(run.stream.map(e => e.text).join('\n')).toContain('outside.txt: EPERM');
-  } finally {
-    b.stop();
-    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
-  }
-});
+onMac(
+  'in the sandbox, DeepSeek Harness runs in its full-access mode: held to the section by the system, its edits its own',
+  async () => {
+    const repo = makeRepo(),
+      FILE = 'shared/allowlist.ts';
+    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_DSH_BIN: FAKE_ACP, FAKE_ACP_STYLE: 'dsh' });
+    try {
+      const run = await runToEnd(b, {
+        agent: 'dsh',
+        prompt: 'Record it outside too',
+        scope: ['shared/'],
+        resumeFrom: null,
+      });
+      expect(fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8')).toMatch(/^new \S+ mode=danger-full-access$/m);
+      expect(run.changes.map(c => c.path)).toEqual([FILE]);
+      const at = SEED[FILE]!.split('\n').length - 1;
+      expect(run.agentLines).toEqual({ [FILE]: [[at, at]] });
+      expect(fs.existsSync(path.join(repo, 'outside.txt'))).toBe(false);
+      expect(run.stream.map(e => e.text).join('\n')).toContain('outside.txt: EPERM');
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+    }
+  },
+);
 
 test.describe('commit a session', () => {
   async function committing(fn: (repo: string, b: Bridge) => Promise<void>) {
@@ -1434,7 +1441,7 @@ test.describe('commit a session', () => {
       fs.writeFileSync(path.join(repo, 'STOP'), '');
       const refused = await commit(b, run.id, { message: 'Log it' });
       expect(refused.status).toBe(409);
-      expect(refused.body).toMatchObject({ code: 'hook-failed' });
+      expect(refused.body).toMatchObject({ code: 'git-refused' });
       expect((refused.body as { args: { output: string } }).args.output).toContain('secret found in shared/log.ts');
       expect(head(repo)).toBe(was);
       expect(git(repo, 'diff', '--cached')).toBe(staged);
@@ -1608,23 +1615,27 @@ test.describe('sessions at once', () => {
       { LOA_SANDBOX: 'off' },
     ));
 
-  test("in the sandbox, Claude Code's shell commands write in its section, credited line for line, and nowhere else", () =>
-    twoSessions(async (b, repo) => {
-      const prompt = 'Log it. shell:shared/log.ts shell:notes.md shell:apps/console/main.ts';
-      const c = (await call(b, '/api/runs', { agent: 'claude', prompt, scope: ['shared/'] })).body as unknown as RunDTO;
-      await until(b, c.id, 'done');
-      const run = await runOf(b, c.id);
-      expect(run.changes.map(ch => ch.path)).toEqual(['shared/log.ts']);
-      expect(run.agentLines).toEqual({ 'shared/log.ts': [[1, 1]] });
-      // Refused by the system: never written, so nothing to put back.
-      expect(run.summary).toContain('notes.md: EPERM');
-      expect(run.summary).toContain('apps/console/main.ts: EPERM');
-      expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
-      expect(fs.readFileSync(path.join(repo, 'apps/console/main.ts'), 'utf8')).toBe(SEED['apps/console/main.ts']);
-      expect(run.putBack).toBeUndefined();
-    }));
+  onMac(
+    "in the sandbox, Claude Code's shell commands write in its section, credited line for line, and nowhere else",
+    () =>
+      twoSessions(async (b, repo) => {
+        const prompt = 'Log it. shell:shared/log.ts shell:notes.md shell:apps/console/main.ts';
+        const c = (await call(b, '/api/runs', { agent: 'claude', prompt, scope: ['shared/'] }))
+          .body as unknown as RunDTO;
+        await until(b, c.id, 'done');
+        const run = await runOf(b, c.id);
+        expect(run.changes.map(ch => ch.path)).toEqual(['shared/log.ts']);
+        expect(run.agentLines).toEqual({ 'shared/log.ts': [[1, 1]] });
+        // Refused by the system: never written, so nothing to put back.
+        expect(run.summary).toContain('notes.md: EPERM');
+        expect(run.summary).toContain('apps/console/main.ts: EPERM');
+        expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
+        expect(fs.readFileSync(path.join(repo, 'apps/console/main.ts'), 'utf8')).toBe(SEED['apps/console/main.ts']);
+        expect(run.putBack).toBeUndefined();
+      }),
+  );
 
-  test('the section lock holds every program a session starts: its section and ignored output only', () =>
+  onMac('the section lock holds every program a session starts: its section and ignored output only', () =>
     twoSessions(async (b, repo) => {
       fs.writeFileSync(path.join(repo, '.gitignore'), 'dist/\n*.log\n');
       git(repo, 'add', '.gitignore');
@@ -1648,79 +1659,88 @@ test.describe('sessions at once', () => {
       expect(fs.readFileSync(path.join(repo, 'dist/out.js'), 'utf8')).toBe('b');
       expect(fs.readFileSync(path.join(repo, 'debug.log'), 'utf8')).toBe('l');
       expect((await runOf(b, h.id)).summary).toContain('Operation not permitted');
-    }));
+    }),
+  );
 
-  test('npm install and a test suite run in a section holding the package; a lockfile outside the section is refused', () =>
-    twoSessions(async (b, repo) => {
-      const put = (p: string, text: string) => {
-        fs.mkdirSync(path.dirname(path.join(repo, p)), { recursive: true });
-        fs.writeFileSync(path.join(repo, p), text);
-      };
-      put('.gitignore', 'node_modules/\n');
-      put('vendor/dep/package.json', JSON.stringify({ name: 'dep', version: '1.0.0', main: 'index.js' }));
-      put('vendor/dep/index.js', 'module.exports = () => 42;\n');
-      put('vendor/extra/package.json', JSON.stringify({ name: 'extra', version: '1.0.0' }));
-      put(
-        'app/package.json',
-        JSON.stringify({
-          name: 'app',
-          version: '1.0.0',
-          scripts: { test: 'node --test' },
-          dependencies: { dep: 'file:../vendor/dep' },
-        }),
-      );
-      put(
-        'app/dep.test.js',
-        "const test = require('node:test');\nconst assert = require('node:assert');\ntest('dep', () => assert.equal(require('dep')(), 42));\n",
-      );
-      execFileSync('npm', ['install', '--no-audit', '--no-fund'], { cwd: path.join(repo, 'app'), stdio: 'ignore' });
-      fs.rmSync(path.join(repo, 'app/node_modules'), { recursive: true });
-      git(repo, 'add', '-A');
-      git(repo, '-c', 'user.name=t', '-c', 'user.email=t@e.t', 'commit', '-qm', 'app');
-      const lock = fs.readFileSync(path.join(repo, 'app/package-lock.json'), 'utf8');
-      const npm = 'cd app && npm install --no-audit --no-fund && npm test';
-      const inside = (await start(b, ['app/'], `exec: ${npm}`)).body as unknown as RunDTO;
-      await until(b, inside.id, 'done');
-      expect((await runOf(b, inside.id)).summary).toMatch(/^exit 0:/);
-      expect(fs.existsSync(path.join(repo, 'app/node_modules/dep'))).toBe(true);
-      // Adding a package rewrites app/package.json and its lockfile, outside a session on app's tests alone.
-      const narrow = (await start(b, ['app/test/'], 'exec: cd app && npm install --no-audit --no-fund ../vendor/extra'))
-        .body as unknown as RunDTO;
-      await until(b, narrow.id, 'done');
-      expect((await runOf(b, narrow.id)).summary).toMatch(/^exit [1-9]/);
-      expect(fs.readFileSync(path.join(repo, 'app/package-lock.json'), 'utf8')).toBe(lock);
-      expect(JSON.parse(fs.readFileSync(path.join(repo, 'app/package.json'), 'utf8')).dependencies).toEqual({
-        dep: 'file:../vendor/dep',
-      });
-    }));
+  onMac(
+    'npm install and a test suite run in a section holding the package; a lockfile outside the section is refused',
+    () =>
+      twoSessions(async (b, repo) => {
+        const put = (p: string, text: string) => {
+          fs.mkdirSync(path.dirname(path.join(repo, p)), { recursive: true });
+          fs.writeFileSync(path.join(repo, p), text);
+        };
+        put('.gitignore', 'node_modules/\n');
+        put('vendor/dep/package.json', JSON.stringify({ name: 'dep', version: '1.0.0', main: 'index.js' }));
+        put('vendor/dep/index.js', 'module.exports = () => 42;\n');
+        put('vendor/extra/package.json', JSON.stringify({ name: 'extra', version: '1.0.0' }));
+        put(
+          'app/package.json',
+          JSON.stringify({
+            name: 'app',
+            version: '1.0.0',
+            scripts: { test: 'node --test' },
+            dependencies: { dep: 'file:../vendor/dep' },
+          }),
+        );
+        put(
+          'app/dep.test.js',
+          "const test = require('node:test');\nconst assert = require('node:assert');\ntest('dep', () => assert.equal(require('dep')(), 42));\n",
+        );
+        execFileSync('npm', ['install', '--no-audit', '--no-fund'], { cwd: path.join(repo, 'app'), stdio: 'ignore' });
+        fs.rmSync(path.join(repo, 'app/node_modules'), { recursive: true });
+        git(repo, 'add', '-A');
+        git(repo, '-c', 'user.name=t', '-c', 'user.email=t@e.t', 'commit', '-qm', 'app');
+        const lock = fs.readFileSync(path.join(repo, 'app/package-lock.json'), 'utf8');
+        const npm = 'cd app && npm install --no-audit --no-fund && npm test';
+        const inside = (await start(b, ['app/'], `exec: ${npm}`)).body as unknown as RunDTO;
+        await until(b, inside.id, 'done');
+        expect((await runOf(b, inside.id)).summary).toMatch(/^exit 0:/);
+        expect(fs.existsSync(path.join(repo, 'app/node_modules/dep'))).toBe(true);
+        // Adding a package rewrites app/package.json and its lockfile, outside a session on app's tests alone.
+        const narrow = (
+          await start(b, ['app/test/'], 'exec: cd app && npm install --no-audit --no-fund ../vendor/extra')
+        ).body as unknown as RunDTO;
+        await until(b, narrow.id, 'done');
+        expect((await runOf(b, narrow.id)).summary).toMatch(/^exit [1-9]/);
+        expect(fs.readFileSync(path.join(repo, 'app/package-lock.json'), 'utf8')).toBe(lock);
+        expect(JSON.parse(fs.readFileSync(path.join(repo, 'app/package.json'), 'utf8')).dependencies).toEqual({
+          dep: 'file:../vendor/dep',
+        });
+      }),
+  );
 
-  test("a session can't reach past the sandbox: the bridge's token, its shell token elsewhere, or what runs later", () =>
-    twoSessions(async (b, repo) => {
-      const home = homeOf(repo);
-      fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
-      const cmd = [
-        'cat .loa/bridge.json',
-        `printf x >> "$HOME/.gitconfig"`,
-        `mkdir -p "$HOME/.config/league-of-agents" && printf x > "$HOME/.config/league-of-agents/approved.json"`,
-        `printf x > "$HOME/.claude/settings.json"`,
-        'printf x >> .git/config',
-      ].join('; ');
-      const h = (await start(b, ['shared/'], `exec: ${cmd}`)).body as unknown as RunDTO;
-      await until(b, h.id, 'done');
-      expect((await runOf(b, h.id)).summary).toMatch(/^exit 1: .*Operation not permitted/);
-      expect(fs.existsSync(path.join(home, '.gitconfig'))).toBe(false);
-      expect(fs.existsSync(path.join(home, '.config/league-of-agents/approved.json'))).toBe(false);
-      expect(fs.existsSync(path.join(home, '.claude/settings.json'))).toBe(false);
-      expect(git(repo, 'config', '--list', '--local')).not.toContain('x');
-      // A run's shell token opens its own shell route and nothing else.
-      const c = (await call(b, '/api/runs', { agent: 'claude', prompt: 'abuse', scope: ['shared/'] }))
-        .body as unknown as RunDTO;
-      await until(b, c.id, 'done');
-      expect((await runOf(b, c.id)).summary).toBe('save: 401');
-      expect(fs.existsSync(path.join(repo, 'README.md'))).toBe(false);
-    }));
+  onMac(
+    "a session can't reach past the sandbox: the bridge's token, its shell token elsewhere, or what runs later",
+    () =>
+      twoSessions(async (b, repo) => {
+        const home = homeOf(repo);
+        fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
+        const cmd = [
+          'cat .loa/bridge.json',
+          `printf x >> "$HOME/.gitconfig"`,
+          `mkdir -p "$HOME/.config/league-of-agents" && printf x > "$HOME/.config/league-of-agents/approved.json"`,
+          `printf x > "$HOME/.claude/settings.json"`,
+          'printf x >> .git/config',
+        ].join('; ');
+        const config = fs.readFileSync(path.join(repo, '.git/config'), 'utf8');
+        const h = (await start(b, ['shared/'], `exec: ${cmd}`)).body as unknown as RunDTO;
+        await until(b, h.id, 'done');
+        expect((await runOf(b, h.id)).summary).toMatch(/^exit 1: .*Operation not permitted/);
+        expect(fs.existsSync(path.join(home, '.gitconfig'))).toBe(false);
+        expect(fs.existsSync(path.join(home, '.config/league-of-agents/approved.json'))).toBe(false);
+        expect(fs.existsSync(path.join(home, '.claude/settings.json'))).toBe(false);
+        expect(fs.readFileSync(path.join(repo, '.git/config'), 'utf8')).toBe(config);
+        // A run's shell token opens its own shell route and nothing else.
+        const c = (await call(b, '/api/runs', { agent: 'claude', prompt: 'abuse', scope: ['shared/'] }))
+          .body as unknown as RunDTO;
+        await until(b, c.id, 'done');
+        expect((await runOf(b, c.id)).summary).toBe('save: 401');
+        expect(fs.existsSync(path.join(repo, 'README.md'))).toBe(false);
+      }),
+  );
 
-  test("in a worktree, a session can't write the repo's git folder outside it", async () => {
+  onMac("in a worktree, a session can't write the repo's git folder outside it", async () => {
     const main = makeRepo(),
       wt = path.join(path.dirname(main), 'wt');
     git(main, 'worktree', 'add', '-q', wt);
@@ -1739,7 +1759,7 @@ test.describe('sessions at once', () => {
     }
   });
 
-  test("a session on a section never runs unlocked: if the sandbox can't start, it is refused", () =>
+  onMac("a session on a section never runs unlocked: if the sandbox can't start, it is refused", () =>
     twoSessions(
       async b => {
         const r = await call(b, '/api/runs', { agent: 'claude', prompt: 'Log it', scope: ['shared/'] });
@@ -1750,7 +1770,8 @@ test.describe('sessions at once', () => {
         expect((await call(b, '/api/runs', { agent: 'claude', prompt: 'Log it', scope: [] })).status).toBe(200);
       },
       { LOA_SANDBOX_EXEC: '/usr/bin/false' },
-    ));
+    ),
+  );
 
   test('sections of sessions at work never overlap, and a whole-repository run works alone', () =>
     twoSessions(async (b, repo) => {
@@ -1959,7 +1980,8 @@ test.describe('sessions at once, in the app', () => {
       await expect(page.locator('#runbar b')).toHaveText('Run 2', { timeout: 15_000 });
       // Nothing selected: the follow-up works on the session's own section.
       await page.keyboard.press('Escape');
-      await page.locator('#sideList [data-run="2"]').click();
+      await expect(page.locator('#scopeRow .chip.all, #scopeRow .chip.from')).toHaveCount(1);
+      await expect(page.locator('#runbar b')).toHaveText('Run 2');
       const chip = page.locator('#followChip');
       await expect(chip).toHaveText('Follow-up to run 2');
       await expect(page.locator('#scopeRow .chip.from > span')).toHaveText(['apps/']);
@@ -2796,9 +2818,11 @@ test('a run limited to lines flags changes outside them; a file outside its file
     expect(start.status).toBe(200);
     await expect.poll(async () => (await runsOf(b))[0]?.status, { timeout: 15_000 }).toBe('done');
     const [run] = await runsOf(b);
-    expect(run!.outOfScope).toEqual(['shared/allowlist.ts outside lines 3–5']);
-    expect(run!.stream.map(e => e.text)).toContain('Changed outside scope: shared/allowlist.ts outside lines 3–5');
-    expect(fs.existsSync(path.join(repo, 'shared/policy-cache.ts'))).toBe(false);
+    // In the sandbox the file outside its file is never written; without one it is, and flagged.
+    const outside = ['shared/allowlist.ts outside lines 3–5', ...(SANDBOX ? [] : ['shared/policy-cache.ts'])];
+    expect(run!.outOfScope).toEqual(outside);
+    expect(run!.stream.map(e => e.text)).toContain(`Changed outside scope: ${outside.join(', ')}`);
+    expect(fs.existsSync(path.join(repo, 'shared/policy-cache.ts'))).toBe(!SANDBOX);
   }));
 
 test('lines selected in the editor scope a live run; changes outside them are flagged; revert is exact', async ({
@@ -2825,8 +2849,11 @@ test('lines selected in the editor scope a live run; changes outside them are fl
     const [run] = (await runsOf(b)).filter(r => r.agent === 'claude');
     expect(run!.scope).toEqual(['shared/allowlist.ts:3-5']);
     // The stand-in agent changed line 9, flagged on the run and in its review; the file it tried to create, the
-    // sandbox refused.
-    expect(run!.outOfScope).toEqual(['shared/allowlist.ts outside lines 3–5']);
+    // sandbox refused, or without one, it is flagged too.
+    expect(run!.outOfScope).toEqual([
+      'shared/allowlist.ts outside lines 3–5',
+      ...(SANDBOX ? [] : ['shared/policy-cache.ts']),
+    ]);
     await expect(page.locator('#editor .cm-added').first()).toBeVisible();
     await expect(page.locator('#editor .cm-removed')).toContainText(["    throw new Error('ALLOWLIST_VIOLATION');"]);
     await page.locator('#rejectChange').click();

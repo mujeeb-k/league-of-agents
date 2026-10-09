@@ -72,8 +72,11 @@ export function makeRepo(): string {
     fs.writeFileSync(path.join(dir, p), text);
   }
   git(dir, 'init', '-q', '-b', 'main');
+  // Who commits, as in any real repo: commits and notes need it, and a CI machine has none.
+  git(dir, 'config', 'user.name', 'test');
+  git(dir, 'config', 'user.email', 'test@example.test');
   git(dir, 'add', '-A');
-  git(dir, '-c', 'user.name=test', '-c', 'user.email=test@example.test', 'commit', '-qm', 'seed');
+  git(dir, 'commit', '-qm', 'seed');
   approveChecks(dir);
   return dir;
 }

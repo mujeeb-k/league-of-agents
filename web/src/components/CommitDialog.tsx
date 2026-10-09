@@ -91,7 +91,7 @@ export function CommitDialog() {
               <div className="mb-4">
                 <p className="mb-2 flex gap-2 text-ink2 text-pretty">
                   <TriangleAlert className="mt-0.5 size-4 shrink-0 text-mod" />
-                  {t('Your git hooks stopped the commit:')}
+                  {t('Git refused the commit:')}
                 </p>
                 <pre
                   id="commitHookOutput"

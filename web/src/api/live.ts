@@ -510,8 +510,8 @@ export async function commitDraft() {
     renderInspector();
     queueRefresh();
   } catch (e) {
-    // A git hook refused: its own words stay in the dialog, to fix and commit again.
-    const output = e instanceof BridgeError && e.data.code === 'hook-failed' ? e.data.args?.output : undefined;
+    // A git hook, or git itself, refused: its own words stay in the dialog, to fix and commit again.
+    const output = e instanceof BridgeError && e.data.code === 'git-refused' ? e.data.args?.output : undefined;
     if (typeof output === 'string') c.hookOutput = output;
     else toast(explain(e));
   } finally {

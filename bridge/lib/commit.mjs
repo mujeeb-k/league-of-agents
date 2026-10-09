@@ -77,7 +77,8 @@ export function commitRun(run, { message = '', include = [] } = {}) {
       await gitAsync(['commit', '-q', '-F', '-'], { env, input: message });
     } catch (e) {
       const output = `${e.stdout ?? ''}${e.stderr ?? ''}`.trim();
-      throw refused('hook-failed', `Git refused the commit: ${output}`, { output });
+      // A hook that refused, or git itself (no name and email set, say): its own words.
+      throw refused('git-refused', `Git refused the commit: ${output}`, { output });
     } finally {
       fs.rmSync(index, { force: true });
     }
