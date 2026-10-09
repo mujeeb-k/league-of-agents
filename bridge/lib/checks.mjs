@@ -2,6 +2,7 @@
 import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
+import { stripVTControlCharacters } from 'node:util';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -144,7 +145,7 @@ export async function runChecks(run) {
         resolve({ code, out });
       });
     });
-    const clean = res.out.replace(/\x1b\[[0-9;]*m/g, '');
+    const clean = stripVTControlCharacters(res.out);
     const error = res.code ? setupError(clean, res.code) : null;
     if (error) {
       run.checks.push({

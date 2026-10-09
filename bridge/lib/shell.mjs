@@ -7,10 +7,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { serial } from './util.mjs';
+import { refused, sameSecret, serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
-import { ROOT, git, gitAsync } from './repo.mjs';
-import { blobAt, computeChanges, pin, snapshotNow } from './snapshots.mjs';
+import { ROOT, gitAsync } from './repo.mjs';
+import { blobAt, computeChanges, pin, restoreFrom, snapshotNow } from './snapshots.mjs';
 import { noteLines } from './agents/lines.mjs';
 import { push, saveRun, working } from './runs.mjs';
 import { lockOfRun } from './sandbox.mjs';
@@ -30,7 +30,7 @@ export function shellAccess(run) {
 export function shellTokenFits(pathname, token) {
   const id = Number(/^\/api\/runs\/(\d+)\/shell$/.exec(pathname)?.[1]);
   const t = tokens.get(id);
-  return !!t && t.length === token.length && crypto.timingSafeEqual(Buffer.from(t), Buffer.from(token));
+  return !!t && sameSecret(token, t);
 }
 
 /** The snapshot before each shell command under way, by run and tool call. */
@@ -62,14 +62,8 @@ export function shellEnds(run, tool) {
           c.hunks.map(h => h.add.join('\n')),
         );
       else if (!watched(run) && !inScope(others, c.path)) {
-        const abs = path.join(ROOT, c.path),
-          was = await blobAt(from, c.path);
-        if (was === null) fs.rmSync(abs, { force: true });
-        else {
-          fs.mkdirSync(path.dirname(abs), { recursive: true });
-          // Byte for byte, as the snapshot holds it.
-          fs.writeFileSync(abs, git(['cat-file', 'blob', was], { encoding: 'buffer' }));
-        }
+        if ((await blobAt(from, c.path)) === null) fs.rmSync(path.join(ROOT, c.path), { force: true });
+        else await restoreFrom(from, [c.path]);
         undone.push(c.path);
       }
     }
@@ -103,17 +97,9 @@ export function restorePutBack(run, file) {
     const abs = path.join(ROOT, file);
     const now = fs.existsSync(abs) ? (await gitAsync(['hash-object', '--', file])).trim() : null;
     if (now !== kept.put)
-      throw Object.assign(new Error(`${file} changed since it was put back.`), {
-        code: 409,
-        reason: 'changed-since-put-back',
-        args: { name: file },
-      });
-    const was = await blobAt(kept.ref, file);
-    if (was === null) fs.rmSync(abs, { force: true });
-    else {
-      fs.mkdirSync(path.dirname(abs), { recursive: true });
-      fs.writeFileSync(abs, git(['cat-file', 'blob', was], { encoding: 'buffer' }));
-    }
+      throw refused('changed-since-put-back', `${file} changed since it was put back.`, { name: file });
+    if ((await blobAt(kept.ref, file)) === null) fs.rmSync(abs, { force: true });
+    else await restoreFrom(kept.ref, [file]);
     kept.restored = true;
     saveRun(run);
     return true;

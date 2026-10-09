@@ -59,8 +59,8 @@ describe('explain', () => {
     ]
       .map(f => fs.readFileSync(f, 'utf8'))
       .join('\n');
-    // As `reason: 'code'`, or through lib/commit.mjs's `refused('code', ...)`.
-    const sent = [...bridge.matchAll(/\b(?:(?:code|reason): |refused\()'([a-z-]+)'/g)].map(m => m[1]);
+    // As `reason: 'code'`, or through lib/util.mjs's `refused('code', ...)`.
+    const sent = [...bridge.matchAll(/\b(?:(?:code|reason): |refused\(\s*)'([a-z-]+)'/g)].map(m => m[1]);
     expect(new Set(sent)).toEqual(new Set(Object.keys(BY_CODE)));
   });
 });

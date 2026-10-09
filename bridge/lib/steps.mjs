@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT, RUNS_DIR, gitAsync } from './repo.mjs';
 import { MAX_BYTES } from './files.mjs';
-import { SECRET_FILES } from './snapshots.mjs';
+import { secretSpecs } from './snapshots.mjs';
 import { emit } from './events.mjs';
 
 /**
@@ -111,10 +111,9 @@ export function stepDone(run, i) {
 
 /** Whether a file's text may be kept: not ignored, and not an untracked file that usually holds secrets. */
 async function keepable(file) {
-  const dir = path.posix.dirname(file) === '.' ? '' : `${path.posix.dirname(file)}/`;
   const [ignored, secret] = await Promise.all([
     gitAsync(['ls-files', '--others', '--ignored', '--exclude-standard', '--', file]),
-    gitAsync(['ls-files', '--others', '--exclude-standard', '--', ...SECRET_FILES.map(g => `:(glob)${dir}${g}`)]),
+    gitAsync(['ls-files', '--others', '--exclude-standard', '--', ...secretSpecs([file])]),
   ]);
   return !ignored.trim() && !secret.split('\n').includes(file);
 }

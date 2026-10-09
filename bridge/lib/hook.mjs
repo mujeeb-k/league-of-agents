@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { readJson, splitLines } from './util.mjs';
+import { readJson, realish, splitLines } from './util.mjs';
 import { inScope, rangeKept } from './scope.mjs';
 
 /** Runs started by an agent's own hooks, by agent: Claude Code and Codex in a terminal, Cursor in its editor. */
@@ -34,15 +34,8 @@ export async function runHook(kind, agent = 'claude') {
       root = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8' }).trim();
     } catch {}
     // Real paths on both sides: the repo may sit behind a symlink (macOS's /tmp is /private/tmp).
-    const real = p => {
-      try {
-        return fs.realpathSync(p);
-      } catch {
-        return path.join(real(path.dirname(p)), path.basename(p));
-      }
-    };
     const rel = path
-      .relative(real(root), real(path.resolve(cwd, f)))
+      .relative(realish(root), realish(path.resolve(cwd, f)))
       .split(path.sep)
       .join('/');
     const block = why => {

@@ -10,6 +10,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { ROOT, git, gitAsync } from './repo.mjs';
 import { scopeEntry } from './scope.mjs';
+import { realish, refused } from './util.mjs';
 
 const SANDBOX_EXEC = process.env.LOA_SANDBOX_EXEC || '/usr/bin/sandbox-exec';
 
@@ -56,24 +57,7 @@ export function lockOfRun(run) {
 
 /** An error the app words: a session on a section that the sandbox can't lock. */
 export const NO_SANDBOX = () =>
-  Object.assign(new Error("A session on a section needs macOS's sandbox, and it can't start here."), {
-    code: 409,
-    reason: 'no-sandbox',
-    args: {},
-  });
-
-/**
- * A path as the sandbox sees it, through symlinks (macOS's /var is /private/var), also for a file not created yet: its
- * nearest folder that exists, resolved, and the rest.
- */
-function realish(p) {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    const up = path.dirname(p);
-    return up === p ? p : path.join(realish(up), path.basename(p));
-  }
-}
+  refused('no-sandbox', "A session on a section needs macOS's sandbox, and it can't start here.");
 
 const escape = s => s.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&');
 

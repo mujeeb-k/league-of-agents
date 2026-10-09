@@ -1,6 +1,7 @@
 // Small helpers shared by the bridge and its hooks.
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 export function readJson(p, d) {
   try {
@@ -21,6 +22,26 @@ export function textLines(text) {
   if (lines.length && lines[lines.length - 1] === '') lines.pop();
   return lines;
 }
+/**
+ * A path through its symlinks (macOS's /var is /private/var, /tmp is /private/tmp), also for a file not made yet: its
+ * nearest folder that exists, resolved, and the rest.
+ */
+export function realish(p) {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    const up = path.dirname(p);
+    return up === p ? p : path.join(realish(up), path.basename(p));
+  }
+}
+/** Whether a token someone sent is the secret, in time that doesn't tell how much of it matched. */
+export function sameSecret(sent, secret) {
+  const a = Buffer.from(sent),
+    b = Buffer.from(secret);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+/** A request the bridge turns down, as an error the app words by its reason (code 409). */
+export const refused = (reason, message, args = {}) => Object.assign(new Error(message), { code: 409, reason, args });
 export const logError = e => console.error(e.message);
 /**
  * Runs baseline and snapshot work one at a time, in order: they share the snapshot index and the baseline.

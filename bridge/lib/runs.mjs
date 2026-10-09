@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readJson, splitLines, serial } from './util.mjs';
 import { inScope, rangeKept, scopeEntry } from './scope.mjs';
-import { ROOT, RUNS_DIR, git } from './repo.mjs';
+import { ROOT, RUNS_DIR, git, gitAsync } from './repo.mjs';
 import { agentLinesOf } from './agents/lines.mjs';
-import { pin, showAt, computeChanges, snapshotNow } from './snapshots.mjs';
+import { blobAt, pin, restoreFrom, showAt, computeChanges, snapshotNow } from './snapshots.mjs';
 import {
   checksFor,
   clash,
@@ -208,28 +208,19 @@ export function push(run, entry) {
   emit('progress', run);
 }
 export async function revertRun(run, force) {
+  // A run names only files inside the repo; anything else in a run file is never read or touched.
+  const changes = run.changes.filter(c => path.resolve(ROOT, c.path).startsWith(ROOT + path.sep));
   const drift = [];
-  for (const c of run.changes) {
-    const now = fs.existsSync(path.join(ROOT, c.path)) ? fs.readFileSync(path.join(ROOT, c.path), 'utf8') : null;
-    if (now !== (await showAt(run.after, c.path))) drift.push(c.path);
+  for (const c of changes) {
+    const now = fs.existsSync(path.join(ROOT, c.path)) ? (await gitAsync(['hash-object', '--', c.path])).trim() : null;
+    if (now !== (await blobAt(run.after, c.path))) drift.push(c.path);
   }
   if (drift.length && !force) return { conflict: drift };
-  for (const c of run.changes) {
-    const abs = path.resolve(ROOT, c.path);
-    // A run names only files inside the repo; anything else in a run file is never touched.
-    if (!abs.startsWith(ROOT + path.sep)) continue;
-    if (c.created) {
-      try {
-        fs.rmSync(abs);
-      } catch {}
-      continue;
-    }
-    const before = await showAt(run.before, c.path);
-    if (before !== null) {
-      fs.mkdirSync(path.dirname(abs), { recursive: true });
-      fs.writeFileSync(abs, before);
-    }
-  }
+  const back = [];
+  for (const c of changes)
+    if (c.created) fs.rmSync(path.join(ROOT, c.path), { force: true });
+    else if ((await blobAt(run.before, c.path)) !== null) back.push(c.path);
+  await restoreFrom(run.before, back);
   run.reverted = true;
   // The bridge's own writes are not someone's changes: taken into the baseline, or into the epoch under way.
   if (working.size) noteRevert(run);

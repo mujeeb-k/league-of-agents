@@ -1,7 +1,7 @@
 // The lines an agent wrote itself, by its edit tools, kept for the run's attribution (web/src/lib/attribution.ts).
-import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from '../repo.mjs';
+import { realish } from '../util.mjs';
 
 /**
  * The lines Claude Code wrote itself, per file, from its edit tools' input: what Edit, MultiEdit and Write put
@@ -23,11 +23,10 @@ export function noteWrites(run, name, input) {
 /** Lines an agent wrote into a file, by the path it named, kept for the run's attribution (agentLinesOf). */
 export function noteLines(run, file, texts) {
   // Agents name files by the path they were given, which may run through a symlink (macOS's /var is /private/var).
-  let abs = path.resolve(ROOT, file);
-  try {
-    abs = path.join(fs.realpathSync(path.dirname(abs)), path.basename(abs));
-  } catch {}
-  const rel = path.relative(ROOT, abs).split(path.sep).join('/');
+  const rel = path
+    .relative(ROOT, realish(path.resolve(ROOT, file)))
+    .split(path.sep)
+    .join('/');
   if (!writes.has(run.id)) writes.set(run.id, new Map());
   const files = writes.get(run.id);
   // Named even when it added no line: a file it emptied or deleted is still its own.

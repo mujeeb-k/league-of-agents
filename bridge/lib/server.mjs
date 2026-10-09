@@ -3,7 +3,6 @@ import http from 'node:http';
 import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { BRIDGE_DIR, WEB_DIR, WEB_FILE } from './paths.mjs';
 import { WEB_URL, APP_PATH } from './args.mjs';
 import { ROOT, TOKEN } from './repo.mjs';
@@ -12,6 +11,7 @@ import { CLAUDE_FIX } from './agents/claude.mjs';
 import { linkOf } from './cli.mjs';
 import { ROUTES } from './routes.mjs';
 import { setShellPort, shellTokenFits } from './shell.mjs';
+import { sameSecret } from './util.mjs';
 
 // An error the app shows carries a `code`, and the values for its sentence in `args`: the app words it in the
 // person's language by that code (web/src/api/errors.ts). `error` is the same sentence in English, for older apps.
@@ -45,8 +45,6 @@ function readBody(req) {
     });
   });
 }
-const safeEq = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-
 // ---------------------------------------------------------------- who may reach the bridge (docs/THREAT-MODEL.md)
 // Only this machine, by the bridge's own address: a different Host is a DNS-rebinding page.
 /** @type {Set<string>} */
@@ -107,7 +105,7 @@ async function handle(req, res) {
   if (locked()) return send(res, 423, { error: LOCKED }, cors);
   const auth = (req.headers.authorization || '').replace(/^Bearer /, '');
   if (!auth) return send(res, 401, { error: 'Missing token' }, cors);
-  if (!safeEq(auth, TOKEN) && !shellTokenFits(url.pathname, auth)) {
+  if (!sameSecret(auth, TOKEN) && !shellTokenFits(url.pathname, auth)) {
     wrongTokens++;
     if (locked()) console.error(`\n  ${LOCKED}\n`);
     const wait = Math.min(100 * 2 ** (wrongTokens - 1), 5000);

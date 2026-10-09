@@ -3,12 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { splitLines } from './util.mjs';
-import { IGNORE, LOA, ROOT, excludeFile, gitAsync } from './repo.mjs';
+import { CONF, LOA, ROOT, excludeFile, gitAsync } from './repo.mjs';
 import { SKIP } from './files.mjs';
 
 const snapIndex = () => path.join(LOA, 'snapshot.index');
 /** Names of files that usually hold secrets, at any depth: untracked ones stay out of snapshots. The README lists them. */
-export const SECRET_FILES = [
+const SECRET_FILES = [
   '.env',
   '.env.*',
   '*.pem',
@@ -35,6 +35,19 @@ export const SECRET_FILES = [
   '*.tfvars',
 ];
 /**
+ * Pathspecs for the files named like secrets: at any depth, or only beside the given paths (in a folder path, at any
+ * depth below it; beside a file, in its own folder).
+ */
+export const secretSpecs = (paths = /** @type {string[] | null} */ (null)) =>
+  SECRET_FILES.flatMap(g =>
+    paths
+      ? paths.map(
+          p =>
+            `:(glob)${p.endsWith('/') ? `${p}**/` : path.posix.dirname(p) === '.' ? '' : `${path.posix.dirname(p)}/`}${g}`,
+        )
+      : [`:(glob)**/${g}`],
+  );
+/**
  * The working tree as a git tree, written through a private index. The index is kept between snapshots, so
  * git hashes only the files that changed since the last one. `fresh` starts it again from HEAD.
  */
@@ -57,14 +70,7 @@ export async function writeTree(fresh = false, paths = /** @type {string[] | nul
       '--exclude-standard',
       '--',
       // Limited to the paths when given: a scan of every untracked path takes seconds in a repo the size of llvm.
-      ...SECRET_FILES.flatMap(g =>
-        paths
-          ? paths.map(
-              p =>
-                `:(glob)${p.endsWith('/') ? `${p}**/` : path.posix.dirname(p) === '.' ? '' : `${path.posix.dirname(p)}/`}${g}`,
-            )
-          : [`:(glob)**/${g}`],
-      ),
+      ...secretSpecs(paths),
     ])
   )
     .split('\0')
@@ -97,7 +103,7 @@ async function indexKey() {
     excludeFile(),
     own.trim(),
   ];
-  const h = crypto.createHash('sha1').update(`${head.commit}\0${JSON.stringify(IGNORE)}`);
+  const h = crypto.createHash('sha1').update(`${head.commit}\0${JSON.stringify(CONF.ignore ?? [])}`);
   for (const f of files.filter(Boolean)) {
     h.update(`\0${f}\0`);
     try {
@@ -185,6 +191,16 @@ export async function pin(id, which, commit) {
   try {
     await gitAsync(['update-ref', `refs/loa/runs/${id}/${which}`, commit]);
   } catch {}
+}
+/**
+ * Puts files in the working tree back as a snapshot holds them, byte for byte, with git's own checkout (its line
+ * ending and filter rules too); the index is left alone. Each path must be in the snapshot.
+ */
+export async function restoreFrom(ref, paths) {
+  if (!paths.length) return;
+  await gitAsync(['restore', '--source', ref, '--worktree', '--pathspec-from-file=-', '--pathspec-file-nul'], {
+    input: paths.map(p => `:(literal)${p}\0`).join(''),
+  });
 }
 export async function showAt(ref, p) {
   try {

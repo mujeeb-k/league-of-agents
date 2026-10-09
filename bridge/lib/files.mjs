@@ -2,11 +2,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { ROOT, IGNORE, git, gitAsync } from './repo.mjs';
+import { ROOT, CONF, git, gitAsync } from './repo.mjs';
 import { logError } from './util.mjs';
 
-export const CODE_EXT =
-  /\.(ts|tsx|js|jsx|mjs|cjs|json|py|go|rs|rb|java|kt|swift|c|h|cpp|cs|php|vue|svelte|css|scss|html|sql|sh|md|yml|yaml|toml)$/i;
+/**
+ * The files a map shows, by extension: every text kind the app has an icon for (web/src/lib/fileKind.ts; a test
+ * checks), but .env files and property lists.
+ */
+const MAPPED = [
+  'ts tsx js jsx mjs cjs mts cts py pyi go rs rb java kt kts swift c h cc cpp hpp cs php vue svelte astro scala lua',
+  'dart ex exs erl hs ml clj sql css scss sass less html htm graphql gql proto',
+  'sh bash zsh fish ps1 bat cmd',
+  'json jsonc json5 yml yaml toml ini cfg conf properties xml',
+  'md mdx txt rst adoc',
+].flatMap(line => line.split(' '));
+export const CODE_EXT = new RegExp(`\\.(${MAPPED.join('|')})$`, 'i');
 export const SKIP =
   /(^|\/)(node_modules|\.git|\.loa|dist|build|coverage|\.next|\.turbo)(\/|$)|(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$|(^|\/)\.env/;
 export const MAX_LINES = 400,
@@ -22,8 +32,17 @@ export const MAX_LINES = 400,
 export const isText = buf => !buf.subarray(0, 8000).includes(0);
 
 const LIST = ['ls-files', '-z', '--cached', '--others', '--exclude-standard'];
-/** A path the map shows when git lists it: code, not in the skip list or loa.config's ignore list. */
-export const isCode = p => CODE_EXT.test(p) && !SKIP.test(p) && !IGNORE.some(g => g && p.startsWith(g));
+const listing = (paths = ['.']) => [...LIST, '--', ...paths, ...leftOut()];
+/** A path the map may show: code, not in the skip list (loa.config's ignore globs are git's to match, codeFiles). */
+export const isCode = p => CODE_EXT.test(p) && !SKIP.test(p);
+/**
+ * loa.config's ignore globs, as pathspecs git leaves out, matched by git itself. A glob without a slash matches at
+ * any depth, as in .gitignore.
+ */
+const leftOut = () =>
+  (Array.isArray(CONF.ignore) ? CONF.ignore : [])
+    .filter(g => typeof g === 'string' && g)
+    .map(g => `:(exclude,glob)${g.includes('/') ? g : `**/${g}`}`);
 /** The code files among what git lists, sorted. */
 function codeOf(out) {
   const files = [...new Set(out.split('\0').filter(Boolean))].filter(isCode).sort();
@@ -40,7 +59,7 @@ export function forgetFiles() {
   if (relisting) return;
   relisting = setTimeout(async () => {
     try {
-      listed = codeOf(await gitAsync(LIST));
+      listed = codeOf(await gitAsync(listing()));
     } catch (e) {
       logError(e);
     }
@@ -49,9 +68,12 @@ export function forgetFiles() {
 }
 /** Every code file in the repo, on any map or none: what the app may open. */
 export function codeFiles() {
-  listed ??= codeOf(git(LIST));
+  listed ??= codeOf(git(listing()));
   return listed;
 }
+/** Of these paths, those the map shows, as git lists them: for files not yet in the list (one a run just made). */
+export const codeAmong = paths =>
+  paths.length ? codeOf(git(listing(paths.map(p => `:(literal)${p}`)))).set : new Set();
 /**
  * The files a map of a folder ('' for the whole repo, else ending in /) shows: the first `max` in it, at most
  * MAX_FILES (the app asks for as many as it draws well).

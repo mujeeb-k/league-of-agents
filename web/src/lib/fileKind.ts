@@ -1,7 +1,8 @@
 // The kind of a file, for its icon in the explorer and on the canvas.
 export type FileKind = 'code' | 'shell' | 'json' | 'config' | 'text' | 'image' | 'table' | 'lock' | 'file';
 
-const BY_EXT: Record<string, FileKind> = {};
+/** Each extension's kind. A map shows every text kind but env and plist (bridge/lib/files.mjs CODE_EXT; a test checks). */
+export const BY_EXT: Record<string, FileKind> = {};
 const add = (kind: FileKind, exts: string) => exts.split(' ').forEach(e => (BY_EXT[e] = kind));
 add(
   'code',

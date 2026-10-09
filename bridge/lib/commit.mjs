@@ -5,13 +5,11 @@
 // show clean and everything else staged stays exactly as it was.
 import fs from 'node:fs';
 import path from 'node:path';
-import { serial } from './util.mjs';
+import { refused, serial } from './util.mjs';
 import { LOA, ROOT, gitAsync } from './repo.mjs';
 import { blobAt, headNow } from './snapshots.mjs';
 import { emitRun } from './events.mjs';
 import { saveRun } from './runs.mjs';
-
-const refused = (reason, message, args = {}) => Object.assign(new Error(message), { code: 409, reason, args });
 
 /** A file's content id as it is on disk now, or null when it is gone. */
 async function blobNow(p) {

@@ -2,7 +2,7 @@
 // the agent stops. Every agent is handled this way (agents/registry.mjs connectorOf).
 import fs from 'node:fs';
 import path from 'node:path';
-import { logError, serial } from './util.mjs';
+import { logError, refused, serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
 import { ROOT, LOA } from './repo.mjs';
 import { finishRun, push, saveRun, working } from './runs.mjs';
@@ -108,11 +108,11 @@ function carryOn(run) {
     return files.length ? words(files.map(w => w.path).join(', ')) : '';
   };
   const allowed = told('allowed', f => `You may now change ${f}. `);
-  const refused = told('refused', f => `Leave ${f} as it is. `);
+  const left = told('refused', f => `Leave ${f} as it is. `);
   run.waiting = null;
   saveRun(run);
   emitRun(run);
-  return turn(run, scopePreamble(run) + allowed + refused + 'Carry on where you stopped.');
+  return turn(run, scopePreamble(run) + allowed + left + 'Carry on where you stopped.');
 }
 async function end(run, status) {
   fs.rmSync(scopeFileOf(run), { force: true });
@@ -143,7 +143,6 @@ export async function answerWant(run, file, allow) {
   });
   if (run.waiting && !sessions.has(run.id)) await afterAnswers(run, run.waiting);
 }
-const refused = (reason, message, args = {}) => Object.assign(new Error(message), { code: 409, reason, args });
 /** What an agent says when its provider stopped it for its rate or usage limit: told apart from other failures. */
 const LIMITED = /\b429\b|rate[ _-]?limit|usage limit|quota exceeded|too many requests/i;
 const limitedBy = run =>

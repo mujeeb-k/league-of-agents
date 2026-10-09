@@ -3,7 +3,7 @@
 // the changes in its own section, and, for an agent that reports its edits, only the files those edits named. When
 // the last one ends, whatever changed that no run owns (an edit by hand, an agent outside its section) is recorded as
 // a run of its own, credited to none of them.
-import { serial } from './util.mjs';
+import { refused, serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
 import { CONF } from './repo.mjs';
 import { runChecks } from './checks.mjs';
@@ -28,22 +28,14 @@ const overlap = (a, b) =>
 /** Why a run on this scope can't start now, as the error the app words, or null. */
 export function clash(scope) {
   for (const r of working.values()) {
-    if (!scope.length || !r.scope?.length)
-      return Object.assign(new Error(`Run ${r.id} is still active`), {
-        code: 409,
-        reason: 'run-active',
-        args: { id: r.id },
-      });
+    if (!scope.length || !r.scope?.length) return refused('run-active', `Run ${r.id} is still active`, { id: r.id });
     for (const a of scope.map(area))
       for (const b of r.scope.map(area))
         if (overlap(a, b))
-          return Object.assign(
-            new Error(`Run ${r.id} is working on ${b}. Pick a section outside it, or wait for it to finish.`),
-            {
-              code: 409,
-              reason: 'sections-overlap',
-              args: { id: r.id, path: b },
-            },
+          return refused(
+            'sections-overlap',
+            `Run ${r.id} is working on ${b}. Pick a section outside it, or wait for it to finish.`,
+            { id: r.id, path: b },
           );
   }
   return null;

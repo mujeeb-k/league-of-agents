@@ -534,6 +534,31 @@ test('failed checks make Revert the primary action and Keep the secondary one', 
   }
 });
 
+test("a check's terminal codes, colour and cursor alike, stay out of its summary", async () => {
+  const repo = makeRepo();
+  // How test runners print: the cursor hidden while they run, the counts in colour.
+  const out = String.raw`\x1b[?25l\x1b[32m3 passed\x1b[39m\x1b[?25h`;
+  fs.writeFileSync(
+    path.join(repo, 'loa.config.json'),
+    JSON.stringify({ checks: [{ name: 'tests', run: `node -e "process.stdout.write('${out}')"` }] }),
+  );
+  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qam', 'coloured check');
+  approveChecks(repo);
+  const b = await startBridge(repo);
+  try {
+    const run = (await call(b, '/api/runs', { agent: 'claude', prompt: 'Edit the log', scope: [], resumeFrom: null }))
+      .body as unknown as RunDTO;
+    await expect
+      .poll(async () => ((await call(b, `/api/runs/${run.id}`)).body as unknown as RunDTO).checks[0]?.summary, {
+        timeout: 15_000,
+      })
+      .toBe('3 passed');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('logged out of Claude Code: the composer says how to log in, and it clears once logged in', async ({ page }) => {
   const repo = makeRepo();
   const flag = path.join(path.dirname(repo), 'logged-out');
@@ -1034,6 +1059,46 @@ test("a folder as the map: the state holds its files; the repo's folders are lis
     const shared = await call(b, '/api/file?path=shared/log.ts');
     expect(shared.status).toBe(200);
     expect((await call(b, '/api/state?root=../')).status).toBe(400);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test("loa.config's ignore globs leave files off the map, as git matches them", async () => {
+  const repo = makeRepo();
+  const put = (p: string) => {
+    fs.mkdirSync(path.dirname(path.join(repo, p)), { recursive: true });
+    fs.writeFileSync(path.join(repo, p), 'export {};\n');
+  };
+  put('gen/a.ts');
+  put('shared/x.gen.ts');
+  put('apps/deep/fixtures/f.ts');
+  fs.writeFileSync(
+    path.join(repo, 'loa.config.json'),
+    JSON.stringify({ ignore: ['gen/**', '*.gen.ts', '**/fixtures/**'] }),
+  );
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP });
+  try {
+    const paths = ((await call(b, '/api/state')).body as unknown as StateResponse).tree.map(f => f.path);
+    expect(paths).toContain('apps/console/main.ts');
+    for (const p of ['gen/a.ts', 'shared/x.gen.ts', 'apps/deep/fixtures/f.ts']) expect(paths, p).not.toContain(p);
+    // A file a run makes that a glob leaves out stays off the map too.
+    await expect
+      .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).agents.hermes?.available)
+      .toBe(true);
+    const r = await runToEnd(b, {
+      agent: 'hermes',
+      prompt: "exec: printf 'x' > shared/y.gen.ts",
+      scope: [],
+      resumeFrom: null,
+    });
+    expect(r.changes.map(c => c.path)).toEqual(['shared/y.gen.ts']);
+    const events = (await call(b, '/api/events?since=0&delta=1')).body as unknown as {
+      events: { delta?: { files: Record<string, unknown> } }[];
+    };
+    const delta = events.events.find(e => e.delta && 'shared/y.gen.ts' in e.delta.files)!.delta!;
+    expect(delta.files['shared/y.gen.ts']).toBeNull();
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
@@ -2287,6 +2352,21 @@ test.describe('sessions at once', () => {
       const h = (await start(b, ['shared/'], 'long:70000')).body as unknown as RunDTO;
       await until(b, h.id, 'done');
       expect((await runOf(b, h.id)).summary).toBe('é'.repeat(70000));
+    }));
+
+  test('revert puts back a file that is not UTF-8 byte for byte', () =>
+    twoSessions(async (b, repo) => {
+      // Latin-1 text: é is the single byte 0xe9, which UTF-8 can't decode.
+      const latin = Buffer.from([...Buffer.from("export const name = 'caf"), 0xe9, ...Buffer.from("';\n")]);
+      fs.writeFileSync(path.join(repo, 'shared/legacy.ts'), latin);
+      git(repo, 'add', '-A');
+      git(repo, '-c', 'user.name=t', '-c', 'user.email=t@e.t', 'commit', '-qm', 'legacy');
+      const h = (await start(b, ['shared/'], "exec: printf 'export {};\\n' >> shared/legacy.ts"))
+        .body as unknown as RunDTO;
+      await until(b, h.id, 'done');
+      expect((await runOf(b, h.id)).changes.map(c => c.path)).toEqual(['shared/legacy.ts']);
+      expect((await call(b, `/api/runs/${h.id}/revert`, {})).status).toBe(200);
+      expect(fs.readFileSync(path.join(repo, 'shared/legacy.ts')).equals(latin)).toBe(true);
     }));
 
   test("Claude Code's steps: an edit refused, then allowed and made; a shell command as a step that runs", () =>
@@ -4104,10 +4184,12 @@ test('bridge security: wrong tokens slow down, then lock it until a restart', as
     const one = Date.now() - t0;
     expect((await state('wrong-2')).status).toBe(401);
     expect(Date.now() - t0 - one).toBeGreaterThan(one);
+    // As long as the token in characters but not in bytes: still just wrong.
+    expect((await state('\u00e9'.repeat(first.length))).status).toBe(401);
     // The right token still works between wrong ones.
     expect((await state(first)).status).toBe(200);
-    const rest = await Promise.all(Array.from({ length: 48 }, (_, i) => state(`wrong-${i + 3}`)));
-    expect(rest.map(r => r.status)).toEqual(Array(48).fill(401));
+    const rest = await Promise.all(Array.from({ length: 47 }, (_, i) => state(`wrong-${i + 3}`)));
+    expect(rest.map(r => r.status)).toEqual(Array(47).fill(401));
     // Locked: even the right token is refused, and the bridge says so in its log, in status and in the app.
     expect((await state(first)).status).toBe(423);
     expect(fs.readFileSync(path.join(repo, '.loa/bridge.log'), 'utf8')).toContain(

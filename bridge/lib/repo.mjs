@@ -6,7 +6,7 @@ import { execFile, execFileSync } from 'node:child_process';
 import { readJson } from './util.mjs';
 
 /** The repo the bridge runs in, set by openRepo before anything else reads it. */
-export let ROOT, LOA, RUNS_DIR, CONFIG_FILE, CONF, IGNORE, bridgeFile, LAYOUT_FILE, prev, EXCLUDED;
+export let ROOT, LOA, RUNS_DIR, CONFIG_FILE, CONF, bridgeFile, LAYOUT_FILE, prev, EXCLUDED;
 /**
  * Finds the repo and its .loa/ folder, or says why the bridge can't run here and exits. Reads loa.config.json and the
  * last start's .loa/bridge.json, and keeps .loa/ out of git.
@@ -34,7 +34,6 @@ export function openRepo() {
   fs.chmodSync(LOA, 0o700);
   CONFIG_FILE = path.join(ROOT, 'loa.config.json');
   CONF = readJson(CONFIG_FILE, {});
-  IGNORE = (CONF.ignore || []).map(g => g.replace(/\*\*?.*$/, ''));
   bridgeFile = path.join(LOA, 'bridge.json');
   /** Where the map's folders and files are placed (web/src/lib/layout.ts SavedLayout). */
   LAYOUT_FILE = path.join(LOA, 'layout.json');

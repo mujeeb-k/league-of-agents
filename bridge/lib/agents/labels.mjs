@@ -1,7 +1,7 @@
 // How an agent's work reads in the activity list: its tool calls and their failures, with paths as the repo names them.
-import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT } from '../repo.mjs';
+import { realish } from '../util.mjs';
 
 /** What a failed tool call said, as text with the repo's paths made relative. */
 export const toolText = content =>
@@ -17,27 +17,27 @@ export function toolError(text) {
   const line = text.split('\n')[0].slice(0, 300);
   return /requires approval|permission/i.test(line) ? { t: 'deny', text: line } : { t: 'err', text: line };
 }
+/**
+ * The repo's path as an agent may name it: its real path, and on macOS the form without /private that links to it
+ * (/var is /private/var, /tmp is /private/tmp); the longer first, so it is replaced whole.
+ */
+let forms;
+const rootForms = () => {
+  if (forms?.[0] !== ROOT) {
+    const alias = ROOT.startsWith('/private/') ? ROOT.slice('/private'.length) : null;
+    forms = alias && realish(alias) === ROOT ? [ROOT, alias] : [ROOT];
+  }
+  return forms;
+};
 /** Absolute paths inside the repo become repo-relative, in any text. */
 export function relPaths(text) {
-  return String(text)
-    .split(ROOT + path.sep)
-    .join('')
-    .split(ROOT)
-    .join('.');
+  let out = String(text);
+  for (const root of rootForms()) out = out.replaceAll(root + path.sep, '').replaceAll(root, '.');
+  return out;
 }
 /** A path as the repo sees it, following symlinks (macOS /var is /private/var) before making it relative. */
 export function repoRelative(f) {
-  let abs = path.resolve(ROOT, f);
-  try {
-    abs = fs.realpathSync(abs);
-  } catch {
-    try {
-      abs = path.join(fs.realpathSync(path.dirname(abs)), path.basename(abs));
-    } catch {
-      /* neither the file nor its folder exists: keep the path as given */
-    }
-  }
-  return path.relative(ROOT, abs);
+  return path.relative(ROOT, realish(path.resolve(ROOT, f)));
 }
 /** A Claude Code, Cursor or Codex tool call as an activity entry: its name and the file, command or pattern it names. */
 export function toolLabel(name, input = {}) {

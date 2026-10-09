@@ -1,5 +1,5 @@
 // Events, by long polling (it works where WebSockets get blocked): a run's progress, and state changes.
-import { codeFiles, forgetFiles, isCode, treeEntry } from './files.mjs';
+import { codeAmong, codeFiles, forgetFiles, isCode, treeEntry } from './files.mjs';
 import { working, publicRun } from './runs.mjs';
 import { takeSteps } from './steps.mjs';
 
@@ -14,8 +14,10 @@ export function emitRun(run) {
   const { set } = codeFiles();
   // A code file the run made or removed: the list is made again (the watcher may be off, or not yet heard of it).
   if (run.changes.some(c => isCode(c.path) && c.deleted === set.has(c.path))) forgetFiles();
+  // One it made is on the map if git lists it, past loa.config's ignore globs.
+  const made = codeAmong(run.changes.filter(c => !c.deleted && isCode(c.path) && !set.has(c.path)).map(c => c.path));
   const files = Object.fromEntries(
-    run.changes.map(c => [c.path, isCode(c.path) && !c.deleted ? treeEntry(c.path) : null]),
+    run.changes.map(c => [c.path, !c.deleted && (set.has(c.path) || made.has(c.path)) ? treeEntry(c.path) : null]),
   );
   const ids = [...working.keys()];
   emit('state', undefined, { run: publicRun(run), files, active: ids[0] ?? null, working: ids });
