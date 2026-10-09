@@ -63,7 +63,7 @@ function state({ url }) {
       // Whether a map was ever asked for here: until then, the app asks which folder to map when the repo is too large.
       rootChosen: fs.existsSync(mapFile()),
       codeFiles: codeFiles().files.length,
-      tree: readTree(root),
+      tree: readTree(root, Number(url.searchParams.get('max')) || undefined),
       runs: [...runs.values()].sort((a, b) => a.id - b.id).map(publicRun),
       active: working.keys().next().value ?? null,
       working: [...working.keys()],

@@ -52,10 +52,13 @@ export function codeFiles() {
   listed ??= codeOf(git(LIST));
   return listed;
 }
-/** The files a map of a folder ('' for the whole repo, else ending in /) shows: the first MAX_FILES in it. */
-export function listFiles(root = '') {
+/**
+ * The files a map of a folder ('' for the whole repo, else ending in /) shows: the first `max` in it, at most
+ * MAX_FILES (the app asks for as many as it draws well).
+ */
+export function listFiles(root = '', max = MAX_FILES) {
   const { files } = codeFiles();
-  return (root ? files.filter(p => p.startsWith(root)) : files).slice(0, MAX_FILES);
+  return (root ? files.filter(p => p.startsWith(root)) : files).slice(0, Math.min(max, MAX_FILES));
 }
 /** Every folder holding code files, with how many are in it and under it: the folders a map can be of. */
 export function folders() {
@@ -97,8 +100,8 @@ export function treeEntry(p, lines = true) {
  * The map of a folder: each file with its length and first lines, or for a map of LINES_UNDER files or more, its
  * length alone (the app asks for lines as it shows a file).
  */
-export function readTree(root = '') {
-  const files = listFiles(root);
+export function readTree(root = '', max = MAX_FILES) {
+  const files = listFiles(root, max);
   return files.map(p => treeEntry(p, files.length < LINES_UNDER)).filter(Boolean);
 }
 export const hashOf = text => crypto.createHash('sha1').update(text).digest('hex');

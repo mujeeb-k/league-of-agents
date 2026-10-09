@@ -301,7 +301,7 @@ for (const theme of ['light', 'dark'] as const)
       };
       await page.goto(`${APP}/?still`);
       await page.locator('#insp section').first().waitFor();
-      let release = hold('**/api/state', 'GET');
+      let release = hold('**/api/state?*', 'GET');
       await page.locator('#connectBtn').click();
       await page.locator('#connectInput').fill(`http://127.0.0.1:${b.port}/#t=${b.token}`);
       await page.locator('#connectInput').press('Enter');
@@ -348,7 +348,7 @@ for (const theme of ['light', 'dark'] as const)
       const b2 = await startBridge(makeRepo());
       try {
         const start = await ctx.newPage();
-        void start.route('**/api/state', () => {});
+        void start.route('**/api/state?*', () => {});
         await start.goto(`${APP}/#bridge=${b2.port}&t=${b2.token}`);
         await expect(start.locator('#showDemo')).toBeVisible();
         rows.set('Show the demo meanwhile', await live(start, start.locator('#showDemo')));

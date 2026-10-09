@@ -215,7 +215,7 @@ test('loading states: connecting, starting a run, and keep show progress and blo
       await route.continue();
     });
   try {
-    await slow('**/api/state', 'GET');
+    await slow('**/api/state?*', 'GET');
     await page.goto(APP);
     await page.locator('#connectBtn').click();
     await page.locator('#connectInput').fill(`http://127.0.0.1:${b.port}/#t=${b.token}`);
@@ -229,7 +229,7 @@ test('loading states: connecting, starting a run, and keep show progress and blo
     // A successful connect closes the dialog and does not reopen it.
     await expect(page.locator('#connectDlg')).toBeHidden();
     await expect(page.locator('#connectBtn')).toBeFocused();
-    await page.unroute('**/api/state');
+    await page.unroute('**/api/state?*');
 
     await slow('**/api/runs');
     await page.locator('#prompt').fill('Name the action and origin in allowlist errors');
@@ -338,7 +338,7 @@ test('startup: a link shows "Connecting", never the demo first, and offers the d
     b = await startBridge(repo);
   let release = () => {};
   const gate = new Promise<void>(r => (release = r));
-  await page.route('**/api/state', async route => {
+  await page.route('**/api/state?*', async route => {
     await gate;
     await route.continue();
   });
@@ -969,6 +969,8 @@ test("a folder as the map: the state holds its files; the repo's folders are lis
     const whole = (await call(b, '/api/state')).body as unknown as StateResponse;
     expect(whole.root).toBe('');
     expect(whole.codeFiles).toBe(whole.tree.length);
+    // The app may ask for fewer files a map than the bridge's most: then the map holds that many.
+    expect(((await call(b, '/api/state?root=&max=2')).body as unknown as StateResponse).tree).toHaveLength(2);
     const apps = (await call(b, '/api/state?root=apps/')).body as unknown as StateResponse;
     expect(apps.root).toBe('apps/');
     expect(apps.tree.map(f => f.path)).toEqual([
@@ -4093,7 +4095,7 @@ test('version check: an old bridge shows the update banner, a current one does n
   const reporting = async (version: string | null | undefined) => {
     await page.unrouteAll({ behavior: 'ignoreErrors' });
     if (version !== undefined)
-      await page.route('**/api/state', async route => {
+      await page.route('**/api/state?*', async route => {
         const res = await route.fetch();
         const json = (await res.json()) as StateResponse;
         if (version === null) delete json.version;
@@ -4428,7 +4430,7 @@ test('watch mode off: the app says edits outside a run are not recorded, and how
     b = await startBridge(repo, FAKE_CLAUDE, {}, ['--no-hooks']);
   try {
     expect((await call(b, '/api/state')).body.watchOff).toBeNull();
-    await page.route('**/api/state', async route => {
+    await page.route('**/api/state?*', async route => {
       const res = await route.fetch();
       const body = (await res.json()) as StateResponse;
       await route.fulfill({

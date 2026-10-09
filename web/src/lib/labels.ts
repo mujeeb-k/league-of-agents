@@ -7,7 +7,7 @@
 // Labels keep their natural width, so a name is never cut short.
 import { S, dom, st } from '../state/app';
 import { OVER } from './constants';
-import { filesUnder } from './model';
+import { countUnder } from './model';
 import type { DirNode } from './types';
 
 type Rect = { x: number; y: number; w: number; h: number };
@@ -35,7 +35,7 @@ export function fitLabels() {
   // Measuring forces layout twice: skipped when nothing a label depends on changed since they were fitted.
   if (labelsNow([...els.values(), ...zones]) === fitted) return;
   const dirs = [...S.DIRMAP.values()].filter(d => els.has(d.path));
-  const weight = new Map(dirs.map(d => [d, filesUnder(d).length]));
+  const weight = new Map(dirs.map(d => [d, countUnder(d)]));
   dirs.sort((a, b) => depth(a) - depth(b) || weight.get(b)! - weight.get(a)!);
   // Frames that draw a box; folders without files show only their label.
   const frames = dirs

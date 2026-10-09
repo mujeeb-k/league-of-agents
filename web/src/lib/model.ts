@@ -287,6 +287,20 @@ export function layout(tidy = false) {
 export const allDirs = () => [...S.DIRMAP.values()];
 export const filesUnder = (d: DirNode) => [...S.FILES.values()].filter(f => under(d, f.path));
 
+/** Each folder's count of files in it and under it, for the files as last counted. */
+let counts: { of: Map<string, FileNode>; size: number; n: Map<string, number> } | null = null;
+/** How many files are in a folder and under it: every folder counted in one pass, again only when the files change. */
+export function countUnder(d: DirNode): number {
+  if (counts?.of !== S.FILES || counts.size !== S.FILES.size) {
+    const n = new Map<string, number>([['', S.FILES.size]]);
+    for (const p of S.FILES.keys())
+      for (let i = p.indexOf('/'); i >= 0; i = p.indexOf('/', i + 1))
+        n.set(p.slice(0, i), (n.get(p.slice(0, i)) ?? 0) + 1);
+    counts = { of: S.FILES, size: S.FILES.size, n };
+  }
+  return counts.n.get(d.path) ?? 0;
+}
+
 /** The agent stopped short and is waiting on you: Claude Code said it was blocked, or named an action. */
 export const needsYou = (r: Run) => !!r.turn && (r.turn.status === 'blocked' || r.turn.needs !== '');
 

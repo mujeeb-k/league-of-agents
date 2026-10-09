@@ -64,10 +64,22 @@ async function request<T>(
   return data as T;
 }
 
+/**
+ * The most files a map shows: the largest a page draws within every budget (10,000 file tiles in the page take 92 to
+ * 137 ms to show a selection). The bridge allows up to 10,000.
+ */
+export const MAP_MAX = 5000;
+
 export const bridge = {
-  /** The state, with the map of a folder ('' the whole repo); without one, the folder last mapped (0.2.0 on). */
+  /**
+   * The state, with the map of a folder ('' the whole repo) or the folder last mapped, of at most MAP_MAX files
+   * (bridges from 0.2.0; earlier ones map the whole repo, up to their own limit).
+   */
   state: (c: Conn, root?: string | null) =>
-    request<StateResponse>(c, typeof root === 'string' ? `/api/state?root=${encodeURIComponent(root)}` : '/api/state'),
+    request<StateResponse>(
+      c,
+      `/api/state?max=${MAP_MAX}${typeof root === 'string' ? `&root=${encodeURIComponent(root)}` : ''}`,
+    ),
   /** The folders a map can be of, with their code files. Bridges before 0.2.0 answer 404. */
   folders: (c: Conn) => request<{ folders: { path: string; files: number }[] }>(c, '/api/folders'),
   /** Files' lengths and first lines, for a map too large to carry them. */

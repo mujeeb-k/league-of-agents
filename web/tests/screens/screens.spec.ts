@@ -106,7 +106,7 @@ test('live screens', async ({ page }) => {
       const repo = makeRepo();
       const b = await startBridge(repo);
       stop.push(b);
-      const release = hold(page, '**/api/state', 'GET');
+      const release = hold(page, '**/api/state?*', 'GET');
       await page.goto(`${APP}/#bridge=${b.port}&t=${b.token}`);
       await expect(page.locator('#stageState')).toBeVisible();
       await shoot(page, 'connecting', WIDE);

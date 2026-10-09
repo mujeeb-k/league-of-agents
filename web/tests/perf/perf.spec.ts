@@ -93,7 +93,7 @@ const report = (rows: object[]) =>
 test.describe.configure({ mode: 'serial' });
 fs.mkdirSync(OUT, { recursive: true });
 
-for (const n of [1000, 10000])
+for (const n of [1000, 5000])
   test(`pan and zoom on a ${n.toLocaleString('en')}-file repo hold 60 fps`, async ({ page, browser }) => {
     test.setTimeout(300_000);
     const repo = bigRepo(n);
@@ -581,6 +581,8 @@ interface Measured {
   stateEvent: number;
   /** With three sessions at work: from a step's progress event to the first frame with its marker on the file. */
   marker: number | null;
+  /** The page's JavaScript heap once the map is visible and settled, in MB. */
+  heapMB: number;
 }
 
 type Mode = 'as it opens' | 'colored by author' | 'three sessions at once';
@@ -642,6 +644,11 @@ async function measureReactRouter(page: Page, b: Bridge, repo: string, file: str
   await page.waitForFunction(() => (window as unknown as { mapVisible: number | null }).mapVisible !== null);
   const mapVisible = await page.evaluate(() => (window as unknown as { mapVisible: number }).mapVisible);
   await page.waitForTimeout(1500);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('HeapProfiler.collectGarbage');
+  await cdp.send('Performance.enable');
+  const { metrics } = await cdp.send('Performance.getMetrics');
+  const heapMB = metrics.find(m => m.name === 'JSHeapUsedSize')!.value / 2 ** 20;
   if (mode === 'three sessions at once') await expect(page.locator('#sels .zone b')).toHaveCount(3);
   if (mode === 'colored by author') {
     await page.keyboard.press('c');
@@ -731,7 +738,7 @@ async function measureReactRouter(page: Page, b: Bridge, repo: string, file: str
     for (const h of held.slice(1)) fs.writeFileSync(path.join(repo, `.loa/go-${h}`), '');
     await expect(page.locator(counted)).toHaveCount(0, { timeout: 30_000 });
   }
-  return { mapVisible, panDropped, zoomDropped, selection, stateEvent: shown - event, marker };
+  return { mapVisible, panDropped, zoomDropped, selection, stateEvent: shown - event, marker, heapMB };
 }
 
 test("a run's timeline of 1,000 steps scrolls at 60 fps, and a click shows its file within 200 ms", async ({
@@ -808,6 +815,85 @@ test("a run's timeline of 1,000 steps scrolls at 60 fps, and a click shows its f
   } finally {
     b.stop();
     git(repo, 'checkout', '-q', '--', '.');
+  }
+});
+
+// The same measures on a generated 5,000-file repo: the most a map shows (api/client.ts MAP_MAX). Memory is reported
+// and held under a budget.
+for (const n of [5000])
+  test.describe(`a generated ${n.toLocaleString('en')}-file repo, as it opens`, () => {
+    const runs: Measured[] = [];
+    test.beforeAll(async ({ browser }) => {
+      test.setTimeout(900_000);
+      const repo = bigRepo(n);
+      const file = 'src/area0/part0/mod0/file0.ts';
+      const b = await startBridge(repo, undefined, { LOA_QUIET_MS: '300' }, ['--no-hooks']);
+      try {
+        for (let i = 0; i < 3; i++) {
+          const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+          runs.push(await measureReactRouter(await ctx.newPage(), b, repo, file, 'as it opens'));
+          await ctx.close();
+        }
+      } finally {
+        b.stop();
+      }
+      fs.writeFileSync(path.join(OUT, `${n} files.json`), JSON.stringify(runs, null, 2));
+      report(runs);
+    });
+    const of = (k: keyof Measured) => median(runs.map(r => r[k] ?? NaN));
+    test(`${n} files: map visible under 2 s`, () => expect(of('mapVisible')).toBeLessThan(2000));
+    test(`${n} files: pan and zoom at 60 fps (at most 2% of frames dropped)`, () => {
+      expect(of('panDropped'), 'pan').toBeLessThanOrEqual(2);
+      expect(of('zoomDropped'), 'zoom').toBeLessThanOrEqual(2);
+    });
+    test(`${n} files: selection visible under 100 ms`, () => expect(of('selection')).toBeLessThan(100));
+    test(`${n} files: canvas updated under 200 ms after a state event`, () =>
+      expect(of('stateEvent')).toBeLessThan(200));
+    test(`${n} files: the page holds under 400 MB`, () => expect(of('heapMB')).toBeLessThan(400));
+  });
+
+test('a folder of 1,500 files as the map, picked from a repository too large to map whole: shown within 1 s', async ({
+  page,
+}) => {
+  test.setTimeout(600_000);
+  // 12,000 files, 1,500 in each of src/area0 to src/area7.
+  const repo = bigRepo(12000);
+  const b = await startBridge(repo, undefined, { LOA_QUIET_MS: '300' }, ['--no-hooks']);
+  try {
+    const times: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      // Each time from the whole repository, which asks for a folder.
+      fs.rmSync(path.join(repo, '.loa/map.json'), { force: true });
+      await page.goto('about:blank');
+      await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+      const pick = page.locator(`#mapPicker [data-folder="src/area${i}/"]`);
+      await expect(pick).toContainText('1,500 files', { timeout: 60_000 });
+      const shown = page.evaluate(
+        dir =>
+          new Promise<number>(resolve =>
+            document.addEventListener(
+              'pointerdown',
+              e => {
+                const look = () =>
+                  // The new map: the crumb names the folder, and the folder's files are drawn.
+                  document.querySelector('#mapRoot')?.textContent === `${dir}/` &&
+                  document.querySelector(`#world .frame[data-dir="${dir}"]`)
+                    ? requestAnimationFrame(() => resolve(performance.now() - e.timeStamp))
+                    : requestAnimationFrame(look);
+                requestAnimationFrame(look);
+              },
+              { once: true, capture: true },
+            ),
+          ),
+        `src/area${i}`,
+      );
+      await pick.click();
+      times.push(await shown);
+    }
+    report([{ name: 'folder of 1,500 files as the map', ms: times.map(t => Math.round(t)).join(', ') }]);
+    expect(median(times)).toBeLessThan(1000);
+  } finally {
+    b.stop();
   }
 });
 
