@@ -1536,8 +1536,9 @@ test.describe('sessions at once', () => {
       expect(c.status).toBe('running');
       expect((await state(b)).working).toEqual([a.id, c.id]);
       // Each prompt names the sections other sessions hold.
+      const log = path.join(repo, '../fake-acp.log');
       await expect
-        .poll(() => fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8'))
+        .poll(() => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : ''))
         .toContain('Other sessions are working at the same time on: shared/.');
       go(repo, 'a');
       go(repo, 'c');
@@ -1972,10 +1973,10 @@ test.describe('sessions at once, in the app', () => {
       // Alone, it opens as it finishes.
       await expect(page.locator('#runbar b')).toHaveText('Run 1', { timeout: 15_000 });
       await expect(page.locator('[data-act="keep"]')).toBeVisible();
-      // Closed, so the next prompt starts a session of its own; then the whole map.
+      // Closed, so the next prompt starts a session of its own; apps/ picked in the file tree.
       await page.keyboard.press('Escape');
-      await page.keyboard.press('0');
-      await folder(page, 'apps').click();
+      await page.locator('[data-tab="files"]').click();
+      await page.locator('#sideList .ti[data-dir="apps"]').click();
       await run(page, 'Tidy the app. edit:apps/console/main.ts');
       await expect(page.locator('#runbar b')).toHaveText('Run 2', { timeout: 15_000 });
       // Nothing selected: the follow-up works on the session's own section.
