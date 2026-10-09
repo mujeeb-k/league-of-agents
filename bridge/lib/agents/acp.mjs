@@ -72,6 +72,14 @@ function startAcp(run, prompt, name, command, env) {
       }
   };
   const onUpdate = u => {
+    // A harness may say what the turn has cost so far (ACP usage_update); Hermes and DeepSeek Harness don't.
+    if (u.sessionUpdate === 'usage_update') {
+      if (u.cost?.currency === 'USD' && typeof u.cost.amount === 'number') {
+        run.cost = u.cost.amount;
+        emit('progress', run);
+      }
+      return;
+    }
     if (u.sessionUpdate === 'agent_message_chunk') {
       if (u.content?.type === 'text') said += u.content.text;
       return;

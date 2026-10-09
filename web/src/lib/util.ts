@@ -18,3 +18,6 @@ export function fmtDur(a: number | undefined | null, b: number | undefined | nul
     new Intl.NumberFormat(locale(), { style: 'unit', unit: u, unitDisplay: 'narrow' }).format(n);
   return s < 60 ? unit(s, 'second') : `${unit(Math.floor(s / 60), 'minute')} ${unit(s % 60, 'second')}`;
 }
+
+/** A cost in US dollars as agents report it: to a tenth of a cent. */
+export const money = (usd: number) => '$' + usd.toFixed(3);

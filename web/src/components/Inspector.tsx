@@ -21,6 +21,7 @@ import { runsRepoCode } from '../lib/checks';
 import { agentOf, modelOf } from '../lib/constants';
 import { existsNow, fileStat, linesAt, needsYou, runStats, viewOf } from '../lib/model';
 import type { Run } from '../lib/types';
+import { money } from '../lib/util';
 import { S, dom, st } from '../state/app';
 import { panels } from '../state/panels';
 import { isOffline, propagate, runAction, selectRun, toggleReviewed, viewFile } from '../state/actions';
@@ -206,7 +207,7 @@ function RunView({ run }: { run: Run }) {
   const checksFailed = !!run.checks?.some(c => c.ok === false);
   // Watch mode's runs and saves from the editor have no prompt, reply or scope.
   const detected = run.agent === 'detected' || run.agent === 'you';
-  const meta = [t('Run {id}', { id: run.id }), run.when, run.dur, run.cost != null ? '$' + run.cost.toFixed(3) : '']
+  const meta = [t('Run {id}', { id: run.id }), run.when, run.dur, run.cost != null ? money(run.cost) : '']
     .filter(Boolean)
     .join(' · ');
   return (

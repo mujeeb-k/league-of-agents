@@ -15,6 +15,17 @@ export function workingRuns(): Run[] {
 /** A session's colour: the one it was given as it started, the same in every window and after a reload. */
 export const sessionColour = (run: Run) => `var(--session-${((run.slot ?? run.id) % MAX_SESSIONS) + 1})`;
 
+/**
+ * The sessions at work and those that worked beside them: what their costs add up to, where their harnesses report
+ * one, and how many don't (yet: Claude Code says its cost as it finishes).
+ */
+export function sessionsCost() {
+  const working = workingRuns();
+  const group = S.RUNS.filter(r => working.includes(r) || working.some(w => workedTogether(w, r)));
+  const known = group.filter(r => r.cost != null);
+  return { total: known.reduce((a, r) => a + r.cost!, 0), counted: known.length, missing: group.length - known.length };
+}
+
 /** Whether two runs worked at the same time: sessions, one beside the other. */
 export function workedTogether(a: Pick<Run, 'startedAt' | 'endedAt'>, b: Pick<Run, 'startedAt' | 'endedAt'>) {
   if (a.startedAt === undefined || b.startedAt === undefined) return false;

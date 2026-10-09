@@ -5,7 +5,7 @@
 // ACP extra is installed. With FAKE_ACP_STYLE=dsh it asks as DeepSeek Harness does in its read-only mode: its edit
 // tool call is kind "other", titled "edit", with the edit's arguments as rawInput, and its permission request names
 // only the call. The prompt steers it: "outside" also asks to edit outside.txt; "command" asks to run one; "slow" waits to be
-// cancelled; "exec: <command>" runs it. "edit:<path>" asks to edit that file and appends a line to it, instead of the usual edit; "wait:<name>"
+// cancelled; "exec: <command>" runs it; "cost" reports a cost. "edit:<path>" asks to edit that file and appends a line to it, instead of the usual edit; "wait:<name>"
 // then holds the turn until the file .loa/go-<name> exists, so a test can keep two sessions at work at once. It logs
 // to fake-acp.log beside the repo: a session's sandbox lets nothing write in .loa.
 import { spawnSync } from 'node:child_process';
@@ -47,6 +47,14 @@ async function held(text) {
 }
 
 async function turn(sessionId, text) {
+  // "cost": report the turn's cost so far, as ACP lets a harness do (usage_update), before any work.
+  if (/\bcost\b/.test(text))
+    update(sessionId, {
+      sessionUpdate: 'usage_update',
+      used: 7710,
+      size: 1000000,
+      cost: { amount: 0.0042, currency: 'USD' },
+    });
   say(sessionId, 'Reading the policy module.');
   update(sessionId, {
     sessionUpdate: 'tool_call',

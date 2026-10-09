@@ -476,5 +476,9 @@ const catalogue: Catalogue = {
   '{agent} hit its usage limit. Try again later.': '{agent} hit its usage limit. Try again later.',
   'New session': 'New session',
   'Run {id}’s section': 'Run {id}’s section',
+  '{cost} so far': '{cost} so far',
+  'Not counted: {n} sessions whose agents report no cost, or not yet (Claude Code says it as it finishes).': {
+    other: 'Not counted: {n} sessions whose agents report no cost, or not yet (Claude Code says it as it finishes).',
+  },
 };
 export default catalogue;

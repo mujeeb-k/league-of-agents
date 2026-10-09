@@ -13,7 +13,8 @@ import { panels, setPinned, sideVisibleAt } from '../state/panels';
 import { isOffline, runAction, selectRun, toggleSel } from '../state/actions';
 import { stopAll } from '../api/live';
 import { renderSel, renderSide, useRegion } from '../state/render';
-import { endedAs, sessionColour, workingRuns } from '../state/sessions';
+import { endedAs, sessionColour, sessionsCost, workingRuns } from '../state/sessions';
+import { money } from '../lib/util';
 import { cn } from '@/lib/utils';
 import { BetaTag, CheckBadge, Dot, Stat } from './bits';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -180,6 +181,7 @@ function RunRow({ r }: { r: Run }) {
           <span className="truncate" title={r.model ? `${a.name} · ${r.model}` : undefined}>
             {running ? t('{agent} is working', { agent: a.name }) : `${a.name} · ${r.when}`}
           </span>
+          {r.cost != null ? <span className="cost shrink-0 tabular-nums">{money(r.cost)}</span> : null}
           {a.beta ? <BetaTag /> : null}
           {running && S.CONN ? (
             <Tip label={t('Stop run {id}', { id: r.id })}>
@@ -391,21 +393,41 @@ function RunList() {
     return () => el.removeEventListener('click', onClick);
   }, []);
   const atWork = S.CONN ? workingRuns().length : 0;
+  const cost = atWork ? sessionsCost() : null;
   return (
     <div ref={ref}>
-      {atWork > 1 ? (
+      {atWork > 1 || cost?.counted ? (
         <div className="flex items-center gap-2 border-b px-3 py-2 text-xs text-muted-foreground">
           <span>{tn(atWork, '{n} session at work', '{n} sessions at work')}</span>
-          <Button
-            id="stopAll"
-            variant="outline"
-            size="xs"
-            className="ml-auto"
-            disabled={isOffline()}
-            onClick={() => void stopAll()}
-          >
-            {t('Stop all')}
-          </Button>
+          {cost?.counted ? (
+            <span
+              id="sessionsCost"
+              className="tabular-nums"
+              title={
+                cost.missing
+                  ? tn(
+                      cost.missing,
+                      'Not counted: {n} session whose agent reports no cost, or not yet (Claude Code says it as it finishes).',
+                      'Not counted: {n} sessions whose agents report no cost, or not yet (Claude Code says it as it finishes).',
+                    )
+                  : undefined
+              }
+            >
+              {t('{cost} so far', { cost: money(cost.total) })}
+            </span>
+          ) : null}
+          {atWork > 1 ? (
+            <Button
+              id="stopAll"
+              variant="outline"
+              size="xs"
+              className="ml-auto"
+              disabled={isOffline()}
+              onClick={() => void stopAll()}
+            >
+              {t('Stop all')}
+            </Button>
+          ) : null}
         </div>
       ) : null}
       {S.RUNS.length ? (

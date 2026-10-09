@@ -101,6 +101,8 @@ test('live run, review and revert', async ({ page }) => {
     await expect(page.locator('.check .nm')).toHaveText('tests');
     await expect(page.locator('.check .sm')).toHaveText('3 passed');
     await expect(page.locator('#sideList .run .tags')).toContainText('Checks passed');
+    // Its cost, as Claude Code reported it at the end.
+    await expect(page.locator('#sideList [data-run="1"] .cost')).toHaveText('$0.012');
     await expect(page.locator('.flist li .p')).toHaveText(['allowlist.ts', 'policy-cache.ts']);
     await expect(page.locator('#insp .acts li')).toHaveText(['toolEdit shared/allowlist.ts']);
 
@@ -2014,6 +2016,17 @@ test.describe('sessions at once, in the app', () => {
       await expect.poll(look).toEqual(before);
       // Working sessions' cards keep their colour too.
       await expect(page.locator('#sideList [data-run="1"] .tags')).toContainText('Cancelled');
+    }));
+
+  test("each session's cost where its harness reports it, and the total for the sessions at work", async ({ page }) =>
+    withHermes(page, async () => {
+      await folder(page, 'shared').click();
+      await run(page, 'edit:shared/log.ts wait:a cost');
+      await folder(page, 'apps').click();
+      await run(page, 'edit:apps/console/main.ts wait:b cost');
+      await expect(running(page)).toHaveCount(2);
+      await expect(page.locator('#sideList [data-run="1"] .cost')).toHaveText('$0.004');
+      await expect(page.locator('#sessionsCost')).toHaveText('$0.008 so far');
     }));
 
   test('a session finishing while another is reviewed leaves the view where it is', async ({ page }) =>
