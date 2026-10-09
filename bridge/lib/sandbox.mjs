@@ -13,8 +13,19 @@ import { scopeEntry } from './scope.mjs';
 
 const SANDBOX_EXEC = process.env.LOA_SANDBOX_EXEC || '/usr/bin/sandbox-exec';
 
-/** Agents proved to run inside the sandbox; the others are flagged after the run, as before. */
-const SANDBOXED = new Set(['claude', 'hermes', 'dsh']);
+/**
+ * The agents proved to run inside the sandbox (the others are flagged after the run, as before), each with the
+ * temporary file its edit tool writes beside a file and renames over it, as a regex of the file's folder and name
+ * (both escaped). Only that: no other new file beside a file section.
+ */
+const TEMP_BESIDE = {
+  // Claude Code's Edit: <file>.tmp.<pid>.<hex>.
+  claude: (dir, name) => `^${dir}/${name}\\.tmp\\.[0-9]+\\.[0-9a-f]+$`,
+  // Hermes's write and patch: .hermes-tmp.XXXXXX (mktemp) in the file's folder.
+  hermes: dir => `^${dir}/\\.hermes-tmp\\.[A-Za-z0-9.]+$`,
+  // DeepSeek Harness's edit and write: a folder .<file>.<pid>.<uuid>.tmpdir holding <file>.tmp.
+  dsh: (dir, name) => `^${dir}/\\.${name}\\.[0-9]+\\.[0-9a-f-]+\\.tmpdir(/|$)`,
+};
 
 /** macOS has the sandbox; LOA_SANDBOX=off makes the bridge behave as on a system without one. */
 const HAS_SANDBOX = process.platform === 'darwin' && process.env.LOA_SANDBOX !== 'off';
@@ -39,7 +50,7 @@ function sandboxStarts() {
  * @returns {'sandbox' | 'refuse' | 'none'}
  */
 export function lockOfRun(run) {
-  if (!run.scope?.length || !SANDBOXED.has(run.agent) || !HAS_SANDBOX) return 'none';
+  if (!run.scope?.length || !Object.hasOwn(TEMP_BESIDE, run.agent) || !HAS_SANDBOX) return 'none';
   return sandboxStarts() ? 'sandbox' : 'refuse';
 }
 
@@ -143,11 +154,20 @@ function runLater(gitDir, commonDir) {
   ];
 }
 
+/** The agents' settings and hook files a repo may hold. */
+const REPO_SETTINGS = [
+  '.claude/settings.json',
+  '.claude/settings.local.json',
+  '.codex/config.toml',
+  '.codex/hooks.json',
+  '.cursor/hooks.json',
+];
+
 /**
  * Prepares the sandbox that locks a run to its section: writes inside the repo only to the section, to what the
  * repo ignores, and to the temporary files an editor writes beside a file before renaming it over the file (Claude
  * Code's Edit tool does); no tracked file outside the section, even one that matches an ignore rule; nothing that runs
- * later outside the sandbox (runLater); and no reading the bridge's own token. Asynchronous: in a repo the size of
+ * later outside the sandbox (runLater, REPO_SETTINGS); and no reading the bridge's own token. Asynchronous: in a repo the size of
  * llvm, git's listings take a second.
  */
 export async function prepareSandbox(run) {
@@ -167,7 +187,8 @@ export async function prepareSandbox(run) {
       allow.push(add('subpath', abs.replace(/\/$/, '')));
       inSection.push(p => p.startsWith(e));
     } else {
-      allow.push(add('regex', `^${escape(abs)}[^/]*$`));
+      allow.push(add('literal', abs));
+      allow.push(add('regex', TEMP_BESIDE[run.agent](escape(path.dirname(abs)), escape(path.basename(abs)))));
       inSection.push(p => p === e);
     }
   }
@@ -182,15 +203,18 @@ export async function prepareSandbox(run) {
   ]);
   for (const p of ignored.split('\0').filter(Boolean))
     allow.push(add(p.endsWith('/') ? 'subpath' : 'literal', path.join(real, p).replace(/\/$/, '')));
-  // Tracked files the allows above would reach: one named like a file in the section, or one an ignore pattern
-  // matches though it is committed. Matched here in one pass; git's own matching takes seconds in llvm.
-  const files = run.scope.map(s => scopeEntry(s).path).filter(e => !e.endsWith('/'));
+  // Tracked files an ignore pattern matches though they are committed. Matched here in one pass; git's own matching
+  // takes seconds in llvm.
   const ignoredRx = patterns.length ? new RegExp(patterns.join('|')) : null;
   for (const p of tracked.split('\0'))
-    if (p && !inSection.some(f => f(p)) && (files.some(f => p.startsWith(f)) || ignoredRx?.test(path.join(real, p))))
+    if (p && !inSection.some(f => f(p)) && ignoredRx?.test(path.join(real, p)))
       deny.push(add('literal', path.join(real, p)));
   for (const [kind, p] of runLater(gitDir.trim(), path.resolve(real, commonDir.trim())))
     deny.push(add(kind, realish(p)));
+  // In the repo, though git ignores them: the bridge's own folder, and the agents' settings and hooks for this repo,
+  // which later sessions run outside the sandbox. Writable only when the section holds them.
+  deny.push(add('subpath', path.join(real, '.loa')));
+  for (const p of REPO_SETTINGS) if (!inSection.some(f => f(p))) deny.push(add('literal', path.join(real, p)));
   const token = add('literal', path.join(real, '.loa/bridge.json'));
   const profile = [
     '(version 1)',

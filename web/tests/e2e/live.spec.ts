@@ -1741,6 +1741,59 @@ test.describe('sessions at once', () => {
       }),
   );
 
+  onMac(
+    'on a file section, a session writes that file and nothing new beside it: no file named like it, no new file elsewhere',
+    () =>
+      twoSessions(async (b, repo) => {
+        const cmd = [
+          "printf 'x\\n' >> shared/allowlist.ts",
+          "printf 'n' > shared/allowlist.tsx",
+          "printf 'n' > shared/allowlist.ts.bak",
+          "printf 'n' > shared/new.ts",
+          "printf 'n' > brand-new.ts",
+          "printf 'n' > shared/allowlist.ts.tmp.4242.a1b2c3d4e5f6",
+          // Hermes writes its temporary file beside the file, then renames it over the file.
+          "printf 'y\\n' > shared/.hermes-tmp.Ab12Cd && mv shared/.hermes-tmp.Ab12Cd shared/allowlist.ts",
+        ].join('; ');
+        const h = (await start(b, ['shared/allowlist.ts'], `exec: ${cmd}`)).body as unknown as RunDTO;
+        await until(b, h.id, 'done');
+        expect(fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8')).toBe('y\n');
+        const refused = ['allowlist.tsx', 'allowlist.ts.bak', 'allowlist.ts.tmp.4242.a1b2c3d4e5f6', 'new.ts'];
+        for (const p of [...refused.map(f => `shared/${f}`), 'brand-new.ts'])
+          expect(fs.existsSync(path.join(repo, p)), p).toBe(false);
+      }),
+  );
+
+  onMac(
+    "a session can't widen its own lock: not through an ignore file, the bridge's folder, or the repo's agent settings",
+    () =>
+      twoSessions(async (b, repo) => {
+        fs.writeFileSync(path.join(repo, '.gitignore'), 'dist/\n');
+        git(repo, 'add', '.gitignore');
+        git(repo, '-c', 'user.name=t', '-c', 'user.email=t@e.t', 'commit', '-qm', 'ignore');
+        const cmd = [
+          "printf 'apps/\\n' >> .gitignore",
+          "printf 'apps/\\n' >> .git/info/exclude",
+          "printf 'n' > apps/new.ts",
+          "printf 'x' > .loa/planted.json",
+          "mkdir -p .claude && printf '{}' > .claude/settings.local.json",
+          "mkdir -p .codex && printf 'x' > .codex/config.toml",
+          "mkdir -p .cursor && printf '{}' > .cursor/hooks.json",
+        ].join('; ');
+        const settings = path.join(repo, '.claude/settings.local.json');
+        const before = fs.existsSync(settings) ? fs.readFileSync(settings, 'utf8') : null;
+        const h = (await start(b, ['shared/'], `exec: ${cmd}`)).body as unknown as RunDTO;
+        await until(b, h.id, 'done');
+        expect(fs.readFileSync(path.join(repo, '.gitignore'), 'utf8')).toBe('dist/\n');
+        expect(fs.readFileSync(path.join(repo, '.git/info/exclude'), 'utf8')).not.toContain('apps/');
+        expect(fs.existsSync(path.join(repo, 'apps/new.ts'))).toBe(false);
+        expect(fs.existsSync(path.join(repo, '.loa/planted.json'))).toBe(false);
+        expect(fs.existsSync(settings) ? fs.readFileSync(settings, 'utf8') : null).toBe(before);
+        expect(fs.existsSync(path.join(repo, '.codex/config.toml'))).toBe(false);
+        expect(fs.existsSync(path.join(repo, '.cursor/hooks.json'))).toBe(false);
+      }),
+  );
+
   onMac("in a worktree, a session can't write the repo's git folder outside it", async () => {
     const main = makeRepo(),
       wt = path.join(path.dirname(main), 'wt');
