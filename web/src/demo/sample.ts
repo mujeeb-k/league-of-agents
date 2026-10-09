@@ -9,7 +9,7 @@ import type { SampleRunDef, TreeSpec } from '../lib/types';
 export const SAMPLE_REPO = 'relay';
 export const SAMPLE_BRANCH = 'main';
 /** Agents offered in demo mode. Only agents the bridge can run. */
-export const DEMO_AGENTS = ['claude', 'cursor', 'codex'];
+export const DEMO_AGENTS = ['claude', 'hermes', 'cursor', 'codex'];
 /** The agents the demo shows kept inside their selection, as macOS's sandbox keeps them (bridge/lib/sandbox.mjs). */
 export const DEMO_STAYS = ['claude', 'hermes'];
 
@@ -223,7 +223,7 @@ export const SAMPLE_RUNS: SampleRunDef[] = [
   },
   {
     id: 17,
-    agent: 'cursor',
+    agent: 'hermes',
     title: "Cap each tenant's retries at 12",
     scope: ['server/delivery/tenant-config.ts'],
     when: 'Just now',

@@ -80,7 +80,7 @@ test('the first view: the latest run and the three sessions at work around it, e
     for (const p of ['server/delivery/endpoint-health.ts', 'server/delivery/retry/backoff.ts'])
       await expect(page.locator(`.fr[data-path="${p}"]`)).toBeInViewport();
     const zones = page.locator('#sels .zone');
-    await expect(zones.locator('b')).toHaveText(['Run 15 · Claude Code', 'Run 16 · Codex', 'Run 17 · Cursor']);
+    await expect(zones.locator('b')).toHaveText(['Run 15 · Claude Code', 'Run 16 · Codex', 'Run 17 · Hermes']);
     for (let i = 0; i < 3; i++) await expect(zones.nth(i)).toBeInViewport({ ratio: 0.9 });
     // Fit everything still shows the whole map.
     await page.keyboard.press('0');
@@ -626,7 +626,7 @@ test('agent menu opens, picks, and closes on outside click and Escape', async ({
   await expect(menu).toBeHidden();
   await page.locator('#agentBtn').click();
   await expect(menu).toBeVisible();
-  await expect(menu.locator('[data-agent]')).toHaveText(['Claude Code', 'CursorBeta', 'CodexBeta']);
+  await expect(menu.locator('[data-agent]')).toHaveText(['Claude Code', 'Hermes', 'CursorBeta', 'CodexBeta']);
   await menu.locator('[data-agent="codex"]').click();
   await expect(menu).toBeHidden();
   await expect(page.locator('#agentBtn')).toHaveText('Codex');
@@ -694,7 +694,7 @@ test('several sections and ⌘↵ start a session on each, drawn in its own colo
   await expect(page.locator('#sels .zone b')).toHaveText([
     'Run 15 · Claude Code',
     'Run 16 · Codex',
-    'Run 17 · Cursor',
+    'Run 17 · Hermes',
     'Run 18 · Claude Code',
     'Run 19 · Claude Code',
   ]);
@@ -991,7 +991,7 @@ test('the demo opens on three sessions at work; they finish one by one, the firs
   await page.goto('/');
   await page.locator('#insp section').first().waitFor();
   const zones = page.locator('#sels .zone b');
-  await expect(zones).toHaveText(['Run 15 · Claude Code', 'Run 16 · Codex', 'Run 17 · Cursor']);
+  await expect(zones).toHaveText(['Run 15 · Claude Code', 'Run 16 · Codex', 'Run 17 · Hermes']);
   await expect(page.locator('#runbar b')).toHaveText('Run 14');
   await showSidebar(page);
   await page.locator('[data-tab="runs"]').click();
@@ -1002,7 +1002,7 @@ test('the demo opens on three sessions at work; they finish one by one, the firs
   await expect(page.locator('#runbar b')).toHaveText('Run 15');
   await expect(page.locator('[data-mode="diff"]')).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('.flist li .p')).toHaveText(['sign-request.ts', 'dispatch.ts']);
-  await expect(zones).toHaveText(['Run 16 · Codex', 'Run 17 · Cursor']);
+  await expect(zones).toHaveText(['Run 16 · Codex', 'Run 17 · Hermes']);
   // The others end beside it: listed as done, and the view stays on run 15.
   await page.clock.runFor(9500);
   await expect(page.locator('#sideList .run.running')).toHaveCount(0);

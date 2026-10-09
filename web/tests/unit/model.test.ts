@@ -56,7 +56,7 @@ describe('demo sample', () => {
   it('has the shape of the demo sample: 23 files, 3 runs, then 3 sessions at work', () => {
     expect(files).toHaveLength(23);
     expect(SAMPLE_RUNS.filter(r => !r.working)).toHaveLength(3);
-    expect(SAMPLE_RUNS.filter(r => r.working).map(r => r.agent)).toEqual(['claude', 'codex', 'cursor']);
+    expect(SAMPLE_RUNS.filter(r => r.working).map(r => r.agent)).toEqual(['claude', 'codex', 'hermes']);
   });
   it('only deletes lines that exist', () => {
     for (const r of SAMPLE_RUNS)
