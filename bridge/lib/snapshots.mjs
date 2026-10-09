@@ -1,8 +1,9 @@
 // Snapshots: the working tree as private git commits, pinned under refs/loa/; never your branch or staging.
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { splitLines } from './util.mjs';
-import { LOA, gitAsync } from './repo.mjs';
+import { IGNORE, LOA, ROOT, excludeFile, gitAsync } from './repo.mjs';
 import { SKIP } from './files.mjs';
 
 const snapIndex = () => path.join(LOA, 'snapshot.index');
@@ -75,6 +76,58 @@ export async function writeTree(fresh = false, paths = /** @type {string[] | nul
   if (untrackedSecrets.length)
     await gitAsync(['rm', '--cached', '-q', '--ignore-unmatch', '--', ...untrackedSecrets], { env });
   return (await gitAsync(['write-tree'], { env })).trim();
+}
+const keyFile = () => path.join(LOA, 'snapshot.key');
+/**
+ * What the snapshot index holds besides the files' own content: HEAD, and every rule that says what git ignores. A
+ * file once snapshotted stays in the index until it is started again from HEAD, even once ignored, so the index is
+ * kept only while these are as they were.
+ */
+async function indexKey() {
+  const [head, ignores, own] = await Promise.all([
+    headNow(),
+    gitAsync(['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', ':(glob)**/.gitignore']),
+    gitAsync(['config', '--path', 'core.excludesFile']).catch(() => ''),
+  ]);
+  const files = [
+    ...ignores
+      .split('\0')
+      .filter(Boolean)
+      .map(f => path.join(ROOT, f)),
+    excludeFile(),
+    own.trim(),
+  ];
+  const h = crypto.createHash('sha1').update(`${head.commit}\0${JSON.stringify(IGNORE)}`);
+  for (const f of files.filter(Boolean)) {
+    h.update(`\0${f}\0`);
+    try {
+      h.update(fs.readFileSync(f));
+    } catch {}
+  }
+  return h.digest('hex');
+}
+/**
+ * Readies the snapshot index for a start's first snapshot, so git hashes only what changed: the index kept from the
+ * last start while its key holds; on the first start, a copy of git's own index, whose tracked files git already
+ * hashed. A split or sparse index can't be copied: then it starts from HEAD, as before.
+ */
+export async function startIndex() {
+  const key = await indexKey();
+  let kept = '';
+  try {
+    kept = fs.readFileSync(keyFile(), 'utf8');
+  } catch {}
+  if (kept !== key || !fs.existsSync(snapIndex())) {
+    fs.rmSync(snapIndex(), { force: true });
+    const [split, sparse, own] = await Promise.all([
+      gitAsync(['config', '--bool', 'core.splitIndex']).catch(() => ''),
+      gitAsync(['config', '--bool', 'index.sparse']).catch(() => ''),
+      gitAsync(['rev-parse', '--path-format=absolute', '--git-path', 'index']),
+    ]);
+    if (split.trim() !== 'true' && sparse.trim() !== 'true' && fs.existsSync(own.trim()))
+      fs.copyFileSync(own.trim(), snapIndex());
+  }
+  fs.writeFileSync(keyFile(), key);
 }
 /** A commit of the tree on top of HEAD, reachable only from the refs it is pinned to. */
 export async function commitTree(tree, label, head) {

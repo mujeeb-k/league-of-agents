@@ -9,7 +9,7 @@ import { logError, serial } from './util.mjs';
 import { HOOK_AGENT } from './hook.mjs';
 import { ROOT, CONFIG_FILE, gitAsync } from './repo.mjs';
 import { SKIP } from './files.mjs';
-import { writeTree, commitTree, headNow, pin, computeChanges } from './snapshots.mjs';
+import { writeTree, commitTree, headNow, pin, computeChanges, startIndex } from './snapshots.mjs';
 import { runs, working, newRun, finishRun } from './runs.mjs';
 import { emit } from './events.mjs';
 
@@ -116,7 +116,10 @@ function watchFailed(e) {
 }
 /** Takes the first baseline, then watches. The bridge starts listening only once the baseline exists. */
 export async function watch() {
-  await serial(() => rebase(true));
+  await serial(async () => {
+    await startIndex();
+    await rebase();
+  });
   try {
     const watcher = fs.watch(ROOT, { recursive: true }, (_, f) => {
       const p = f ? String(f).split(path.sep).join('/') : '';

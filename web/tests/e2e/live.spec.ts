@@ -906,6 +906,56 @@ async function answered(b: Bridge, id: number, allow: boolean) {
   return now();
 }
 
+test("a start's first snapshot: from git's own index the first time, the same tree as from scratch; kept after, unless an ignore rule changed", async () => {
+  const repo = makeRepo();
+  const put = (p: string, text: string) => {
+    fs.mkdirSync(path.dirname(path.join(repo, p)), { recursive: true });
+    fs.writeFileSync(path.join(repo, p), text);
+  };
+  // Staged and unstaged edits, a new file, an ignored one, an untracked secret and a tracked template.
+  put('.gitignore', 'dist/\n');
+  put('.env.example', 'KEY=\n');
+  git(repo, 'add', '-A');
+  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@e.t', 'commit', '-qm', 'seed');
+  put('shared/log.ts', 'staged\n');
+  git(repo, 'add', 'shared/log.ts');
+  put('shared/log.ts', 'staged, then changed\n');
+  put('apps/new.ts', 'new\n');
+  put('dist/out.js', 'built\n');
+  put('.env', 'SECRET=1\n');
+  put('out/x.log', 'log\n');
+  // The tree as git would snapshot it from scratch: HEAD, then everything but ignored files and untracked secrets.
+  const scratch = path.join(path.dirname(repo), 'scratch.index');
+  const env = { ...process.env, GIT_INDEX_FILE: scratch };
+  execFileSync('git', ['read-tree', 'HEAD'], { cwd: repo, env });
+  execFileSync('git', ['add', '-A'], { cwd: repo, env });
+  execFileSync('git', ['rm', '--cached', '-q', '.env'], { cwd: repo, env });
+  const expected = execFileSync('git', ['write-tree'], { cwd: repo, env, encoding: 'utf8' }).trim();
+  const beforeOf = async (b: Bridge) => {
+    const r = await runToEnd(b, { agent: 'claude', prompt: 'Probe', scope: [], resumeFrom: null });
+    return git(repo, 'rev-parse', `refs/loa/runs/${r.id}/before^{tree}`).trim();
+  };
+  let b = await startBridge(repo, FAKE_CLAUDE);
+  try {
+    expect(await beforeOf(b)).toBe(expected);
+  } finally {
+    b.stop();
+  }
+  // A rule now ignores a file the kept index holds: the next start begins again, and leaves it out.
+  put('.gitignore', 'dist/\nout/\n');
+  git(repo, 'add', '.gitignore');
+  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@e.t', 'commit', '-qm', 'ignore out');
+  b = await startBridge(repo, FAKE_CLAUDE);
+  try {
+    const tree = await beforeOf(b);
+    expect(git(repo, 'ls-tree', '-r', '--name-only', tree)).not.toContain('out/x.log');
+    expect(git(repo, 'ls-tree', '-r', '--name-only', tree)).toContain('apps/new.ts');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('bridge keeps deny rules, records raw agent output, and keeps secret files out of snapshots', async () => {
   const repo = makeRepo();
   // Untracked files whose names usually hold secrets, at the top and deeper down.
