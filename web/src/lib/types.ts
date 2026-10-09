@@ -124,6 +124,8 @@ export interface Run {
   waiting?: 'done' | 'failed' | null;
   /** On a section: whether the system kept it inside. */
   stays?: boolean;
+  /** A shell command of it tried to write outside its section, and the sandbox refused. */
+  commandBlocked?: boolean;
   startedAt?: number;
   endedAt?: number | null;
 }

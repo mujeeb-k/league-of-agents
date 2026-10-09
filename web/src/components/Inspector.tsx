@@ -299,7 +299,11 @@ function RunView({ run }: { run: Run }) {
                       {k.label}
                     </b>
                     <span className="min-w-0 leading-[18px] [overflow-wrap:anywhere]">
-                      {e.file ? t('Tried to change {file}. Blocked.', { file: e.file }) : e.text}
+                      {e.file
+                        ? t('Tried to change {file}. Blocked.', { file: e.file })
+                        : e.say === 'command-blocked'
+                          ? t('A command tried to write outside your selection. Blocked.')
+                          : e.text}
                     </span>
                   </li>
                 );

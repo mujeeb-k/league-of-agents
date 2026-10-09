@@ -3,7 +3,7 @@ import path from 'node:path';
 import { VERSION } from '../paths.mjs';
 import { inScope } from '../scope.mjs';
 import { ROOT } from '../repo.mjs';
-import { blocked, push } from '../runs.mjs';
+import { blocked, commandBlocked, push } from '../runs.mjs';
 import { lockOfRun } from '../sandbox.mjs';
 import { emit } from '../events.mjs';
 import { noteLines } from './lines.mjs';
@@ -94,10 +94,12 @@ function startAcp(run, prompt, name, command, env) {
       const tool = { ...calls.get(u.toolCallId), ...u };
       calls.set(u.toolCallId, tool);
       if (tool.kind === 'edit') noteEdit(u.toolCallId, { content: u.content });
+      // A command whose write the sandbox refused, failed or not (Hermes's terminal tool, DeepSeek Harness's bash).
+      else if (!isEdit(tool) && lockOfRun(run) === 'sandbox' && refusedWrite(textOf(u), true)) commandBlocked(run);
       // DeepSeek Harness's edit or write, done without asking (its full-access mode, in the sandbox): its arguments.
       else if (isEdit(tool) && u.status === 'completed') noteEdit(u.toolCallId, tool);
       if (u.status === 'failed') {
-        const said = (u.content || []).map(c => c?.content?.text || '').join(' ');
+        const said = textOf(u);
         const outside = isEdit(tool) ? filesOf(tool).filter(f => run.scope?.length && !inScope(run.scope, f)) : [];
         // DeepSeek Harness's read-only mode denies each write until it asks (dsh-sandbox-policy): expected.
         if (/\[sandbox: file access denied/.test(said))
@@ -180,6 +182,8 @@ function startAcp(run, prompt, name, command, env) {
     done,
   };
 }
+/** What a tool call update says: the text of its content. */
+const textOf = u => (u.content || []).map(c => c?.content?.text || '').join(' ');
 /** An edit: a call of kind "edit" (Hermes), or DeepSeek Harness's edit or write tool, sent as kind "other". */
 const isEdit = tool => tool.kind === 'edit' || (tool.kind === 'other' && ['edit', 'write'].includes(tool.title));
 /**

@@ -8,6 +8,8 @@ export interface StreamEntry {
   text: string;
   /** A write refused outside the section: the file, worded by the app (bridges from 0.2.0). */
   file?: string;
+  /** What the entry says, worded by the app (bridges from 0.2.0): 'command-blocked'. */
+  say?: string;
 }
 
 /**
@@ -103,6 +105,8 @@ export interface RunDTO {
   waiting?: 'done' | 'failed' | null;
   /** On a section: whether the system kept it inside, as AgentInfo.stays said when it started. */
   stays?: boolean;
+  /** A shell command of it tried to write outside its section, and the sandbox refused. */
+  commandBlocked?: boolean;
 }
 
 /** Claude Code's verdict on its last turn (post_turn_summary): completed or blocked, and what it needs. */

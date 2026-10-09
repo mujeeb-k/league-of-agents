@@ -110,6 +110,12 @@ if (shells.length) {
         failed = e.code;
       }
     const told = refused ?? failed ?? runHooks('PostToolUse', payload);
+    // The command's result, as Claude Code's Bash tool returns it: the shell's own error when the write failed.
+    const content = failed ? `Exit code 1\n(eval):1: operation not permitted: ${file}` : '';
+    out({
+      type: 'user',
+      message: { content: [{ type: 'tool_result', tool_use_id: payload.tool_use_id, is_error: !!failed, content }] },
+    });
     results.push(told ? `${file}: ${told}` : `${file}: written`);
   }
   out({ type: 'result', result: results.join('\n'), session_id: 'sess-123', total_cost_usd: 0.0123 });

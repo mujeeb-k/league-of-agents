@@ -182,6 +182,17 @@ export function blocked(run, file) {
   saveRun(run);
   emitRun(run);
 }
+/**
+ * A shell command the sandbox refused a write outside the section. It names no file reliably, so nothing is asked:
+ * the run says so, once.
+ */
+export function commandBlocked(run) {
+  if (run.commandBlocked) return;
+  run.commandBlocked = true;
+  push(run, { t: 'deny', text: 'A command tried to write outside the selection. Blocked.', say: 'command-blocked' });
+  saveRun(run);
+  emitRun(run);
+}
 export function push(run, entry) {
   run.stream.push(entry);
   if (run.stream.length > 400) run.stream.splice(0, run.stream.length - 400);

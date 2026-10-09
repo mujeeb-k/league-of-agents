@@ -217,6 +217,11 @@ function RunRow({ r }: { r: Run }) {
           <p className="reach mt-1 text-xs text-muted-foreground text-pretty">{reachOf(r.stays)}</p>
         ) : null}
         {running ? <Asks r={r} /> : null}
+        {r.commandBlocked ? (
+          <p className="blocked mt-1 text-xs text-ink2 text-pretty">
+            {t('A command tried to write outside your selection. Blocked.')}
+          </p>
+        ) : null}
         {running ? null : (
           <>
             {/* One line per idea: what changed, then tags that never break inside. */}

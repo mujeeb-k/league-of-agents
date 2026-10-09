@@ -1652,6 +1652,9 @@ test.describe('sessions at once', () => {
         // Refused by the system: never written, so nothing to put back.
         expect(run.summary).toContain('notes.md: EPERM');
         expect(run.summary).toContain('apps/console/main.ts: EPERM');
+        // A command's write names no file to ask about: said once, plainly.
+        expect(run.commandBlocked).toBe(true);
+        expect(run.stream.filter(e => e.say === 'command-blocked')).toHaveLength(1);
         expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
         expect(fs.readFileSync(path.join(repo, 'apps/console/main.ts'), 'utf8')).toBe(SEED['apps/console/main.ts']);
         expect(run.putBack).toBeUndefined();
@@ -1682,6 +1685,11 @@ test.describe('sessions at once', () => {
       expect(fs.readFileSync(path.join(repo, 'dist/out.js'), 'utf8')).toBe('b');
       expect(fs.readFileSync(path.join(repo, 'debug.log'), 'utf8')).toBe('l');
       expect((await runOf(b, h.id)).summary).toContain('Operation not permitted');
+      expect((await runOf(b, h.id)).commandBlocked).toBe(true);
+      // Inside its section only: nothing blocked, nothing said.
+      const inside = (await start(b, ['shared/'], "exec: printf 'y\\n' >> shared/log.ts")).body as unknown as RunDTO;
+      await until(b, inside.id, 'done');
+      expect((await runOf(b, inside.id)).commandBlocked).toBeUndefined();
     }),
   );
 
@@ -2424,6 +2432,21 @@ test.describe('sessions at once, in the app', () => {
       const after = (await call(b, '/api/state')).body as unknown as StateResponse;
       expect(after.runs.find(r => r.id === 3)!.scope).toEqual(['shared/']);
     }));
+
+  onMac(
+    'a command that tried to write outside the selection says so on the card, while it works and after',
+    async ({ page }) =>
+      withHermes(page, async repo => {
+        await folder(page, 'shared').click();
+        await run(page, 'exec: printf n > notes.md\nedit:shared/log.ts wait:a');
+        const line = page.locator('#sideList [data-run="1"] .blocked');
+        await expect(line).toHaveText('A command tried to write outside your selection. Blocked.', { timeout: 15_000 });
+        go(repo, 'a');
+        await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+        await expect(line).toHaveText('A command tried to write outside your selection. Blocked.');
+        expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
+      }),
+  );
 
   test('several sections and one prompt start a session on each; sections that overlap start none', async ({ page }) =>
     withHermes(page, async (repo, b) => {

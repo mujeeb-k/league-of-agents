@@ -545,5 +545,7 @@ const catalogue: Catalogue = {
   'Run {id} is working on {path}. Allow it once that run ends.':
     'Run {id} is working on {path}. Allow it once that run ends.',
   'That was already answered.': 'That was already answered.',
+  'A command tried to write outside your selection. Blocked.':
+    'A command tried to write outside your selection. Blocked.',
 };
 export default catalogue;

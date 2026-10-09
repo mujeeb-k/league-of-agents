@@ -146,8 +146,22 @@ async function turn(sessionId, text) {
       ? fs.readFileSync('../fake-acp.later', 'utf8')
       : /\bexec: (.+)$/m.exec(text)?.[1];
   if (exec) {
+    // Told as Hermes tells its terminal tool: the call, then its output.
+    update(sessionId, {
+      sessionUpdate: 'tool_call',
+      toolCallId: 'exec-1',
+      title: `terminal: ${exec}`,
+      kind: 'execute',
+    });
     const r = spawnSync('sh', ['-c', exec], { encoding: 'utf8' });
-    say(sessionId, `exit ${r.status}: ${(r.stdout + r.stderr).trim().split('\n').slice(-3).join(' | ')}`);
+    const output = (r.stdout + r.stderr).trim();
+    update(sessionId, {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 'exec-1',
+      status: 'completed',
+      content: [{ type: 'content', content: { type: 'text', text: output } }],
+    });
+    say(sessionId, `exit ${r.status}: ${output.split('\n').slice(-3).join(' | ')}`);
     if (!edits.length) return 'end_turn';
   }
   if (edits.length) {
