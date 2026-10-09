@@ -3,7 +3,7 @@ import { ChevronRight, Pin } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { flyAll, flyDir, flyFile } from '../lib/camera';
 import { agentOf } from '../lib/constants';
-import { drawMap } from '../lib/minimap';
+import { drawMap, filesPrint, footprintKey } from '../lib/minimap';
 import { fileKind } from '../lib/fileKind';
 import { dirStat, existsNow, fileStat, needsYou, runStats } from '../lib/model';
 import type { DirNode, Run, Tab } from '../lib/types';
@@ -362,13 +362,14 @@ function RunList() {
   const rev = useRegion('side');
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
-    ref.current!.querySelectorAll<HTMLCanvasElement>('canvas[data-fp]').forEach(cv =>
-      drawMap(
-        cv,
-        S.RUNS.find(r => r.id === +(cv.dataset.fp ?? '')),
-        false,
-      ),
-    );
+    const at = filesPrint();
+    ref.current!.querySelectorAll<HTMLCanvasElement>('canvas[data-fp]').forEach(cv => {
+      const run = S.RUNS.find(r => r.id === +(cv.dataset.fp ?? ''));
+      const key = footprintKey(cv, run, at);
+      if (cv.dataset.drawn === key) return;
+      cv.dataset.drawn = key;
+      drawMap(cv, run);
+    });
   }, [rev]);
   useEffect(() => {
     const el = ref.current!;

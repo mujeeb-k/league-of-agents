@@ -16,12 +16,21 @@ const depth = (d: DirNode) => (d.path ? d.path.split('/').length : 0);
 /** The inset of an overview label inside its block, on screen (05-canvas.css). */
 const INSET = 4;
 
+/** What the labels were last fitted to: the scale, and each folder's class, place and label, as fitted. */
+let fitted = '';
+const labelsNow = (els: Iterable<HTMLElement>) =>
+  [st.v.s, ...[...els].map(el => el.className + el.style.cssText + el.querySelector('.flabel')?.textContent)].join(
+    '\n',
+  );
+
 export function fitLabels() {
   if (!dom.world || !S.ROOT) return;
   const s = st.v.s,
     over = s < OVER;
   const els = new Map<string, HTMLElement>();
   for (const el of dom.world.querySelectorAll<HTMLElement>('.frame[data-dir]')) els.set(el.dataset.dir!, el);
+  // Measuring forces layout twice: skipped when nothing a label depends on changed since they were fitted.
+  if (labelsNow(els.values()) === fitted) return;
   const dirs = [...S.DIRMAP.values()].filter(d => els.has(d.path));
   const weight = new Map(dirs.map(d => [d, filesUnder(d).length]));
   dirs.sort((a, b) => depth(a) - depth(b) || weight.get(b)! - weight.get(a)!);
@@ -63,4 +72,5 @@ export function fitLabels() {
     placed.push(at(d, fit.size.w, fit.size.h));
     if (fit.cls) el.classList.add(fit.cls);
   }
+  fitted = labelsNow(els.values());
 }

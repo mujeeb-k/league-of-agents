@@ -112,6 +112,17 @@ export interface SceneData {
 }
 
 export let scene: SceneData | null = null;
+/** Each file's card as last built, with what it showed: reused while that is unchanged. */
+const cards = new Map<string, { key: string; card: CardData }>();
+/** The previous objects for the same files or folders where nothing in them changed, so memoized components skip them. */
+function same<T extends { path: string }>(prev: T[] | undefined, next: T[]): T[] {
+  if (!prev) return next;
+  const old = new Map(prev.map(p => [p.path, p]));
+  return next.map(n => {
+    const o = old.get(n.path);
+    return o && JSON.stringify(o) === JSON.stringify(n) ? o : n;
+  });
+}
 /** Each file's view when the scene was computed: a selection change reuses them. */
 let views = new Map<string, FileView>();
 
@@ -166,7 +177,6 @@ export function computeScene(): SceneData {
         'fr',
         v.kind ? 'k-' + v.kind : '',
         v.ghost ? 'ghost' : '',
-        run && !v.kind ? 'dim' : '',
         run && st.cur === f.path ? 'cur' : '',
         drafts.has(f.path) ? 'dirty' : '',
       ].join(' ');
@@ -188,7 +198,7 @@ export function computeScene(): SceneData {
       path: d.path,
       name: d.name,
       note: d.note,
-      cls: `frame${empty ? ' bare' : ''}${empty && !d.dirs.length ? ' leaf' : ''}${ds ? ' hot' : ''}${run && !ds ? ' dim' : ''}`,
+      cls: `frame${empty ? ' bare' : ''}${empty && !d.dirs.length ? ' leaf' : ''}${ds ? ' hot' : ''}`,
       x: d.x,
       y: d.y,
       w: d.w,
@@ -236,6 +246,22 @@ export function computeScene(): SceneData {
       used += h;
     }
     const rest = rows.length - start - slice.length + beyond;
+    const cls = [
+      'card',
+      drafts.has(f.path) ? 'dirty' : '',
+      v.kind ? 'k-' + v.kind : '',
+      run && st.cur === f.path ? 'cur' : '',
+    ].join(' ');
+    const from = run?.changes.get(f.path)?.renamedFrom?.split('/').pop() ?? null;
+    // A card that shows what it showed last time is the same object: memoized, it isn't highlighted or drawn again.
+    const key = byAuthor
+      ? null
+      : JSON.stringify([f.x, f.y, cls, from, v.kind && [v.a, v.d], start, rest, slice.map(r => [r.k, r.n, r.t, r.wd])]);
+    const cached = key && cards.get(f.path);
+    if (cached && cached.key === key) {
+      out.cards.push(cached.card);
+      continue;
+    }
     const ids = new Map<string, number>();
     const lineId = (k: RowKind, t: string) => {
       const base = k + '|' + t,
@@ -243,21 +269,15 @@ export function computeScene(): SceneData {
       ids.set(base, n + 1);
       return base + '|' + n;
     };
-    out.cards.push({
+    const card: CardData = {
       ghost: false,
       path: f.path,
       name: f.name,
       x: f.x,
       y: f.y,
-      cls: [
-        'card',
-        drafts.has(f.path) ? 'dirty' : '',
-        v.kind ? 'k-' + v.kind : '',
-        run && !v.kind ? 'dim' : '',
-        run && st.cur === f.path ? 'cur' : '',
-      ].join(' '),
+      cls,
       stat: v.kind ? { a: v.a!, d: v.d! } : null,
-      from: run?.changes.get(f.path)?.renamedFrom?.split('/').pop() ?? null,
+      from,
       above: start,
       rows: slice.map(r => ({
         id: lineId(r.k, r.t || ''),
@@ -271,8 +291,13 @@ export function computeScene(): SceneData {
       empty: !rows.length,
       imports: 0,
       usedBy: 0,
-    });
-
+    };
+    if (key) cards.set(f.path, { key, card });
+    out.cards.push(card);
+  }
+  for (const f of S.FILES.values()) {
+    const v = views.get(f.path)!;
+    if (!v.exists) continue;
     const outs = imports(f.path, v.lines);
     S.GRAPH.out.set(f.path, outs);
     for (const to of outs) {
@@ -280,11 +305,19 @@ export function computeScene(): SceneData {
       S.GRAPH.in.get(to)!.push(f.path);
     }
   }
-  for (const c of out.cards)
-    if (!c.ghost) {
-      c.imports = S.GRAPH.out.get(c.path)?.length ?? 0;
-      c.usedBy = S.GRAPH.in.get(c.path)?.length ?? 0;
-    }
+  // Import counts are set on a copy when they changed: a card handed to React is never changed in place.
+  out.cards = out.cards.map(c => {
+    if (c.ghost) return c;
+    const imports = S.GRAPH.out.get(c.path)?.length ?? 0,
+      usedBy = S.GRAPH.in.get(c.path)?.length ?? 0;
+    if (c.imports === imports && c.usedBy === usedBy) return c;
+    const copy = { ...c, imports, usedBy };
+    const cached = cards.get(c.path);
+    if (cached?.card === c) cached.card = copy;
+    return copy;
+  });
+  out.tiles = same(scene?.tiles, out.tiles);
+  out.frames = same(scene?.frames, out.frames);
   out.sels = selsOf();
   scene = out;
   return out;

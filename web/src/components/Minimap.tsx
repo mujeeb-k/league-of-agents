@@ -2,7 +2,7 @@
 import { Minus, Plus } from 'lucide-react';
 import { useEffect } from 'react';
 import { applyView, flyAll, viewCenter, zoomAt } from '../lib/camera';
-import { drawMap } from '../lib/minimap';
+import { mapGeometry } from '../lib/minimap';
 import { S, dom, st } from '../state/app';
 import { useRegion } from '../state/render';
 import { cn } from '@/lib/utils';
@@ -13,8 +13,7 @@ import { t } from '../i18n';
 function miniJump(e: PointerEvent) {
   const mini = dom.mini,
     r = mini.getBoundingClientRect(),
-    g = drawMap(mini, st.run, true);
-  if (!g) return;
+    g = mapGeometry(mini.clientWidth, mini.clientHeight, true);
   const wx = (e.clientX - r.left - g.ox) / g.k,
     wy = (e.clientY - r.top - g.oy) / g.k,
     s = st.v.s,

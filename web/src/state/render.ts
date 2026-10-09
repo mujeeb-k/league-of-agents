@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from 'react';
 import { drawMini } from '../lib/minimap';
 import { computeScene, reselect } from '../lib/scene';
+import { dom, st } from './app';
 
 export type Region =
   'scene' | 'top' | 'side' | 'composer' | 'inspector' | 'conn' | 'crumb' | 'dialog' | 'palette' | 'editor';
@@ -40,6 +41,9 @@ export function useRegion(r: Region): number {
 
 // Render entry points, one per region.
 export function renderScene() {
+  // With a run open, what it didn't change is dimmed by one attribute (05-canvas.css), so opening a run changes only
+  // the files it changed: the rest keep their objects and aren't drawn again.
+  dom.world?.toggleAttribute('data-run', !!st.run);
   computeScene();
   bump('scene');
   drawMini();

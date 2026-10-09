@@ -111,7 +111,6 @@ export interface Run {
   turn?: TurnSummary;
   startedAt?: number;
   endedAt?: number | null;
-  _flewTo?: boolean;
 }
 
 export interface Box {

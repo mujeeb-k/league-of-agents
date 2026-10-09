@@ -216,8 +216,14 @@ function applyState(s: StateResponse, first: boolean) {
   }
   S.RUNS = runs;
   S.WORKING = workingOf(s);
-  st.run = S.RUNS.find(r => r.id === (live.pendingSelect || keepRun)) || null;
-  if (live.pendingSelect && st.run) live.pendingSelect = null;
+  const wanted = S.RUNS.find(r => r.id === live.pendingSelect) ?? null;
+  // A session that just finished opens once the canvas has shown it finished (openFinished), not in the same frame.
+  const opening =
+    !first && wanted && wanted.status !== 'running' && wanted.changes.size && justFinished.has(wanted.id)
+      ? wanted
+      : null;
+  st.run = (opening ? null : wanted) ?? S.RUNS.find(r => r.id === keepRun) ?? null;
+  if (wanted) live.pendingSelect = null;
   st.sel = new Set(keepSel.filter(k => (k.startsWith('d:') ? S.DIRMAP.has(k.slice(2)) : S.FILES.has(k))));
   S.repoName = s.repo.name;
   S.repoRoot = s.repo.root;
@@ -229,19 +235,24 @@ function applyState(s: StateResponse, first: boolean) {
   if (first) {
     st.v = openingView();
     applyView(true);
-  } else if (
-    st.run &&
-    st.run.status !== 'running' &&
-    st.run._flewTo !== true &&
-    st.run.changes.size &&
-    justFinished.has(st.run.id)
-  ) {
-    st.run._flewTo = true;
-    justFinished.delete(st.run.id);
-    st.mode = 'diff';
-    renderAll();
-    flyRun(st.run);
-  }
+  } else if (opening) openFinished(opening, st.run);
+}
+
+/**
+ * Opens a run that just finished, in Diff, and flies to it: after the frame that shows the new state is painted, so
+ * that frame isn't held up by the open. Left alone if the person opened something else meanwhile.
+ */
+function openFinished(run: Run, was: Run | null) {
+  justFinished.delete(run.id);
+  requestAnimationFrame(() =>
+    setTimeout(() => {
+      if (st.run !== was || !S.RUNS.includes(run)) return;
+      st.run = run;
+      st.mode = 'diff';
+      renderAll();
+      flyRun(run);
+    }),
+  );
 }
 
 async function refresh() {
