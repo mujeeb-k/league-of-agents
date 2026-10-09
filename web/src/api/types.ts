@@ -78,6 +78,7 @@ export interface RunDTO {
    */
   putBack?: { path: string; ref: string; put: string | null; restored: boolean }[];
   committed?: { sha: string; at: number; files: string[] };
+  limited?: boolean;
   checksRunning?: boolean;
   turn?: TurnSummary;
 }

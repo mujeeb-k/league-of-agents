@@ -1,5 +1,5 @@
 // Sidebar: Files and Runs.
-import { ChevronRight, Pin } from 'lucide-react';
+import { ChevronRight, Pin, Square } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { flyAll, flyDir, flyFile } from '../lib/camera';
 import { agentOf } from '../lib/constants';
@@ -10,9 +10,10 @@ import type { DirNode, Run, Tab } from '../lib/types';
 import { S, dom, st } from '../state/app';
 import { drafts, openEditor } from '../state/editing';
 import { panels, setPinned, sideVisibleAt } from '../state/panels';
-import { selectRun, toggleSel } from '../state/actions';
+import { isOffline, runAction, selectRun, toggleSel } from '../state/actions';
+import { stopAll } from '../api/live';
 import { renderSel, renderSide, useRegion } from '../state/render';
-import { sessionColour, workingRuns } from '../state/sessions';
+import { endedAs, sessionColour, workingRuns } from '../state/sessions';
 import { cn } from '@/lib/utils';
 import { BetaTag, CheckBadge, Dot, Stat } from './bits';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
@@ -137,23 +138,13 @@ function tree(d: DirNode, depth: number): ReactNode[] {
   return h;
 }
 
-const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
-
 const tag = 'rounded px-2 text-[11px] leading-[18px] whitespace-nowrap';
 
 function RunRow({ r }: { r: Run }) {
   const s = runStats(r),
     a = agentOf(r.agent),
     running = r.status === 'running',
-    status = r.reverted
-      ? 'Reverted'
-      : r.status === 'failed' || r.status === 'cancelled' || r.status === 'interrupted'
-        ? cap(r.status)
-        : needsYou(r)
-          ? t('Needs you')
-          : r.kept
-            ? 'Kept'
-            : null;
+    status = r.reverted ? t('Reverted') : (endedAs(r) ?? (needsYou(r) ? t('Needs you') : r.kept ? t('Kept') : null));
   const putBack = r.putBack?.filter(k => !k.restored).length ?? 0;
   // A session at work is marked in the colour its section has on the map.
   const zone = running && workingRuns().includes(r) ? sessionColour(r) : null;
@@ -161,10 +152,10 @@ function RunRow({ r }: { r: Run }) {
     <div
       data-run={r.id}
       style={zone ? ({ '--zone': zone } as React.CSSProperties) : undefined}
-      role="button"
-      tabIndex={running ? -1 : 0}
-      aria-disabled={running || undefined}
-      aria-pressed={st.run === r}
+      // A run at work opens once it ends; until then its card isn't a control, and its stop button is.
+      role={running ? undefined : 'button'}
+      tabIndex={running ? undefined : 0}
+      aria-pressed={running ? undefined : st.run === r}
       onKeyDown={e => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         e.preventDefault();
@@ -172,7 +163,9 @@ function RunRow({ r }: { r: Run }) {
         e.currentTarget.click();
       }}
       className={cn(
-        'run grid cursor-pointer grid-cols-[64px_minmax(0,1fr)] gap-3 border-b px-3 py-2 transition-colors outline-none hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset active:bg-accent aria-disabled:cursor-default',
+        'run grid grid-cols-[64px_minmax(0,1fr)] gap-3 border-b px-3 py-2 transition-colors outline-none',
+        !running &&
+          'cursor-pointer hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset active:bg-accent',
         zone && 'shadow-[inset_3px_0_0_var(--zone)]',
         st.run === r && 'sel bg-sel-soft shadow-[inset_2px_0_0_var(--sel)] hover:bg-sel-soft',
         running && 'running',
@@ -188,6 +181,21 @@ function RunRow({ r }: { r: Run }) {
             {running ? t('{agent} is working', { agent: a.name }) : `${a.name} · ${r.when}`}
           </span>
           {a.beta ? <BetaTag /> : null}
+          {running && S.CONN ? (
+            <Tip label={t('Stop run {id}', { id: r.id })}>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                data-stop
+                aria-label={t('Stop run {id}', { id: r.id })}
+                disabled={isOffline()}
+                className="ml-auto text-ink2"
+                onClick={() => void runAction('cancel', r)}
+              >
+                <Square className="size-3 fill-current" />
+              </Button>
+            </Tip>
+          ) : null}
         </div>
         {running ? null : (
           <>
@@ -382,8 +390,24 @@ function RunList() {
     el.addEventListener('click', onClick);
     return () => el.removeEventListener('click', onClick);
   }, []);
+  const atWork = S.CONN ? workingRuns().length : 0;
   return (
     <div ref={ref}>
+      {atWork > 1 ? (
+        <div className="flex items-center gap-2 border-b px-3 py-2 text-xs text-muted-foreground">
+          <span>{tn(atWork, '{n} session at work', '{n} sessions at work')}</span>
+          <Button
+            id="stopAll"
+            variant="outline"
+            size="xs"
+            className="ml-auto"
+            disabled={isOffline()}
+            onClick={() => void stopAll()}
+          >
+            {t('Stop all')}
+          </Button>
+        </div>
+      ) : null}
       {S.RUNS.length ? (
         [...S.RUNS].reverse().map(r => <RunRow key={r.id} r={r} />)
       ) : (

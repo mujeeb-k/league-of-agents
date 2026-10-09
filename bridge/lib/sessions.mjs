@@ -67,12 +67,17 @@ export async function startSession(run, read = {}) {
   const finished = done
     .then(outcome => {
       fs.rmSync(scopeFile, { force: true });
+      if (outcome === 'failed' && limitedBy(run)) run.limited = true;
       return finishRun(run, ['cancelled', 'interrupted'].includes(run.status) ? run.status : outcome);
     })
     .catch(logError)
     .finally(() => sessions.delete(run.id));
   sessions.set(run.id, { cancel, finished });
 }
+/** What an agent says when its provider stopped it for its rate or usage limit: told apart from other failures. */
+const LIMITED = /\b429\b|rate[ _-]?limit|usage limit|quota exceeded|too many requests/i;
+const limitedBy = run =>
+  LIMITED.test([run.summary, ...run.stream.filter(e => e.t === 'err').map(e => e.text)].join('\n'));
 /** Stops a run's agent at the person's request; false when no agent is at work on it (a captured turn). */
 export function cancelSession(run) {
   const session = sessions.get(run.id);

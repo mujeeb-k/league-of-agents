@@ -1,5 +1,6 @@
 // User actions.
-import { bridge } from '../api/client';
+import { BridgeError, bridge } from '../api/client';
+import type { Conn, StartRunBody } from '../api/types';
 import { BY_CODE, explain } from '../api/errors';
 import { showConflict } from '../components/ConflictDialog';
 import { live, liveAction, saveLayoutSoon } from '../api/live';
@@ -14,7 +15,7 @@ import { SAMPLE_TEXT } from '../demo/sampleText';
 import { toast } from '../ui/toast';
 import { S, dom, st } from './app';
 import { checkSelection, ed, rangeScope, sending } from './editing';
-import { MAX_SESSIONS, opensOnFinish, workingRuns } from './sessions';
+import { MAX_SESSIONS, opensOnFinish, seen, workingRuns } from './sessions';
 import {
   renderAll,
   renderComposer,
@@ -28,6 +29,9 @@ import {
 import { locale, t, tn } from '../i18n';
 
 export function selectRun(run: Run | null, fly = true) {
+  // An ended session's mark on the map goes once its run is looked at: opened, or left after being open.
+  if (st.run && st.run !== run && st.run.status !== 'running') seen(st.run.id);
+  if (run) seen(run.id);
   st.run = run;
   st.cur = null;
   if (!run) st.mode = 'after';
@@ -248,67 +252,77 @@ function clearPrompt() {
   dom.prompt.style.height = 'auto';
 }
 
-export async function send() {
+/** Prompts go out one after another, each as it was when Enter was pressed: a second can be typed at once. */
+let sendQueue: Promise<void> = Promise.resolve();
+
+export function send(): Promise<void> {
   const v = dom.prompt.value.trim();
   if (isOffline()) {
     toast(t(OFFLINE));
-    return;
+    return sendQueue;
   }
-  if (!v) return;
+  if (!v) return sendQueue;
   const refused = clashOf(scopeFromSelection(), workingRuns());
   if (refused) {
     toast(clashText(refused));
-    return;
+    return sendQueue;
   }
   if (S.LIVE && S.CONN) {
-    const conn = S.CONN;
-    const fu = followTarget();
-    if (st.busy === 'send') return;
-    st.busy = 'send';
-    renderComposer();
-    try {
-      // Selected lines are checked against the file as it is now, and sent with their text.
-      const why = await checkSelection(conn);
-      if (why) {
-        toast(why);
-        return;
-      }
-      const scope = scopeFromSelection();
-      const held = rangeScope() && ed.path && ed.anchor ? { path: ed.path, anchor: ed.anchor } : null;
-      const lines = held ? { [held.path]: held.anchor.text.join('\n') } : undefined;
-      const context = held
+    // Taken as it is now: the prompt, the agent, the selection and the session it follows.
+    const held = rangeScope() && ed.path && ed.anchor ? { path: ed.path, anchor: ed.anchor } : null;
+    const body = {
+      agent: st.agent,
+      prompt: v,
+      scope: scopeFromSelection(),
+      resumeFrom: followTarget()?.id ?? null,
+      lines: held ? { [held.path]: held.anchor.text.join('\n') } : undefined,
+      context: held
         ? { [held.path]: { before: held.anchor.before, after: held.anchor.after, twin: held.anchor.twin } }
-        : undefined;
-      if (lines) sending();
-      const r = await bridge.startRun(conn, {
-        agent: st.agent,
-        prompt: v,
-        scope,
-        resumeFrom: fu ? fu.id : null,
-        lines,
-        context,
-      });
-      if (lines && ed.sent) ed.sent.id = r.id;
-      clearPrompt();
-      dom.prompt.blur();
-      live.pendingSelect = r.id;
-      st.tab = 'runs';
-      toast(t('{agent} started run {id}', { agent: agentOf(st.agent).name, id: r.id }));
-    } catch (e) {
-      ed.sent = null;
-      toast(explain(e));
-    } finally {
-      st.busy = null;
-      renderComposer();
-    }
-    return;
+        : undefined,
+    };
+    clearPrompt();
+    dom.prompt.blur();
+    const conn = S.CONN;
+    sendQueue = sendQueue.then(() => startLive(conn, body));
+    return sendQueue;
   }
   const run = simulateRun(v);
-  if (!run) return;
-  toast(t('{agent} started run {id}', { agent: agentOf(run.agent).name, id: run.id }));
-  clearPrompt();
-  dom.sendBtn.disabled = true;
-  dom.prompt.blur();
+  if (run) {
+    toast(t('{agent} started run {id}', { agent: agentOf(run.agent).name, id: run.id }));
+    clearPrompt();
+    dom.sendBtn.disabled = true;
+    dom.prompt.blur();
+  }
+  return sendQueue;
+}
+
+/** Starts a run on the bridge from a prompt taken at Enter. Refused, the prompt is put back, unless another was typed. */
+async function startLive(conn: Conn, body: StartRunBody) {
+  st.busy = 'send';
+  renderComposer();
+  try {
+    // Selected lines are checked against the file as it is now, and sent with their text.
+    if (body.lines) {
+      const why = await checkSelection(conn);
+      if (why) throw new Error(why);
+      sending();
+    }
+    const r = await bridge.startRun(conn, body);
+    if (body.lines && ed.sent) ed.sent.id = r.id;
+    live.pendingSelect = r.id;
+    st.tab = 'runs';
+    toast(t('{agent} started run {id}', { agent: agentOf(body.agent).name, id: r.id }));
+  } catch (e) {
+    ed.sent = null;
+    toast(e instanceof BridgeError ? explain(e) : e instanceof Error ? e.message : explain(e));
+    if (!dom.prompt.value.trim()) {
+      dom.prompt.value = body.prompt;
+      dom.prompt.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  } finally {
+    st.busy = null;
+    renderComposer();
+  }
 }
 
 /** Sections that can't run now, in words: whose they are, or which other picked section holds them. */

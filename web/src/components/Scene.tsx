@@ -5,6 +5,7 @@ import { CH, CW } from '../lib/constants';
 import type { Token } from '../lib/highlight';
 import { t, tn } from '../i18n';
 import type { Author } from '../lib/attribution';
+import { cn } from '@/lib/utils';
 import {
   scene,
   updateEdgeFocus,
@@ -156,7 +157,7 @@ const Sel = ({ s }: { s: SelBox }) => (
 /** A session's section, outlined in its colour. */
 const Zone = ({ z }: { z: ZoneBox }) => (
   <div
-    className={z.file ? 'zone f' : 'zone'}
+    className={cn('zone', z.file && 'f', z.ended && 'ended')}
     data-run={z.run}
     style={{ ...box(z.x, z.y, z.w, z.h), '--zone': z.colour } as React.CSSProperties}
   >

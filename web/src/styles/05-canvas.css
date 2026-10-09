@@ -486,6 +486,11 @@ em.n {
   border-radius: 2px;
   background: color-mix(in srgb, var(--zone) 5%, transparent);
 }
+/* A session that ended without finishing: its section is free; a quieter mark says how it ended. */
+.zone.ended {
+  outline-style: dotted;
+  background: none;
+}
 /* Above the top right corner: folder names sit at the top left, and the selection's size below. */
 .zone b {
   position: absolute;

@@ -492,5 +492,15 @@ const catalogue: Catalogue = {
   'Your git hooks stopped the commit:': 'Your git hooks stopped the commit:',
   'Your git hooks stopped the commit.': 'Your git hooks stopped the commit.',
   'Your branch moved while committing. Try again.': 'Your branch moved while committing. Try again.',
+  'Rate limited': 'Rate limited',
+  Failed: 'Failed',
+  Cancelled: 'Cancelled',
+  Interrupted: 'Interrupted',
+  Reverted: 'Reverted',
+  'Stop run {id}': 'Stop run {id}',
+  'Stop all': 'Stop all',
+  '{n} sessions at work': { one: '{n} session at work', other: '{n} sessions at work' },
+  'Stopped {n} sessions': { one: 'Stopped {n} session', other: 'Stopped {n} sessions' },
+  '{agent} hit its usage limit. Try again later.': '{agent} hit its usage limit. Try again later.',
 };
 export default catalogue;

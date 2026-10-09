@@ -10,7 +10,7 @@ import type { Run } from '../lib/types';
 import { t, tn } from '../i18n';
 import { fmtDur, relTime } from '../lib/util';
 import { S, st } from '../state/app';
-import { opensOnFinish } from '../state/sessions';
+import { noteEnded, opensOnFinish } from '../state/sessions';
 import { loadDemo } from '../state/actions';
 import { refreshEditor } from '../state/editing';
 import { bump, renderAll, renderCrumb, renderInspector, renderSide, setConnUI } from '../state/render';
@@ -161,11 +161,15 @@ const workingOf = (s: StateResponse) => s.working ?? (s.active ? [s.active] : []
 
 /**
  * A run started elsewhere is opened, and flown to when it finishes; a save from the editor is not, so the person
- * keeps their place. Nor is a session that ends while the person reviews another that worked beside it.
+ * keeps their place. Nor is a session that ends while the person reviews another that worked beside it, or one they
+ * stopped.
  */
 function followSessions(before: number[], now: number[], s: StateResponse) {
   const follow = (id: number) => s.runs.find(r => r.id === id)?.agent !== 'you';
-  const ended = s.runs.find(r => before.includes(r.id) && !now.includes(r.id) && follow(r.id));
+  // One the person stopped stays where it is: they're doing something else.
+  const ended = s.runs.find(
+    r => before.includes(r.id) && !now.includes(r.id) && follow(r.id) && r.status !== 'cancelled',
+  );
   const started = before.length ? undefined : now.find(follow);
   if (ended && opensOnFinish(ended)) {
     justFinished.add(ended.id);
@@ -305,6 +309,7 @@ async function poll() {
       if (needState || deltas.length) {
         const s = needState ? await bridge.state(conn()) : withDeltas(last!, deltas, r.seq);
         followSessions(S.WORKING, workingOf(s), s);
+        noteEnded(S.WORKING, workingOf(s), s.runs);
         applyState(s, false);
         S.EVSEQ = Math.max(S.EVSEQ, s.seq || 0);
       } else renderSide();
@@ -456,6 +461,18 @@ export async function liveAction(act: string, run: Run) {
     st.busy = null;
     renderInspector();
   }
+}
+
+/** Stops every session at work. */
+export async function stopAll() {
+  const ids = S.WORKING;
+  try {
+    await Promise.all(ids.map(id => bridge.cancel(conn(), id)));
+    toast(tn(ids.length, 'Stopped {n} session', 'Stopped {n} sessions'));
+  } catch (e) {
+    toast(explain(e));
+  }
+  queueRefresh();
 }
 
 /** Opens the commit dialog for a run, with what the bridge says would go in; null closes it. */

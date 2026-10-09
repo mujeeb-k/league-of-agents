@@ -21,6 +21,12 @@ if (loggedOut) {
 }
 // "shell:<path>" in the prompt: append a line to that file with a shell command instead of the usual edit, run between
 // the PreToolUse and PostToolUse hooks the repo's .claude/settings.local.json holds for Bash, as Claude Code runs them.
+// "ratelimit": the turn ends as Claude Code's does when the account hits its limit.
+if (/\bratelimit\b/.test(prompt)) {
+  const text = 'API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"Rate limited"}}';
+  out({ type: 'result', is_error: true, result: text, session_id: 'sess-123', total_cost_usd: 0 });
+  process.exit(1);
+}
 // "abuse": try the run's shell token on another route, as a session reaching past its hooks would.
 if (/\babuse\b/.test(prompt)) {
   const r = await fetch(`http://127.0.0.1:${process.env.LOA_BRIDGE_PORT}/api/save`, {

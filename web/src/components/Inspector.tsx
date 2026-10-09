@@ -233,6 +233,12 @@ function RunView({ run }: { run: Run }) {
             )}
           </div>
         )}
+        {run.limited ? (
+          <p className="problem mt-3 flex gap-2 text-ink2 text-pretty">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-mod" />
+            {t('{agent} hit its usage limit. Try again later.', { agent: a.name })}
+          </p>
+        ) : null}
       </Section>
       {detected ? (
         <Section>

@@ -103,6 +103,8 @@ export interface Run {
   outOfScope?: string[];
   /** Without a sandbox, files a shell command changed outside the section and the bridge put back (bridge/lib/shell.mjs). */
   putBack?: { path: string; restored: boolean }[];
+  /** Failed because the agent's provider stopped it at its rate or usage limit. */
+  limited?: boolean;
   /** The commit the person made of the run's files, from the app (bridge/lib/commit.mjs). */
   committed?: { sha: string; at: number; files: string[] };
   /** Files and folders (ending in /) the run was limited to. Empty means the whole repository. */

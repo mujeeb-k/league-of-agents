@@ -229,6 +229,8 @@ test('loading states: connecting, starting a run, and keep show progress and blo
     await page.locator('#prompt').press('Enter');
     await expect(page.locator('#sendBtn .spin')).toBeVisible();
     await expect(page.locator('#sendBtn')).toBeDisabled();
+    // The prompt is taken at once: the box is free for the next one while this one is sent.
+    await expect(page.locator('#prompt')).toHaveValue('');
     await expect(page.locator(TOAST)).toHaveText('Claude Code started run 1');
     await expect(page.locator('#sendBtn .spin')).toHaveCount(0);
 
@@ -638,7 +640,8 @@ test('cancel a running agent', async ({ page }) => {
     await page.locator('#prompt').press('Enter');
     await expect(page.locator('#sideList .run.running .m')).toHaveText('Claude Code is working');
     // A running run cannot be opened: its card is disabled, and a click does nothing.
-    await expect(page.locator('#sideList .run.running')).toHaveAttribute('aria-disabled', 'true');
+    await expect(page.locator('#sideList .run.running')).not.toHaveAttribute('role', 'button');
+    await expect(page.locator('#sideList .run.running [data-stop]')).toBeVisible();
     await page.locator('#sideList .run.running').click({ force: true });
     await expect(page.locator('#runbar b')).toHaveText('Run 1');
     await expect(page.locator('#insp .spin').first()).toBeVisible();
@@ -1888,6 +1891,52 @@ test.describe('sessions at once, in the app', () => {
       go(repo, 'c');
       await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
       await expect(zones).toHaveCount(0);
+    }));
+
+  test('stop one session or all; a stopped one shows so on its section and card, and frees its section', async ({
+    page,
+  }) =>
+    withHermes(page, async () => {
+      await folder(page, 'shared').click();
+      await run(page, 'edit:shared/log.ts wait:a');
+      await folder(page, 'apps').click();
+      await run(page, 'edit:apps/console/main.ts wait:c');
+      await expect(running(page)).toHaveCount(2);
+      await page.locator('#sideList [data-run="1"] [data-stop]').click();
+      await expect(page.locator('#sideList [data-run="1"] .tags')).toContainText('Cancelled', { timeout: 10_000 });
+      // Its section stays drawn, marked as ended, until the run is opened; it is free again.
+      await expect(page.locator('#sels .zone.ended b')).toHaveText('Run 1 · Hermes · Cancelled');
+      await expect(page.locator('#sels .zone:not(.ended) b')).toHaveText(['Run 2 · Hermes']);
+      await folder(page, 'shared').click();
+      await run(page, 'edit:shared/log.ts wait:b');
+      await expect(page.locator(TOAST)).toHaveText('Hermes started run 3');
+      await expect(page.locator('#sels .zone.ended')).toHaveCount(0);
+      // Several at work: all stop at once.
+      await page.locator('#stopAll').click();
+      await expect(running(page)).toHaveCount(0, { timeout: 10_000 });
+      await expect(page.locator('#sideList [data-run="2"] .tags')).toContainText('Cancelled');
+      await expect(page.locator('#sideList [data-run="3"] .tags')).toContainText('Cancelled');
+      await expect(page.locator('#sels .zone.ended b')).toHaveText([
+        'Run 2 · Hermes · Cancelled',
+        'Run 3 · Hermes · Cancelled',
+      ]);
+      // Looked at, the marks go: run 2 opened, run 3 (open as it ended) left.
+      await page.locator('#sideList [data-run="2"]').click();
+      await expect(page.locator('#runbar b')).toHaveText('Run 2');
+      await expect(page.locator('#sels .zone.ended')).toHaveCount(0);
+    }));
+
+  test('a session that hits its rate limit says so, on its section, its card and in the inspector', async ({ page }) =>
+    withHermes(page, async () => {
+      await page.locator('#agentBtn').click();
+      await page.locator('#agentMenu [data-agent="claude"]').click();
+      await folder(page, 'shared').click();
+      await run(page, 'ratelimit');
+      await expect(page.locator('#sideList [data-run="1"] .tags')).toContainText('Rate limited', { timeout: 10_000 });
+      await expect(page.locator('#sels .zone.ended b')).toHaveText('Run 1 · Claude Code · Rate limited');
+      // It opens as it ends.
+      await expect(page.locator('#runbar b')).toHaveText('Run 1');
+      await expect(page.locator('#insp .problem')).toHaveText('Claude Code hit its usage limit. Try again later.');
     }));
 
   test('a session finishing while another is reviewed leaves the view where it is', async ({ page }) =>

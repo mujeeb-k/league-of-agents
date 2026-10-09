@@ -1,5 +1,6 @@
 // Sessions at work: runs under way at the same time, each on a section of its own (lib/sections.ts).
 import type { Run } from '../lib/types';
+import { t } from '../i18n';
 import { S, st } from './app';
 
 /** Most sessions started at once from one prompt; each gets a colour of its own (theme.css, --session-1 to 5). */
@@ -37,3 +38,35 @@ export function workedTogether(a: Pick<Run, 'startedAt' | 'endedAt'>, b: Pick<Ru
  */
 export const opensOnFinish = (ended: Pick<Run, 'id' | 'startedAt' | 'endedAt'>) =>
   !st.run || st.run.id === ended.id || st.run.status === 'running' || !workedTogether(st.run, ended);
+
+/** How a run ended when it didn't finish its work, in words: null when it did. */
+export function endedAs(r: Pick<Run, 'status' | 'limited'>): string | null {
+  if (r.limited) return t('Rate limited');
+  if (r.status === 'failed') return t('Failed');
+  if (r.status === 'cancelled') return t('Cancelled');
+  if (r.status === 'interrupted') return t('Interrupted');
+  return null;
+}
+
+/**
+ * Sessions that ended without finishing (stopped, failed, rate limited): their sections stay drawn, marked so, until
+ * the run is opened or another session starts there. Their sections are free at once.
+ */
+export const ended = new Set<number>();
+/** Every session noted as ended: once its mark is gone, a later state event never brings it back. */
+const noted = new Set<number>();
+/** The person looked at a run: its mark goes, and isn't brought back by a state event that arrives later. */
+export function seen(id: number) {
+  noted.add(id);
+  ended.delete(id);
+}
+/** Notes the sessions that just stopped working and ended without finishing, from the runs as they are now. */
+export function noteEnded(before: number[], now: number[], runs: Pick<Run, 'id' | 'status' | 'limited'>[]) {
+  for (const id of before) {
+    const r = runs.find(x => x.id === id);
+    if (!now.includes(id) && r && endedAs(r) && !noted.has(id)) {
+      noted.add(id);
+      ended.add(id);
+    }
+  }
+}

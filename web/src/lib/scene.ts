@@ -9,8 +9,8 @@ import { importResolver } from './imports';
 import { LABEL } from './layout';
 import { drafts } from '../state/editing';
 import { union } from './camera';
-import { area } from './sections';
-import { sessionColour, workingRuns } from '../state/sessions';
+import { area, overlaps } from './sections';
+import { ended, endedAs, sessionColour, workingRuns } from '../state/sessions';
 import { obstacles, pathOf, route, type Rect } from './route';
 import { allDirs, dirStat, filesUnder, linesAt, viewOf } from './model';
 import type { DirNode, FileView, RowKind } from './types';
@@ -94,6 +94,8 @@ export interface SelBox {
 export interface ZoneBox {
   run: number;
   file: boolean;
+  /** A session that ended without finishing: its section, free again, marked with how it ended. */
+  ended: boolean;
   x: number;
   y: number;
   w: number;
@@ -361,15 +363,31 @@ const folderBox = (d: DirNode) =>
 /** The sections of the sessions at work: a box around each folder or file, the whole map for the repository. */
 function zonesOf(): ZoneBox[] {
   const out: ZoneBox[] = [];
-  for (const run of workingRuns()) {
-    const colour = sessionColour(run);
-    let label: string | null = t('Run {id} · {agent}', { id: run.id, agent: agentOf(run.agent).name });
+  const working = workingRuns();
+  // An ended session's mark goes once another session works on its section.
+  for (const id of ended) {
+    const r = S.RUNS.find(x => x.id === id);
+    if (!r || working.some(w => (w.scope ?? []).some(a => (r.scope ?? []).some(b => overlaps(a, b))))) ended.delete(id);
+  }
+  const shown = [...working, ...S.RUNS.filter(r => ended.has(r.id))];
+  for (const run of shown) {
+    const how = ended.has(run.id) ? endedAs(run) : null;
+    const colour = how ? 'var(--ink3)' : sessionColour(run);
+    const name = t('Run {id} · {agent}', { id: run.id, agent: agentOf(run.agent).name });
+    let label: string | null = how ? `${name} · ${how}` : name;
     for (const entry of run.scope?.length ? run.scope : ['/']) {
       const p = area(entry);
       const at = p.endsWith('/') ? S.DIRMAP.get(p.slice(0, -1)) : S.FILES.get(p);
       if (!at) continue;
       const file = at.type !== 'dir';
-      out.push({ run: run.id, file, colour, label, ...(file ? { x: at.x, y: at.y, w: CW, h: CH } : folderBox(at)) });
+      out.push({
+        run: run.id,
+        file,
+        ended: !!how,
+        colour,
+        label,
+        ...(file ? { x: at.x, y: at.y, w: CW, h: CH } : folderBox(at)),
+      });
       label = null;
     }
   }
