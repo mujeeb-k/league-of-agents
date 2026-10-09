@@ -6,7 +6,7 @@ import readline from 'node:readline/promises';
 import { spawn, execFileSync } from 'node:child_process';
 import { ENTRY } from './paths.mjs';
 import { readJson } from './util.mjs';
-import { argv, SITE, WEB_URL, APP_PATH } from './args.mjs';
+import { argv, opt, SITE, WEB_URL, APP_PATH } from './args.mjs';
 import { ROOT, LOA, bridgeFile, EXCLUDED, excludeFile, git } from './repo.mjs';
 import { CHECKS_FILE } from './checks.mjs';
 import { CLAUDE_FIX, claudeProblemNow } from './agents/claude.mjs';
@@ -28,16 +28,13 @@ function defaultBrowser() {
     'Library/Preferences/com.apple.LaunchServices/com.apple.launchservices.secure.plist',
   );
   try {
-    const xml = execFileSync('plutil', ['-convert', 'xml1', '-o', '-', plist], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    // Each handler is a dict, with a dict of preferred versions inside it; those go first.
-    const https = xml
-      .replace(/<key>LSHandlerPreferredVersions<\/key>\s*<dict>[\s\S]*?<\/dict>/g, '')
-      .split('<dict>')
-      .find(d => /<key>LSHandlerURLScheme<\/key>\s*<string>https<\/string>/.test(d));
-    return https?.match(/<key>LSHandlerRoleAll<\/key>\s*<string>([^<]+)<\/string>/)?.[1].toLowerCase() ?? null;
+    const handlers = JSON.parse(
+      execFileSync('plutil', ['-extract', 'LSHandlers', 'json', '-o', '-', plist], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }),
+    );
+    return handlers.find(h => h.LSHandlerURLScheme === 'https')?.LSHandlerRoleAll?.toLowerCase() ?? null;
   } catch {
     return null;
   }
@@ -86,7 +83,7 @@ export async function startInBackground(hooks) {
     if (link !== linkOf(b)) console.log(`  or      ${linkOf(b)}   (the local app, any browser)`);
     console.log('');
     if (problem) console.log(`  ${CLAUDE_FIX[problem]}\n`);
-    if (!argv.includes('--no-open')) openInBrowser(link);
+    if (!opt('no-open')) openInBrowser(link);
     process.exit(0);
   };
   const already = await running();
