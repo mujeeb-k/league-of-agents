@@ -1,4 +1,4 @@
-// The social preview: the wordmark, the line, and the demo's real map with a run's changes. Run with
+// The social preview: the wordmark, the line, and the demo's real map: a run's changes, and sessions at work. Run with
 // `npm run media`. It writes the site's og:image (1200 × 630, public/brand/og.png) and GitHub's social preview
 // (1280 × 640, brand/social-preview.png), which is uploaded in the repository's settings.
 import fs from 'node:fs';
@@ -26,12 +26,15 @@ test('social preview image', async ({ page, browser }) => {
     deviceScaleFactor: 2,
     colorScheme: 'light',
   });
-  await app.goto(APP);
+  // The demo's sessions held at work, part way (demo/sessions.ts).
+  await app.goto(`${APP}/?still`);
   await app.locator('#insp section').first().waitFor();
   await app.mouse.move(1279, 799);
-  await app.locator('#tip').evaluate(el => el.setAttribute('hidden', ''));
+  // The map alone: the hint, the composer and the minimap would cover the sessions' sections.
+  for (const id of ['#tip', '#composer', '#nav']) await app.locator(id).evaluate(el => el.setAttribute('hidden', ''));
   await app.waitForTimeout(800);
-  const shot = (await app.screenshot({ clip: { x: 260, y: 90, width: 620, height: 520 } })).toString('base64');
+  // Run 14's changes and the three sessions, at the .shot's 600 × 504 proportions.
+  const shot = (await app.screenshot({ clip: { x: 285, y: 100, width: 650, height: 546 } })).toString('base64');
   await app.close();
 
   for (const { file, width, height } of OUT) {

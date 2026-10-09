@@ -6,6 +6,9 @@ import { applyPanels, endFirstLoad, sideInset, sideVisibleAt } from '../state/pa
 import { drawMini } from './minimap';
 import type { Box, FileNode, Run, View } from './types';
 import { clamp } from './util';
+import { area } from './sections';
+import { filesUnder } from './model';
+import { workingRuns } from '../state/sessions';
 
 /*
   Zoom stays at 60 fps on large repos by changing only the transform while the scale is moving. The world is
@@ -161,20 +164,34 @@ function readableScale(files: FileNode[], changed = false) {
 
 /**
  * The first view of a repository: the whole map, if it fits at a zoom where its
- * names read. Otherwise the latest run's files, or the top-level folders, at such a zoom: fitted if they fit,
- * else from their top-left corner. The minimap shows the rest; "Fit everything" (0) still shows the whole map.
+ * names read. Otherwise the open (or latest) run's files and the sections of sessions at work, or the top-level
+ * folders, at such a zoom: fitted if they fit, else from their top-left corner. The minimap shows the rest; "Fit everything" (0) still shows the whole map.
  */
 export function openingView(): View {
   const all = fitView(S.WB, 30, 1);
   if (all.s >= readableScale([...S.FILES.values()])) return all;
   const root = S.ROOT!,
-    run = S.RUNS[S.RUNS.length - 1];
+    run = st.run ?? [...S.RUNS].reverse().find(r => r.status !== 'running');
   const changed = run ? [...run.changes.keys()].map(p => S.FILES.get(p)).filter(f => !!f) : [];
+  // With sessions at work, their sections too, at a zoom where names read on the tiles.
+  const sections = workingRuns().flatMap(r =>
+    (r.scope ?? []).map(e => {
+      const p = area(e);
+      return p.endsWith('/') ? S.DIRMAP.get(p.slice(0, -1)) : S.FILES.get(p);
+    }),
+  );
+  const atWork = sections.flatMap(n => (!n ? [] : n.type === 'dir' ? [dirBox(n)] : [fileBox(n)]));
+  const sectionFiles = sections.flatMap(n => (!n ? [] : n.type === 'dir' ? filesUnder(n) : [n]));
   const top = [root, ...root.dirs];
-  const b = union(changed.length ? changed.map(fileBox) : top.map(dirBox));
-  const s = changed.length ? readableScale(changed, true) : readableScale(top.flatMap(d => d.files));
+  const b = union(changed.length || atWork.length ? [...changed.map(fileBox), ...atWork] : top.map(dirBox));
+  const s = atWork.length
+    ? readableScale([...changed, ...sectionFiles])
+    : changed.length
+      ? readableScale(changed, true)
+      : readableScale(top.flatMap(d => d.files));
   const v = fitView(b, 60, s);
-  if (v.s >= s) return v;
+  // Sessions at work are seen together, at whatever zoom fits them, with the run being reviewed.
+  if (v.s >= s || atWork.length) return v;
   return { s, x: sideInset(s) + 60 - b.x * s, y: TOP + 40 - b.y * s };
 }
 

@@ -65,7 +65,7 @@ fs.mkdirSync(OUT, { recursive: true });
 
 test('demo screens', async ({ page }) => {
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-  await page.goto(APP);
+  await page.goto(`${APP}/?still`);
   await page.locator('#insp section').first().waitFor();
   await shoot(page, 'demo-run');
   await page.keyboard.press('Escape');
@@ -81,7 +81,7 @@ test('demo screens', async ({ page }) => {
   await page.keyboard.press('0');
   await page.locator('.fr[data-path="server/delivery/dead-letter.ts"]').click();
   await prompt(page, 'Log the reason');
-  await expect(page.locator('#runbar b')).toHaveText('Run 15', { timeout: 5000 });
+  await expect(page.locator('#runbar b')).toHaveText('Run 18', { timeout: 5000 });
   await page.keyboard.press('ControlOrMeta+k');
   await page.keyboard.type('open run 14');
   await page.keyboard.press('Enter');

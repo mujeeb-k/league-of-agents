@@ -75,7 +75,7 @@ for (const size of SIZES)
           reducedMotion: 'reduce',
         });
         const page = await ctx.newPage();
-        await page.goto('/');
+        await page.goto('/?still');
         await page.locator('#insp section').first().waitFor();
         await page.evaluate(() => document.fonts.ready);
         await step(page);
@@ -105,7 +105,7 @@ for (const lang of ['fr', 'zh-CN'])
           });
           await ctx.addInitScript(l => localStorage.setItem('loa.lang', l), lang);
           const page = await ctx.newPage();
-          await page.goto('/');
+          await page.goto('/?still');
           await page.locator('#insp section, #intro').first().waitFor();
           await page.evaluate(() => document.fonts.ready);
           await expect(page.locator('html')).toHaveAttribute('lang', lang);

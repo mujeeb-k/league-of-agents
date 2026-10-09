@@ -16,12 +16,13 @@ const depth = (d: DirNode) => (d.path ? d.path.split('/').length : 0);
 /** The inset of an overview label inside its block, on screen (05-canvas.css). */
 const INSET = 4;
 
-/** What the labels were last fitted to: the scale, and each folder's class, place and label, as fitted. */
+/**
+ * What the labels were last fitted to: the scale, and each folder's and section's class, place, label and spot, as
+ * fitted.
+ */
 let fitted = '';
 const labelsNow = (els: Iterable<HTMLElement>) =>
-  [st.v.s, ...[...els].map(el => el.className + el.style.cssText + el.querySelector('.flabel')?.textContent)].join(
-    '\n',
-  );
+  [st.v.s, ...[...els].map(el => el.className + el.style.cssText + el.dataset.at + el.textContent)].join('\n');
 
 export function fitLabels() {
   if (!dom.world || !S.ROOT) return;
@@ -29,8 +30,10 @@ export function fitLabels() {
     over = s < OVER;
   const els = new Map<string, HTMLElement>();
   for (const el of dom.world.querySelectorAll<HTMLElement>('.frame[data-dir]')) els.set(el.dataset.dir!, el);
+  // Sessions' folder sections: their labels are placed after the folders', clear of them (a file's sits in its tile).
+  const zones = [...document.querySelectorAll<HTMLElement>('#sels .zone:not(.f)')].filter(z => z.querySelector('b'));
   // Measuring forces layout twice: skipped when nothing a label depends on changed since they were fitted.
-  if (labelsNow(els.values()) === fitted) return;
+  if (labelsNow([...els.values(), ...zones]) === fitted) return;
   const dirs = [...S.DIRMAP.values()].filter(d => els.has(d.path));
   const weight = new Map(dirs.map(d => [d, filesUnder(d).length]));
   dirs.sort((a, b) => depth(a) - depth(b) || weight.get(b)! - weight.get(a)!);
@@ -72,5 +75,35 @@ export function fitLabels() {
     placed.push(at(d, fit.size.w, fit.size.h));
     if (fit.cls) el.classList.add(fit.cls);
   }
-  fitted = labelsNow(els.values());
+  placeZoneLabels(zones, placed, s);
+  fitted = labelsNow([...els.values(), ...zones]);
+}
+
+/** Space between a section's box and its label, on screen (05-canvas.css .zone b). */
+const GAP = 12;
+/**
+ * Each section's label at the first spot clear of the labels placed so far: above its box's top right corner, below
+ * its bottom right corner, else inside that corner.
+ */
+function placeZoneLabels(zones: HTMLElement[], placed: Rect[], s: number) {
+  for (const z of zones) {
+    const b = z.querySelector<HTMLElement>('b')!;
+    const box = {
+      x: parseFloat(z.style.left) * s,
+      y: parseFloat(z.style.top) * s,
+      w: parseFloat(z.style.width) * s,
+      h: parseFloat(z.style.height) * s,
+    };
+    const w = b.offsetWidth * s,
+      h = b.offsetHeight * s,
+      right = box.x + box.w - w;
+    const spots: [string, Rect][] = [
+      ['top', { x: right, y: box.y - GAP - h, w, h }],
+      ['bottom', { x: right, y: box.y + box.h + GAP, w, h }],
+      ['inside', { x: right - INSET, y: box.y + box.h - h - INSET, w, h }],
+    ];
+    const [at, r] = spots.find(([, r]) => !placed.some(p => hits(r, p))) ?? spots[2]!;
+    z.dataset.at = at;
+    placed.push(r);
+  }
 }

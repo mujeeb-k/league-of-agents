@@ -33,6 +33,11 @@ export interface SampleRunDef {
   summary: string;
   scope: string[];
   ch: Record<string, 'CREATE' | [number, number, string[]][]>;
+  /**
+   * A session still at work as the demo opens: its steps appear one by one, and it finishes `after` ms in, with its
+   * changes, reply and duration (`dur`). Its changes edit files; none creates one.
+   */
+  working?: { after: number; steps: string[] };
 }
 
 export interface DirNode {

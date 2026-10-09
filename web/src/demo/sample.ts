@@ -1,7 +1,8 @@
 // Neutral demo repository. A fictional webhook delivery service.
 // Its shape:
 // 23 files, 8 empty folders, one 12-file folder, and three runs covering
-// single-line edits, multi-hunk inserts, a created file, and a pure deletion.
+// single-line edits, multi-hunk inserts, a created file, and a pure deletion,
+// then three sessions still at work as the demo opens, each on a section of its own.
 // The file contents live in sample.txt in the "@@ path" format.
 import type { SampleRunDef, TreeSpec } from '../lib/types';
 
@@ -152,6 +153,100 @@ export const SAMPLE_RUNS: SampleRunDef[] = [
       'server/delivery/dead-letter.ts': [
         [1, 1, []],
         [8, 1, ['    reason,', '    attempts: attempt.number,']],
+      ],
+    },
+  },
+  {
+    id: 15,
+    agent: 'claude',
+    model: 'claude-sonnet-5-5',
+    toolWritten: true,
+    title: "Sign each webhook with its endpoint's own secret",
+    scope: ['server/delivery/pipeline/'],
+    when: 'Just now',
+    dur: '1m 12s',
+    prompt: "Each endpoint has its own secret, but every webhook is signed with the shared key. Use the endpoint's.",
+    summary:
+      "`signRequest` now takes the secret to sign with, and the dispatcher passes the endpoint's own.\n\n- **Changed:** `sign-request.ts` no longer reads the shared key from `secrets.ts`.\n- **Changed:** `dispatch.ts` signs with `event.endpoint.secret`.",
+    working: {
+      after: 8000,
+      steps: [
+        'Read server/delivery/pipeline/sign-request.ts',
+        'Read server/delivery/model/types.ts',
+        'Read server/delivery/pipeline/dispatch.ts',
+        'Edit server/delivery/pipeline/sign-request.ts',
+        'Edit server/delivery/pipeline/dispatch.ts',
+      ],
+    },
+    ch: {
+      'server/delivery/pipeline/sign-request.ts': [
+        [1, 1, []],
+        [3, 1, ['export function signRequest(body: string, secret: string) {']],
+        [5, 1, ["  const mac = createHmac('sha256', secret).update(`${ts}.${body}`).digest('hex');"]],
+      ],
+      'server/delivery/pipeline/dispatch.ts': [
+        [9, 1, ['    const res = await sendRequest(event.endpoint, signRequest(payload, event.endpoint.secret));']],
+      ],
+    },
+  },
+  {
+    id: 16,
+    agent: 'codex',
+    title: 'Say when a delivery timed out',
+    scope: ['server/delivery/http-client.ts'],
+    when: 'Just now',
+    dur: '41s',
+    prompt: "A slow endpoint's timeout looks like any other network error. Say when a request timed out.",
+    summary:
+      '`httpClient.post` says when a request **timed out**, and after how long, apart from other network errors.',
+    working: {
+      after: 13000,
+      steps: [
+        'Read server/delivery/http-client.ts',
+        'Read server/delivery/pipeline/send-request.ts',
+        'Edit server/delivery/http-client.ts',
+      ],
+    },
+    ch: {
+      'server/delivery/http-client.ts': [
+        [
+          8,
+          0,
+          [
+            '      if (ctrl.signal.aborted) return { status: 0, error: `timed out after ${opts.timeoutMs} ms`, timedOut: true };',
+          ],
+        ],
+      ],
+    },
+  },
+  {
+    id: 17,
+    agent: 'cursor',
+    title: "Cap each tenant's retries at 12",
+    scope: ['server/delivery/tenant-config.ts'],
+    when: 'Just now',
+    dur: '58s',
+    prompt: "Some tenants set hundreds of retry attempts. Cap them at 12, whatever a tenant's settings say.",
+    summary: "Retries are capped at **12** attempts per tenant, even when a tenant's settings ask for more.",
+    working: {
+      after: 17000,
+      steps: [
+        'Read server/delivery/tenant-config.ts',
+        'Read server/delivery/model/types.ts',
+        'Edit server/delivery/tenant-config.ts',
+      ],
+    },
+    ch: {
+      'server/delivery/tenant-config.ts': [
+        [4, 0, ['const MAX_ATTEMPTS = 12;', '']],
+        [
+          10,
+          1,
+          [
+            '  const policy = { maxAttempts: 8, multiplier: 1, ...t?.retry };',
+            '  return { ...policy, maxAttempts: Math.min(policy.maxAttempts, MAX_ATTEMPTS) };',
+          ],
+        ],
       ],
     },
   },

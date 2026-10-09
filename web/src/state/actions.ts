@@ -3,7 +3,7 @@ import { BridgeError, bridge } from '../api/client';
 import type { Conn, StartRunBody } from '../api/types';
 import { BY_CODE, explain } from '../api/errors';
 import { showConflict } from '../components/ConflictDialog';
-import { live, liveAction, saveLayoutSoon } from '../api/live';
+import { live, liveAction, saveLayoutSoon, stopAll } from '../api/live';
 import { applyView, flyAll, flyFile, flyRun, openingView } from '../lib/camera';
 import { agentOf } from '../lib/constants';
 import { buildModel, diffRows, existsNow, filesUnder, layout, linesAt, parseSample } from '../lib/model';
@@ -12,6 +12,7 @@ import type { FileNode, Mode, Run } from '../lib/types';
 import { clamp } from '../lib/util';
 import { DEMO_AGENTS, SAMPLE_BRANCH, SAMPLE_REPO, SAMPLE_RUNS, SAMPLE_TREE } from '../demo/sample';
 import { SAMPLE_TEXT } from '../demo/sampleText';
+import { startDemoSessions, stopDemoSession } from '../demo/sessions';
 import { toast } from '../ui/toast';
 import { S, dom, st } from './app';
 import { checkSelection, ed, rangeScope, sending } from './editing';
@@ -241,11 +242,18 @@ export function followTarget(): Run | null {
 export const isOffline = () => !!S.CONN && !S.LIVE;
 const OFFLINE = 'The bridge is offline. Reconnect first.';
 
+/** Stops every session at work, on the bridge or in the demo. */
+export function stopSessions() {
+  if (S.LIVE) void stopAll();
+  else for (const r of workingRuns()) stopDemoSession(r);
+}
+
 /** Keep, revert, cancel or stop a run, on the bridge or in the demo. */
 export function runAction(act: string, run: Run) {
   if (isOffline()) toast(t(OFFLINE));
   else if (S.LIVE) void liveAction(act, run);
   else if (act === 'keep') keepDemoRun(run);
+  else if (act === 'cancel') stopDemoSession(run);
   else if (act === 'revert') revertDemoRun(run);
 }
 
@@ -406,9 +414,9 @@ export function loadDemo() {
   if (!DEMO_AGENTS.includes(st.agent)) st.agent = 'claude';
   S.LAYOUT = null; // a new repository is laid out afresh
   buildModel(SAMPLE_TREE, parseSample(SAMPLE_TEXT), SAMPLE_RUNS);
-  st.run = S.RUNS[S.RUNS.length - 1] ?? null;
+  // The demo opens on its latest finished run's changes, with its sessions at work around it.
+  st.run = [...S.RUNS].reverse().find(r => r.status !== 'running') ?? null;
   st.sel.clear();
-  // The demo opens on its latest run's changes.
   st.mode = 'diff';
   S.repoName = SAMPLE_REPO;
   S.repoRoot = '';
@@ -418,6 +426,7 @@ export function loadDemo() {
   renderAll();
   st.v = openingView();
   applyView(true);
+  startDemoSessions();
 }
 
 let switching = 0;

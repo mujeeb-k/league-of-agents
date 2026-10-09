@@ -507,10 +507,24 @@ em.n {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-/* A file's box is narrow: its label starts at its left edge instead. */
+/* Placed clear of folder labels (labels.ts placeZoneLabels): below the box, or inside its bottom right corner. */
+.zone[data-at='bottom'] b {
+  bottom: auto;
+  top: 100%;
+  margin: calc(12px / var(--s)) 0 0;
+}
+.zone[data-at='inside'] b {
+  bottom: calc(4px / var(--s));
+  right: calc(4px / var(--s));
+  margin: 0;
+}
+/* A file's box: its label sits inside, at the bottom left of the tile, clear of the folder's label above. */
 .zone.f b {
-  left: 0;
+  top: auto;
+  bottom: calc(6px / var(--s));
+  left: calc(6px / var(--s));
   right: auto;
+  margin: 0;
 }
 
 #marquee {

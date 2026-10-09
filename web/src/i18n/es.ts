@@ -517,5 +517,21 @@ const catalogue: Catalogue = {
   'Run {id} failed': 'Run {id} failed',
   'Stop notifying me': 'Stop notifying me',
   'Notify me when a session finishes or needs me': 'Notify me when a session finishes or needs me',
+  'Stopped run {id}': 'Stopped run {id}',
+  "Sign each webhook with its endpoint's own secret": "Sign each webhook with its endpoint's own secret",
+  "Each endpoint has its own secret, but every webhook is signed with the shared key. Use the endpoint's.":
+    "Each endpoint has its own secret, but every webhook is signed with the shared key. Use the endpoint's.",
+  "`signRequest` now takes the secret to sign with, and the dispatcher passes the endpoint's own.\n\n- **Changed:** `sign-request.ts` no longer reads the shared key from `secrets.ts`.\n- **Changed:** `dispatch.ts` signs with `event.endpoint.secret`.":
+    "`signRequest` now takes the secret to sign with, and the dispatcher passes the endpoint's own.\n\n- **Changed:** `sign-request.ts` no longer reads the shared key from `secrets.ts`.\n- **Changed:** `dispatch.ts` signs with `event.endpoint.secret`.",
+  'Say when a delivery timed out': 'Say when a delivery timed out',
+  "A slow endpoint's timeout looks like any other network error. Say when a request timed out.":
+    "A slow endpoint's timeout looks like any other network error. Say when a request timed out.",
+  '`httpClient.post` says when a request **timed out**, and after how long, apart from other network errors.':
+    '`httpClient.post` says when a request **timed out**, and after how long, apart from other network errors.',
+  "Cap each tenant's retries at 12": "Cap each tenant's retries at 12",
+  "Some tenants set hundreds of retry attempts. Cap them at 12, whatever a tenant's settings say.":
+    "Some tenants set hundreds of retry attempts. Cap them at 12, whatever a tenant's settings say.",
+  "Retries are capped at **12** attempts per tenant, even when a tenant's settings ask for more.":
+    "Retries are capped at **12** attempts per tenant, even when a tenant's settings ask for more.",
 };
 export default catalogue;

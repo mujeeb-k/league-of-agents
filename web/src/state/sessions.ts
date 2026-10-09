@@ -55,6 +55,12 @@ export function endedAs(r: Pick<Run, 'status' | 'limited'>): string | null {
 export const ended = new Set<number>();
 /** Every session noted as ended: once its mark is gone, a later state event never brings it back. */
 const noted = new Set<number>();
+/** Marks a session as ended, once. */
+export function markEnded(id: number) {
+  if (noted.has(id)) return;
+  noted.add(id);
+  ended.add(id);
+}
 /** The person looked at a run: its mark goes, and isn't brought back by a state event that arrives later. */
 export function seen(id: number) {
   noted.add(id);
@@ -64,9 +70,6 @@ export function seen(id: number) {
 export function noteEnded(before: number[], now: number[], runs: Pick<Run, 'id' | 'status' | 'limited'>[]) {
   for (const id of before) {
     const r = runs.find(x => x.id === id);
-    if (!now.includes(id) && r && endedAs(r) && !noted.has(id)) {
-      noted.add(id);
-      ended.add(id);
-    }
+    if (!now.includes(id) && r && endedAs(r)) markEnded(id);
   }
 }

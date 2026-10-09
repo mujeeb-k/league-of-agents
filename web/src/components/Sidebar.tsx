@@ -10,8 +10,7 @@ import type { DirNode, Run, Tab } from '../lib/types';
 import { S, dom, st } from '../state/app';
 import { drafts, openEditor } from '../state/editing';
 import { panels, setPinned, sideVisibleAt } from '../state/panels';
-import { isOffline, runAction, selectRun, toggleSel } from '../state/actions';
-import { stopAll } from '../api/live';
+import { isOffline, runAction, selectRun, stopSessions, toggleSel } from '../state/actions';
 import { renderSel, renderSide, useRegion } from '../state/render';
 import { endedAs, sessionColour, sessionsCost, workingRuns } from '../state/sessions';
 import { money } from '../lib/util';
@@ -175,16 +174,11 @@ function RunRow({ r }: { r: Run }) {
     >
       <canvas data-fp={r.id} aria-hidden="true" className="h-11 w-16 rounded-md bg-card ring-1 ring-border" />
       <div className="min-w-0">
-        <div className="t leading-snug font-medium text-pretty [overflow-wrap:anywhere]">{r.title}</div>
-        <div className="m mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          <Dot c={a.c} className={cn('size-1.5', running && 'animate-pulse')} />
-          {/* The model is in the inspector; here, in the row's tooltip, so the time stays readable. */}
-          <span className="truncate" title={r.model ? `${a.name} · ${r.model}` : undefined}>
-            {running ? t('{agent} is working', { agent: a.name }) : `${a.name} · ${r.when}`}
-          </span>
-          {r.cost != null ? <span className="cost shrink-0 tabular-nums">{money(r.cost)}</span> : null}
-          {a.beta ? <BetaTag /> : null}
-          {running && S.CONN ? (
+        <div className="flex items-start gap-1">
+          <div className="t min-w-0 flex-1 leading-snug font-medium text-pretty [overflow-wrap:anywhere]">
+            {r.title}
+          </div>
+          {running ? (
             <Tip label={t('Stop run {id}', { id: r.id })}>
               <Button
                 variant="ghost"
@@ -192,13 +186,23 @@ function RunRow({ r }: { r: Run }) {
                 data-stop
                 aria-label={t('Stop run {id}', { id: r.id })}
                 disabled={isOffline()}
-                className="ml-auto text-ink2"
+                className="-mt-0.5 -mr-1 shrink-0 text-ink2"
                 onClick={() => void runAction('cancel', r)}
               >
                 <Square className="size-3 fill-current" />
               </Button>
             </Tip>
           ) : null}
+        </div>
+        <div className="m mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+          <Dot c={a.c} className={cn('size-1.5', running && 'animate-pulse')} />
+          {/* The model is in the inspector; here, in the row's tooltip, so the time stays readable. */}
+          <span className="truncate" title={r.model ? `${a.name} · ${r.model}` : undefined}>
+            {running ? t('{agent} is working', { agent: a.name }) : `${a.name} · ${r.when}`}
+          </span>
+          {r.cost != null ? <span className="cost shrink-0 tabular-nums">{money(r.cost)}</span> : null}
+          {/* While it works, the stop button takes the room: "Beta" shows once it ends. */}
+          {a.beta && !running ? <BetaTag /> : null}
         </div>
         {running ? null : (
           <>
@@ -393,7 +397,7 @@ function RunList() {
     el.addEventListener('click', onClick);
     return () => el.removeEventListener('click', onClick);
   }, []);
-  const atWork = S.CONN ? workingRuns().length : 0;
+  const atWork = workingRuns().length;
   const cost = atWork ? sessionsCost() : null;
   return (
     <div ref={ref}>
@@ -424,7 +428,7 @@ function RunList() {
               size="xs"
               className="ml-auto"
               disabled={isOffline()}
-              onClick={() => void stopAll()}
+              onClick={stopSessions}
             >
               {t('Stop all')}
             </Button>

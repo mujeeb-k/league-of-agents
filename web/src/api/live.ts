@@ -12,6 +12,7 @@ import { fmtDur, relTime } from '../lib/util';
 import { S, st } from '../state/app';
 import { noteEnded, opensOnFinish } from '../state/sessions';
 import { noticeEnded } from '../state/notices';
+import { stopDemoTimers } from '../demo/sessions';
 import { loadDemo, selectRun } from '../state/actions';
 import { refreshEditor } from '../state/editing';
 import { bump, renderAll, renderCrumb, renderInspector, renderSide, setConnUI } from '../state/render';
@@ -334,6 +335,8 @@ export async function connect(c: Conn, quiet = false): Promise<string | null> {
   setConnUI();
   try {
     const s = await bridge.state(c);
+    // Leaving the demo: its sessions stop moving.
+    stopDemoTimers();
     // S.CONN marks the data as live; it is set only once the bridge has answered, and kept when a
     // reconnect fails, so a lost bridge reads as offline rather than as the demo.
     S.CONN = c;

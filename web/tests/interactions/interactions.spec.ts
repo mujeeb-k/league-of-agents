@@ -35,10 +35,11 @@ const showSidebar = async (page: Page) => {
 const chips = (page: Page) => page.locator('#scopeRow .chip:not(.all):not(.fu) > span').allTextContents();
 const mini = (page: Page) => page.evaluate(() => (document.getElementById('mini') as HTMLCanvasElement).toDataURL());
 
-// The demo opens on its latest run at a readable zoom (camera.ts openingView). These tests start from the
-// whole map, as "Fit everything" (0) shows it.
+// The demo opens on its latest run with its sessions at work around it (camera.ts openingView). These tests start
+// from the whole map, as "Fit everything" (0) shows it, with the sessions held at work (?still, demo/sessions.ts)
+// so nothing moves under them.
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?still');
   await page.locator('#insp section').first().waitFor();
   await page.keyboard.press('0');
   await expect(page.locator('#world')).not.toHaveClass(/near/);
@@ -67,20 +68,20 @@ test('under 860 px, the introduction is a card at the top of the canvas, and clo
   await expect(page.locator('#insp #intro')).toHaveCount(1);
 });
 
-test('the first view is readable: the latest run, at a zoom where its names read in full', async ({ page }) => {
+test('the first view: the latest run and the three sessions at work around it, every one in view', async ({ page }) => {
   for (const size of [
     { width: 1440, height: 900 },
     { width: 1280, height: 800 },
   ]) {
     await page.setViewportSize(size);
-    await page.goto('/');
+    await page.goto('/?still');
     await page.locator('#insp section').first().waitFor();
-    // Code level: every card header shows its full name, and the run's first changed file is on screen.
-    await expect(page.locator('#world')).toHaveClass(/near/);
-    const card = page.locator('.card[data-path="server/delivery/endpoint-health.ts"]');
-    await expect(card).toBeInViewport();
-    await expect(card.locator('.fn')).toHaveText('endpoint-health.ts');
-    expect(await card.locator('.fn').evaluate(n => n.scrollWidth <= n.clientWidth)).toBe(true);
+    await expect(page.locator('#runbar b')).toHaveText('Run 14');
+    for (const p of ['server/delivery/endpoint-health.ts', 'server/delivery/retry/backoff.ts'])
+      await expect(page.locator(`.fr[data-path="${p}"]`)).toBeInViewport();
+    const zones = page.locator('#sels .zone');
+    await expect(zones.locator('b')).toHaveText(['Run 15 · Claude Code', 'Run 16 · Codex', 'Run 17 · Cursor']);
+    for (let i = 0; i < 3; i++) await expect(zones.nth(i)).toBeInViewport({ ratio: 0.9 });
     // Fit everything still shows the whole map.
     await page.keyboard.press('0');
     await expect(page.locator('#world')).not.toHaveClass(/near/);
@@ -187,7 +188,7 @@ test('on a phone, Try it on your code says to use it on a Mac and offers to send
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await ctx.newPage();
   try {
-    await page.goto('/');
+    await page.goto('/?still');
     expect(await page.evaluate(() => matchMedia('(hover: none) and (pointer: coarse)').matches)).toBe(true);
     await page.locator('#connectBtn').click();
     const dialog = page.locator('#connectDlg');
@@ -416,8 +417,8 @@ test('sidebar: tree click selects and flies, tabs switch', async ({ page }) => {
   expect(await chips(page)).toEqual(['relay/']);
   await page.locator('[data-tab="runs"]').click();
   await expect(page.locator('[data-tab="runs"]')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('#runCount')).toHaveText('3');
-  await expect(page.locator('#sideList .run')).toHaveCount(3);
+  await expect(page.locator('#runCount')).toHaveText('6');
+  await expect(page.locator('#sideList .run')).toHaveCount(6);
   await page.locator('[data-tab="files"]').click();
   await expect(page.locator('#sideList .ti').first()).toHaveText('relay/');
 });
@@ -652,7 +653,7 @@ test('prompt: slash focuses, Shift+Enter adds a line, Enter runs, Escape blurs',
     sendBtn = page.locator('#sendBtn');
   await expect(sendBtn).toBeDisabled();
   await page.keyboard.press('Escape');
-  await page.locator('.frame[data-dir="server/delivery/pipeline"] > .flabel b').click();
+  await page.locator('.frame[data-dir="server/api/routes"] > .flabel b').click();
   await page.keyboard.press('/');
   await expect(prompt).toBeFocused();
   await page.keyboard.type('Log every attempt');
@@ -665,12 +666,13 @@ test('prompt: slash focuses, Shift+Enter adds a line, Enter runs, Escape blurs',
   await prompt.focus();
   await page.keyboard.press('Enter');
   await expect(prompt).toHaveValue('');
-  await expect(page.locator(TOAST)).toHaveText('Claude Code started run 15');
-  await expect(page.locator('#sideList .run.running')).toHaveCount(1);
-  await expect(page.locator('#runbar b')).toHaveText('Run 15', { timeout: 5000 });
+  await expect(page.locator(TOAST)).toHaveText('Claude Code started run 18');
+  // Beside the demo's three sessions, held at work.
+  await expect(page.locator('#sideList .run.running')).toHaveCount(4);
+  await expect(page.locator('#runbar b')).toHaveText('Run 18', { timeout: 5000 });
   await expect(page.locator('[data-mode="diff"]')).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('#insp .bubble').nth(1)).toHaveText(
-    'Changed 3 files inside the scope: dispatch.ts, build-payload.ts, sign-request.ts. Nothing outside it was touched.',
+    'Changed 2 files inside the scope: subscriptions.ts, endpoints.ts. Nothing outside it was touched.',
   );
 });
 
@@ -679,24 +681,31 @@ test('several sections and ⌘↵ start a session on each, drawn in its own colo
 }) => {
   await showSidebar(page);
   await page.keyboard.press('Escape'); // close the run
-  await page.locator('#sideList .ti[data-dir="server/delivery/pipeline"]').click();
+  await page.locator('#sideList .ti[data-dir="server/delivery/retry"]').click();
   await page.locator('#sideList .ti[data-dir="server/api"]').click({ modifiers: ['Shift'] });
   await expect(page.locator('#eachBtn')).toHaveText('A session each');
   await expect(page.locator('#eachBtn')).toBeDisabled();
   await page.locator('#prompt').fill('Log every attempt');
   await expect(page.locator('#eachBtn')).toBeEnabled();
   await page.locator('#prompt').press('ControlOrMeta+Enter');
-  await expect(page.locator(TOAST)).toHaveText('Claude Code started runs 15 and 16');
-  await expect(page.locator('#sideList .run.running')).toHaveCount(2);
-  await expect(page.locator('#sels .zone b')).toHaveText(['Run 15 · Claude Code', 'Run 16 · Claude Code']);
+  await expect(page.locator(TOAST)).toHaveText('Claude Code started runs 18 and 19');
+  // Beside the demo's three sessions, held at work: five, each in its own colour.
+  await expect(page.locator('#sideList .run.running')).toHaveCount(5);
+  await expect(page.locator('#sels .zone b')).toHaveText([
+    'Run 15 · Claude Code',
+    'Run 16 · Codex',
+    'Run 17 · Cursor',
+    'Run 18 · Claude Code',
+    'Run 19 · Claude Code',
+  ]);
   const colours = await page
     .locator('#sels .zone')
     .evaluateAll(els => els.map(el => getComputedStyle(el).outlineColor));
-  expect(new Set(colours).size).toBe(2);
+  expect(new Set(colours).size).toBe(5);
   // The first to finish opens; the second, beside it, leaves the view on it.
-  await expect(page.locator('#sideList .run.running')).toHaveCount(0, { timeout: 5000 });
-  await expect(page.locator('#runbar b')).toHaveText('Run 15');
-  await expect(page.locator('#sels .zone')).toHaveCount(0);
+  await expect(page.locator('#sideList .run.running')).toHaveCount(3, { timeout: 5000 });
+  await expect(page.locator('#runbar b')).toHaveText('Run 18');
+  await expect(page.locator('#sels .zone')).toHaveCount(3);
   await page.locator('[data-tab="files"]').click();
   await page.locator('#sideList .ti[data-dir="server/api"]').click();
   await page.locator('#sideList .ti[data-dir="server/api/routes"]').click({ modifiers: ['Shift'] });
@@ -831,7 +840,7 @@ test('keep and revert in demo mode work as in live mode (findings 1 and 31)', as
   await expect(page.locator(TOAST)).toHaveText('Reverted run 14');
   // The run stays, marked reverted, and its changes are gone from the latest state.
   await expect(page.locator('#runbar b')).toHaveText('Run 14');
-  await expect(page.locator('#runCount')).toHaveText('3');
+  await expect(page.locator('#runCount')).toHaveText('6');
   await expect(page.locator('#insp .outcome')).toContainText('Reverted');
   await page.keyboard.press('Escape');
   await expect(page.locator('.fr[data-path="server/delivery/retry/backoff.ts"]')).toHaveCount(0);
@@ -845,20 +854,20 @@ test('demo revert refuses while a later run changed the same files', async ({ pa
   await page.locator('.fr[data-path="server/delivery/dead-letter.ts"]').click();
   await page.locator('#prompt').fill('Log the reason');
   await page.locator('#prompt').press('Enter');
-  await expect(page.locator('#runbar b')).toHaveText('Run 15', { timeout: 5000 });
+  await expect(page.locator('#runbar b')).toHaveText('Run 18', { timeout: 5000 });
   await page.keyboard.press('ControlOrMeta+k');
   await page.keyboard.type('open run 14');
   await page.keyboard.press('Enter');
   await page.locator('[data-act="revert"]').focus();
   await page.keyboard.press('Enter');
-  await expect(page.locator('#conflictDlg')).toContainText('Run 15 changed these files again');
+  await expect(page.locator('#conflictDlg')).toContainText('Run 18 changed these files again');
   // Escape closes it and returns focus to Revert.
   await page.keyboard.press('Escape');
   await expect(page.locator('[data-act="revert"]')).toBeFocused();
   await page.locator('[data-act="revert"]').click();
   await expect(page.locator('#conflictFiles')).toHaveText('server/delivery/dead-letter.ts');
-  await page.getByRole('button', { name: 'Open run 15' }).click();
-  await expect(page.locator('#runbar b')).toHaveText('Run 15');
+  await page.getByRole('button', { name: 'Open run 18' }).click();
+  await expect(page.locator('#runbar b')).toHaveText('Run 18');
 });
 
 test('F zooms to the selection, else the run, else everything', async ({ page }) => {
@@ -975,13 +984,57 @@ test('connect screen: the command to copy, errors inline, cancel and Escape', as
 });
 
 // Colored by author in the demo: its Claude Code run's lines are the agent's, and the map shows it, with no error.
+test('the demo opens on three sessions at work; they finish one by one, the first opening, the rest beside it', async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.goto('/');
+  await page.locator('#insp section').first().waitFor();
+  const zones = page.locator('#sels .zone b');
+  await expect(zones).toHaveText(['Run 15 · Claude Code', 'Run 16 · Codex', 'Run 17 · Cursor']);
+  await expect(page.locator('#runbar b')).toHaveText('Run 14');
+  await showSidebar(page);
+  await page.locator('[data-tab="runs"]').click();
+  await expect(page.locator('#sideList .run.running')).toHaveCount(3);
+  await expect(page.locator('#sideList [data-run="15"]')).toContainText('Claude Code is working');
+  // Claude Code's session ends first: it opens, in Diff, with its reply.
+  await page.clock.runFor(8100);
+  await expect(page.locator('#runbar b')).toHaveText('Run 15');
+  await expect(page.locator('[data-mode="diff"]')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('.flist li .p')).toHaveText(['sign-request.ts', 'dispatch.ts']);
+  await expect(zones).toHaveText(['Run 16 · Codex', 'Run 17 · Cursor']);
+  // The others end beside it: listed as done, and the view stays on run 15.
+  await page.clock.runFor(9500);
+  await expect(page.locator('#sideList .run.running')).toHaveCount(0);
+  await expect(page.locator('#runbar b')).toHaveText('Run 15');
+  await expect(page.locator('#sels .zone')).toHaveCount(0);
+  await expect(page.locator('#sideList [data-run="16"]')).toContainText('in 1 file');
+});
+
+test('in the demo, a session can be stopped: no changes, its section marked as stopped', async ({ page }) => {
+  await page.clock.install();
+  await page.goto('/');
+  await page.locator('#insp section').first().waitFor();
+  await showSidebar(page);
+  await page.locator('[data-tab="runs"]').click();
+  await page.locator('#sideList [data-run="16"] [data-stop]').click();
+  await expect(page.locator('#sideList [data-run="16"] .tags')).toContainText('Cancelled');
+  await expect(page.locator('#sels .zone.ended b')).toHaveText('Run 16 · Codex · Cancelled');
+  await page.clock.runFor(20_000);
+  await expect(page.locator('#sideList [data-run="16"]')).toContainText('No changes');
+  await page.locator('#stopAll').waitFor({ state: 'detached' });
+});
+
 test('the demo colored by author: C marks the agent lines on cards and tiles', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', e => errors.push(e.message));
-  await page.goto('/');
+  await page.goto('/?still');
   await page.locator('#insp section').first().waitFor();
   await page.keyboard.press('c');
   await expect(page.locator('#byAuthor')).toHaveAttribute('aria-pressed', 'true');
+  // Lines are marked on code cards: closer in, to a file the latest run changed.
+  await page.locator('.fr[data-path="server/delivery/endpoint-health.ts"]').click();
+  await page.keyboard.press('f');
   await expect(page.locator('.ln.au-agent').first()).toBeVisible();
   await page.keyboard.press('0');
   await expect(page.locator('.fr .au i.au-agent').first()).toBeVisible();
@@ -1199,12 +1252,12 @@ test.describe('editor', () => {
     await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.insertText(text.replaceAll('healthOf', 'healthFor'));
     await page.keyboard.press('ControlOrMeta+s');
-    await expect(page.locator(TOAST)).toHaveText('Saved as run 15');
+    await expect(page.locator(TOAST)).toHaveText('Saved as run 18');
     await page.keyboard.press('Escape');
     await page.locator('[data-tab="runs"]').click();
-    await page.locator('#sideList [data-run="15"]').click();
+    await page.locator('#sideList [data-run="18"]').click();
     await page.locator('#propagate').click();
-    await expect(page.locator('#runbar b')).toHaveText('Run 16');
+    await expect(page.locator('#runbar b')).toHaveText('Run 19');
     await expect(page.locator('#insp h2')).toHaveText('Update what depends on my change to endpoint-health.ts');
     await expect(page.locator('.flist li .p')).toHaveText(['endpoints.ts', 'circuit-breaker.ts']);
     // Every line that used the old name now uses the new one.
@@ -1222,13 +1275,13 @@ test.describe('editor', () => {
     await page.keyboard.press('ControlOrMeta+End');
     await page.keyboard.type('\nexport const edited = true;');
     await page.keyboard.press('ControlOrMeta+s');
-    await expect(page.locator(TOAST)).toHaveText('Saved as run 15');
+    await expect(page.locator(TOAST)).toHaveText('Saved as run 18');
     await expect(page.locator('#editor header .dirty')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await page.locator('[data-tab="runs"]').click();
-    await expect(page.locator('#sideList [data-run="15"]')).toContainText('Edited endpoint-health.ts');
-    await expect(page.locator('#sideList [data-run="15"]')).toContainText('You');
-    await page.locator('#sideList [data-run="15"]').click();
+    await expect(page.locator('#sideList [data-run="18"]')).toContainText('Edited endpoint-health.ts');
+    await expect(page.locator('#sideList [data-run="18"]')).toContainText('You');
+    await page.locator('#sideList [data-run="18"]').click();
     await expect(page.locator('#insp')).toContainText('Saved in the editor on the map.');
     await expect(page.locator('.flist li .p')).toHaveText(['endpoint-health.ts']);
   });
@@ -1276,7 +1329,7 @@ test.describe('a page per language', () => {
     await expect(html.locator('#introStatic p').last()).toHaveText(ABOUT_FR);
     await bare.close();
     // The app: the same words.
-    await page.goto('/fr/');
+    await page.goto('/fr/?still');
     await expect(page.locator('#intro p').last()).toHaveText(ABOUT_FR);
     await expect(page.locator('#intro .translation')).toHaveText('Voyez chaque changement que font vos agents.');
     await expect(page.locator('#conn')).toHaveText('Démo');
@@ -1305,7 +1358,7 @@ test.describe('a page per language', () => {
     page.on('response', r => {
       if (r.status() >= 400) missing.push(`${r.status()} ${r.url()}`);
     });
-    await page.goto('/fr/');
+    await page.goto('/fr/?still');
     await page.locator('#intro').waitFor();
     await page.evaluate(() => document.fonts.ready);
     const broken = await page
@@ -1340,7 +1393,7 @@ test.describe('a page per language', () => {
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
     // From a language's own page, English is the homepage at /.
-    await page.goto('/zh-CN/');
+    await page.goto('/zh-CN/?still');
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-CN');
     await page.keyboard.press('ControlOrMeta+k');
     await page.keyboard.type('English');
@@ -1413,7 +1466,7 @@ for (const home of ['/', '/zh-CN/', '/fr/', '/pt-BR/', '/es/'])
     await page.locator('.fr[data-path="server/delivery/dead-letter.ts"]').click({ modifiers: ['Shift'] });
     await page.locator('#prompt').fill('Log every attempt');
     await page.keyboard.press('ControlOrMeta+Enter');
-    await expect(page.locator('#sels .zone')).toHaveCount(2);
+    await expect(page.locator('#sels .zone')).toHaveCount(5);
     await page.keyboard.press('Escape');
     await expect(page.locator('#stage')).toBeVisible();
     expect(errors).toEqual([]);

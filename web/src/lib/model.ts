@@ -95,19 +95,28 @@ export function buildModel(spec: TreeSpec, code: Record<string, string>, runDefs
       changes: new Map(),
       reviewed: new Set(),
     };
-    for (const [p, v] of Object.entries(r.ch)) {
-      const f = S.FILES.get(p);
-      if (!f) continue;
-      if (v === 'CREATE') {
-        run.changes.set(p, newChange({ created: true, lines: f.base.slice() }));
-        f.base = [];
-        f.createdBy = r.id;
-      } else run.changes.set(p, newChange({ hunks: v.map(([at, del, add]) => ({ at, del, add })) }));
-    }
-    if (r.toolWritten) run.agentLines = addedRanges(run.changes);
+    // A session still at work: running, in the first colour free, its changes and reply to come (demo/sessions.ts).
+    if (r.working) {
+      Object.assign(run, { status: 'running', summary: '', dur: '', stream: [], startedAt: Date.now(), endedAt: null });
+      run.slot = S.RUNS.filter(x => x.status === 'running').length;
+    } else applyChanges(run, r);
     S.RUNS.push(run);
   }
   layout();
+}
+
+/** A sample run's changes, on the run: what it edits, and the files it creates, which exist only from it on. */
+export function applyChanges(run: Run, r: SampleRunDef) {
+  for (const [p, v] of Object.entries(r.ch)) {
+    const f = S.FILES.get(p);
+    if (!f) continue;
+    if (v === 'CREATE') {
+      run.changes.set(p, newChange({ created: true, lines: f.base.slice() }));
+      f.base = [];
+      f.createdBy = r.id;
+    } else run.changes.set(p, newChange({ hunks: v.map(([at, del, add]) => ({ at, del, add })) }));
+  }
+  if (r.toolWritten) run.agentLines = addedRanges(run.changes);
 }
 
 /** Every line a run added, per file, as [from, to] indexes in the file after it: for the demo's agent runs. */

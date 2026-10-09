@@ -175,7 +175,7 @@ const DEMO: Element[] = [
       await p.locator('.fr[data-path="server/delivery/dead-letter.ts"]').click();
       await p.locator('#prompt').fill('Log the reason');
       await p.locator('#prompt').press('Enter');
-      await expect(p.locator('#runbar b')).toHaveText('Run 15', { timeout: 5000 });
+      await expect(p.locator('#runbar b')).toHaveText('Run 18', { timeout: 5000 });
       await p.keyboard.press('ControlOrMeta+k');
       await p.keyboard.type('open run 14');
       await p.keyboard.press('Enter');
@@ -277,7 +277,7 @@ for (const theme of ['light', 'dark'] as const)
       const row: Partial<Record<State, string>> = {};
       for (const [state, how] of Object.entries(el.states) as [State, 'auto' | Setup][]) {
         const page = await ctx.newPage();
-        await page.goto(APP);
+        await page.goto(`${APP}/?still`);
         await page.locator('#insp section').first().waitFor();
         await page.evaluate(() => document.fonts.ready);
         row[state] = await capture(page, el, state, how);
@@ -299,7 +299,7 @@ for (const theme of ['light', 'dark'] as const)
         });
         return release;
       };
-      await page.goto(APP);
+      await page.goto(`${APP}/?still`);
       await page.locator('#insp section').first().waitFor();
       let release = hold('**/api/state', 'GET');
       await page.locator('#connectBtn').click();
