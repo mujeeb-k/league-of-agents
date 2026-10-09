@@ -25,9 +25,9 @@ import { showAt } from './snapshots.mjs';
 import { recordedAuthors, exportAttribution } from './authorship.mjs';
 import { runs, working, saveRun, publicRun, beginRun, finishRun, push, revertRun } from './runs.mjs';
 import { armIdle, ownWrite, writeConfig, watchOff } from './watch.mjs';
-import { seq, events, waiters, emit } from './events.mjs';
+import { seq, events, waiters, emit, emitRun } from './events.mjs';
 import { cancelSession, startSession } from './sessions.mjs';
-import { shellEnds, shellStarts } from './shell.mjs';
+import { restorePutBack, shellEnds, shellStarts } from './shell.mjs';
 
 /**
  * @typedef {{ url: URL; params: string[]; body: () => Promise<any> }} Request  `params`: what the route's pattern
@@ -188,6 +188,19 @@ async function shell({ params, body }) {
     return [200, { undone: [] }];
   }
   return [200, { undone: await shellEnds(run, tool) }];
+}
+/**
+ * Restores a file a shell command wrote outside its section, as the command left it, once the person asks.
+ * @param {Request} request
+ * @returns {Promise<Reply>}
+ */
+async function restore({ params, body }) {
+  const run = runOf(params);
+  if (!run) return noRun;
+  const { path: file } = await body();
+  if (!(await restorePutBack(run, file))) return [404, { error: 'Nothing kept to restore' }];
+  emitRun(run);
+  return [200, { ok: true }];
 }
 /**
  * @param {Request} request
@@ -422,6 +435,7 @@ export const ROUTES = [
   ['POST', /^\/api\/runs\/(\d+)\/revert$/, revert],
   ['GET', /^\/api\/runs\/(\d+)\/before$/, runFileBefore],
   ['POST', /^\/api\/runs\/(\d+)\/shell$/, shell],
+  ['POST', /^\/api\/runs\/(\d+)\/put-back$/, restore],
   ['POST', '/api/attribution/export', exportNote],
   ['GET', '/api/authors', authors],
   ['GET', '/api/layout', layout],

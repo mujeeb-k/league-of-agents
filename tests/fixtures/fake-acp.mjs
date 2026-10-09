@@ -5,8 +5,10 @@
 // ACP extra is installed. With FAKE_ACP_STYLE=dsh it asks as DeepSeek Harness does in its read-only mode: its edit
 // tool call is kind "other", titled "edit", with the edit's arguments as rawInput, and its permission request names
 // only the call. The prompt steers it: "outside" also asks to edit outside.txt; "command" asks to run one; "slow" waits to be
-// cancelled. "edit:<path>" asks to edit that file and appends a line to it, instead of the usual edit; "wait:<name>"
-// then holds the turn until the file .loa/go-<name> exists, so a test can keep two sessions at work at once.
+// cancelled; "exec: <command>" runs it. "edit:<path>" asks to edit that file and appends a line to it, instead of the usual edit; "wait:<name>"
+// then holds the turn until the file .loa/go-<name> exists, so a test can keep two sessions at work at once. It logs
+// to fake-acp.log beside the repo: a session's sandbox lets nothing write in .loa.
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import readline from 'node:readline';
 
@@ -38,6 +40,12 @@ const model = {
   options: [{ group: 'fake', name: 'Fake', options: [{ value: '["fake","fake-model-1"]', name: 'fake-model-1' }] }],
 };
 
+/** "wait:<name>" holds the turn until the file .loa/go-<name> exists. */
+async function held(text) {
+  const hold = /\bwait:(\S+)/.exec(text)?.[1];
+  if (hold) while (!fs.existsSync(`.loa/go-${hold}`)) await new Promise(r => setTimeout(r, 20));
+}
+
 async function turn(sessionId, text) {
   say(sessionId, 'Reading the policy module.');
   update(sessionId, {
@@ -65,6 +73,11 @@ async function turn(sessionId, text) {
           }
         : { sessionUpdate: 'tool_call', toolCallId, title: `patch: ${path}`, kind: 'edit', locations: [{ path }] },
     );
+    // In its full-access mode DeepSeek Harness writes without asking; a write the system refuses fails.
+    if (dsh && process.env.DSH_PERMISSION_MODE === 'danger-full-access') {
+      update(sessionId, { sessionUpdate: 'tool_call_update', toolCallId, status: 'completed' });
+      return true;
+    }
     // DeepSeek Harness's sandbox denies the write first, and the model then asks to escalate.
     if (dsh)
       update(sessionId, {
@@ -100,6 +113,14 @@ async function turn(sessionId, text) {
         { optionId: 'no', name: 'Deny', kind: 'reject_once' },
       ],
     });
+  // "exec: <command>" to the end of its line: run it unasked, in a shell of its own, as Hermes runs commands, and
+  // reply with its exit code and the end of its output.
+  const exec = /\bexec: (.+)$/m.exec(text)?.[1];
+  if (exec) {
+    const r = spawnSync('sh', ['-c', exec], { encoding: 'utf8' });
+    say(sessionId, `exit ${r.status}: ${(r.stdout + r.stderr).trim().split('\n').slice(-3).join(' | ')}`);
+    return 'end_turn';
+  }
   const edits = [...text.matchAll(/\bedit:(\S+)/g)].map(m => m[1]);
   if (edits.length) {
     for (const [i, file] of edits.entries()) {
@@ -107,19 +128,23 @@ async function turn(sessionId, text) {
       const after = `${before}// edited in ${sessionId}\n`;
       if (await permit(`edit-${i}`, file, before, after)) fs.writeFileSync(file, after);
     }
-    const hold = /\bwait:(\S+)/.exec(text)?.[1];
-    if (hold) while (!fs.existsSync(`.loa/go-${hold}`)) await new Promise(r => setTimeout(r, 20));
+    await held(text);
     say(sessionId, `Edited ${edits.join(', ')}.`);
     return 'end_turn';
   }
   if (/outside/.test(text) && (await permit('edit-out', 'outside.txt', '', 'written outside the scope\n')))
-    fs.writeFileSync('outside.txt', 'written outside the scope\n');
+    try {
+      fs.writeFileSync('outside.txt', 'written outside the scope\n');
+    } catch (e) {
+      say(sessionId, `outside.txt: ${e.code}. `);
+    }
   const before = fs.readFileSync(FILE, 'utf8');
   const line = "export const reviewedBy = 'fake-acp';";
   if (await permit('edit-1', FILE, before, before + line + '\n')) {
     fs.writeFileSync(FILE, before + line + '\n');
     update(sessionId, { sessionUpdate: 'tool_call_update', toolCallId: 'edit-1', status: 'completed' });
   }
+  await held(text);
   say(sessionId, `Added reviewedBy to ${FILE}.`);
   return 'end_turn';
 }
@@ -138,10 +163,10 @@ readline.createInterface({ input: process.stdin }).on('line', async l => {
   else if (m.method === 'session/new') {
     const sessionId = `fake-session-${process.pid}`;
     sessions.add(sessionId);
-    fs.appendFileSync('.loa/fake-acp.log', `new ${sessionId} mode=${process.env.DSH_PERMISSION_MODE}\n`);
+    fs.appendFileSync('../fake-acp.log', `new ${sessionId} mode=${process.env.DSH_PERMISSION_MODE}\n`);
     reply({ sessionId, configOptions: [model] });
   } else if (m.method === 'session/resume') {
-    fs.appendFileSync('.loa/fake-acp.log', `resume ${m.params.sessionId}\n`);
+    fs.appendFileSync('../fake-acp.log', `resume ${m.params.sessionId}\n`);
     // Hermes replays the session so far before it answers a resume.
     say(m.params.sessionId, 'Replayed from before.');
     update(m.params.sessionId, {
@@ -153,7 +178,7 @@ readline.createInterface({ input: process.stdin }).on('line', async l => {
     reply({ configOptions: [model] });
   } else if (m.method === 'session/prompt') {
     const text = m.params.prompt.map(p => p.text).join('\n');
-    fs.appendFileSync('.loa/fake-acp.log', `prompt ${JSON.stringify(text)}\n`);
+    fs.appendFileSync('../fake-acp.log', `prompt ${JSON.stringify(text)}\n`);
     reply({ stopReason: await turn(m.params.sessionId, text) });
   } else if (m.method === 'session/cancel') cancelled?.();
   else if (m.id !== undefined) send({ id: m.id, error: { code: -32601, message: 'Method not found' } });

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { readJson, onPath } from '../util.mjs';
 import { HOOKS } from '../serve.mjs';
 import { acpConnector } from './acp.mjs';
+import { lockOfRun } from '../sandbox.mjs';
 import { streamConnector } from './stream.mjs';
 
 export const BIN = {
@@ -36,12 +37,13 @@ export const ACP = {
     command: [process.env.LOA_HERMES_BIN || 'hermes', 'acp'],
     check: [process.env.LOA_HERMES_BIN || 'hermes', 'acp', '--check'],
   },
-  // In its read-only mode DeepSeek Harness asks before every write (its sandbox denies the write, and it asks to
-  // escalate), so its edits outside the scope can be refused. Without it, it writes without asking.
+  // On a section, in the sandbox (sandbox.mjs), it runs in its full-access mode: its own sandbox can't start inside
+  // ours, and ours holds it to the section. Elsewhere, in its read-only mode, it asks before every write (its
+  // sandbox denies the write, and it asks to escalate), so its edits outside the scope can be refused.
   dsh: {
     name: 'DeepSeek Harness',
     command: [process.env.LOA_DSH_BIN || 'dsh', '--profile', 'acp'],
-    env: { DSH_PERMISSION_MODE: 'read-only' },
+    env: run => ({ DSH_PERMISSION_MODE: lockOfRun(run) === 'sandbox' ? 'danger-full-access' : 'read-only' }),
   },
 };
 /** Which agents are on this machine, and the harnesses the person added. */
@@ -70,7 +72,7 @@ export function loadAgents() {
 const STREAMED = {
   claude: streamConnector(
     () => BIN.claude,
-    (prompt, sessionId) => [
+    (prompt, run) => [
       '-p',
       prompt,
       '--output-format',
@@ -78,12 +80,14 @@ const STREAMED = {
       '--verbose',
       '--permission-mode',
       'acceptEdits',
-      ...(sessionId ? ['--resume', sessionId] : []),
+      // Inside the section's sandbox, Claude Code's own can't start (one sandbox can't start another).
+      ...(lockOfRun(run) === 'sandbox' ? ['--settings', '{"sandbox":{"enabled":false}}'] : []),
+      ...(run.sessionId ? ['--resume', run.sessionId] : []),
     ],
   ),
   cursor: streamConnector(
     () => BIN.cursor,
-    (prompt, sessionId) => [
+    (prompt, { sessionId }) => [
       '-p',
       '--force',
       '--output-format',
@@ -94,7 +98,7 @@ const STREAMED = {
   ),
   codex: streamConnector(
     () => BIN.codex,
-    (prompt, sessionId) => [
+    (prompt, { sessionId }) => [
       'exec',
       '--json',
       '--sandbox',

@@ -17,6 +17,7 @@ import {
   startingPoint,
 } from './parallel.mjs';
 import { base, setBase, rebase, settle } from './watch.mjs';
+import { NO_SANDBOX, lockOfRun } from './sandbox.mjs';
 import { emit, emitRun } from './events.mjs';
 
 export const runs = new Map();
@@ -44,7 +45,13 @@ export function pruneRuns() {
   if (!old.length) return;
   git(['update-ref', '--stdin'], {
     input:
-      old.flatMap(id => [`delete refs/loa/runs/${id}/before`, `delete refs/loa/runs/${id}/after`]).join('\n') + '\n',
+      old
+        .flatMap(id => [
+          `delete refs/loa/runs/${id}/before`,
+          `delete refs/loa/runs/${id}/after`,
+          ...[...new Set((runs.get(id).putBack ?? []).map(k => k.ref))].map(ref => `delete ${ref}`),
+        ])
+        .join('\n') + '\n',
   });
   for (const id of old) {
     for (const ext of ['.json', '.stream.jsonl', '.stderr.log'])
@@ -96,6 +103,7 @@ export function beginRun(opts) {
   return serial(async () => {
     const refused = clash(opts.scope ?? []);
     if (refused) throw refused;
+    if (lockOfRun(opts) === 'refuse') throw NO_SANDBOX();
     const before = await startingPoint(settle);
     const run = newRun(opts);
     run.before = before;

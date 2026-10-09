@@ -42,8 +42,15 @@ if (shells.length) {
       message: { content: [{ type: 'tool_use', id: payload.tool_use_id, name: 'Bash', input: { command } }] },
     });
     const refused = runHooks('PreToolUse', payload);
-    if (!refused) fs.appendFileSync(file, '// written by a shell command\n');
-    const told = refused ?? runHooks('PostToolUse', payload);
+    // In the section's sandbox, a write outside it fails as a shell command's would: told, not written.
+    let failed = null;
+    if (!refused)
+      try {
+        fs.appendFileSync(file, '// written by a shell command\n');
+      } catch (e) {
+        failed = e.code;
+      }
+    const told = refused ?? failed ?? runHooks('PostToolUse', payload);
     results.push(told ? `${file}: ${told}` : `${file}: written`);
   }
   out({ type: 'result', result: results.join('\n'), session_id: 'sess-123', total_cost_usd: 0.0123 });
@@ -75,10 +82,13 @@ t = t.replace(
 );
 t += '\nexport function isEmpty(p: Policy) {\n  return p.origins.length === 0;\n}\n';
 fs.writeFileSync('shared/allowlist.ts', t);
-fs.writeFileSync(
-  'shared/policy-cache.ts',
-  "import { loadPolicy } from './allowlist';\n\nexport const cached = loadPolicy();\n",
-);
+// Refused in a section's sandbox when the file is outside it: Claude Code carries on, and so does this.
+try {
+  fs.writeFileSync(
+    'shared/policy-cache.ts',
+    "import { loadPolicy } from './allowlist';\n\nexport const cached = loadPolicy();\n",
+  );
+} catch {}
 await new Promise(r => setTimeout(r, 400));
 out({
   type: 'result',

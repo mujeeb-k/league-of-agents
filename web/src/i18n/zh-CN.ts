@@ -432,5 +432,7 @@ const catalogue: Catalogue = {
     'Run {id} is working on the whole repository. Wait for it to finish.',
   'Pick up to {n} sections to start a session on each.': 'Pick up to {n} sections to start a session on each.',
   '{agent} started runs {ids}': '{agent} started runs {ids}',
+  "A session on a section runs in macOS's sandbox, which can't start here. Start the bridge from a regular terminal.":
+    "A session on a section runs in macOS's sandbox, which can't start here. Start the bridge from a regular terminal.",
 };
 export default catalogue;

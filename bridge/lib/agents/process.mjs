@@ -4,13 +4,16 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { ROOT, RUNS_DIR } from '../repo.mjs';
 import { push } from '../runs.mjs';
+import { lockOfRun, sandboxArgs } from '../sandbox.mjs';
 
 /**
  * Starts an agent for a run. Its stdout is kept as-is in .loa/runs/<id>.stream.jsonl (fixtures, debugging) and
  * handed to `onLine` a line at a time; its stderr is kept in <id>.stderr.log and handed to `onStderr`. `closed`
  * resolves with its exit code, once its logs are written.
  */
-export function launch(run, [cmd, ...args], { env = {}, stdin = false, onLine, onStderr }) {
+export function launch(run, argv, { env = {}, stdin = false, onLine, onStderr }) {
+  // A session on a section runs inside the sandbox that holds it there (sandbox.mjs).
+  const [cmd, ...args] = lockOfRun(run) === 'sandbox' ? [...sandboxArgs(run), ...argv] : argv;
   const child = spawn(cmd, args, {
     cwd: ROOT,
     env: { ...process.env, LOA_MANAGED: '1', ...env },

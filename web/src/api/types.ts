@@ -72,6 +72,11 @@ export interface RunDTO {
   kept: boolean;
   reverted: boolean;
   outOfScope?: string[];
+  /**
+   * Without a sandbox, files a shell command changed outside the section, put back at once; what it wrote is kept
+   * under `ref`, to restore (POST /api/runs/:id/put-back).
+   */
+  putBack?: { path: string; ref: string; restored: boolean }[];
   checksRunning?: boolean;
   turn?: TurnSummary;
 }

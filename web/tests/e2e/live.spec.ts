@@ -1197,7 +1197,7 @@ test('an ACP harness (Hermes): asks before editing, reports its model, is refuse
     // The line it showed as a diff before writing it counts as the agent's (attribution).
     const at = SEED[FILE]!.split('\n').length - 1;
     expect(first.agentLines).toEqual({ [FILE]: [[at, at]] });
-    const log = () => fs.readFileSync(path.join(repo, '.loa/fake-acp.log'), 'utf8');
+    const log = () => fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8');
     expect(log()).toContain('Scope for this task:\\n- shared/');
     // A follow-up resumes the same session. Asked to edit outside the scope, it is refused, and the run says so.
     const second = await runToEnd(b, {
@@ -1235,10 +1235,10 @@ test('an ACP harness (Hermes): asks before editing, reports its model, is refuse
   }
 });
 
-test("DeepSeek Harness runs in its read-only mode, so each edit asks: in the scope allowed and the agent's lines, outside refused", async () => {
+test("without a sandbox, DeepSeek Harness runs in its read-only mode, so each edit asks: in the scope allowed and the agent's lines, outside refused", async () => {
   const repo = makeRepo(),
     FILE = 'shared/allowlist.ts';
-  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_DSH_BIN: FAKE_ACP, FAKE_ACP_STYLE: 'dsh' });
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_DSH_BIN: FAKE_ACP, FAKE_ACP_STYLE: 'dsh', LOA_SANDBOX: 'off' });
   try {
     const run = await runToEnd(b, {
       agent: 'dsh',
@@ -1246,7 +1246,7 @@ test("DeepSeek Harness runs in its read-only mode, so each edit asks: in the sco
       scope: ['shared/'],
       resumeFrom: null,
     });
-    expect(fs.readFileSync(path.join(repo, '.loa/fake-acp.log'), 'utf8')).toMatch(/^new \S+ mode=read-only$/m);
+    expect(fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8')).toMatch(/^new \S+ mode=read-only$/m);
     expect(run.changes.map(c => c.path)).toEqual([FILE]);
     const at = SEED[FILE]!.split('\n').length - 1;
     expect(run.agentLines).toEqual({ [FILE]: [[at, at]] });
@@ -1264,11 +1264,34 @@ test("DeepSeek Harness runs in its read-only mode, so each edit asks: in the sco
   }
 });
 
+test('in the sandbox, DeepSeek Harness runs in its full-access mode: held to the section by the system, its edits its own', async () => {
+  const repo = makeRepo(),
+    FILE = 'shared/allowlist.ts';
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_DSH_BIN: FAKE_ACP, FAKE_ACP_STYLE: 'dsh' });
+  try {
+    const run = await runToEnd(b, {
+      agent: 'dsh',
+      prompt: 'Record it outside too',
+      scope: ['shared/'],
+      resumeFrom: null,
+    });
+    expect(fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8')).toMatch(/^new \S+ mode=danger-full-access$/m);
+    expect(run.changes.map(c => c.path)).toEqual([FILE]);
+    const at = SEED[FILE]!.split('\n').length - 1;
+    expect(run.agentLines).toEqual({ [FILE]: [[at, at]] });
+    expect(fs.existsSync(path.join(repo, 'outside.txt'))).toBe(false);
+    expect(run.stream.map(e => e.text).join('\n')).toContain('outside.txt: EPERM');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test.describe('sessions at once', () => {
   /** A repo whose stand-in Hermes edits what each prompt names, and holds its turn until the test says go. */
-  async function twoSessions(fn: (b: Bridge, repo: string) => Promise<void>) {
+  async function twoSessions(fn: (b: Bridge, repo: string) => Promise<void>, env: Record<string, string> = {}) {
     const repo = makeRepo();
-    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP, LOA_CODEX_BIN: FAKE_CODEX });
+    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP, LOA_CODEX_BIN: FAKE_CODEX, ...env });
     try {
       await expect
         .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).agents.hermes?.available)
@@ -1295,9 +1318,9 @@ test.describe('sessions at once', () => {
       expect(c.status).toBe('running');
       expect((await state(b)).working).toEqual([a.id, c.id]);
       // Each prompt names the sections other sessions hold.
-      expect(fs.readFileSync(path.join(repo, '.loa/fake-acp.log'), 'utf8')).toContain(
-        'Other sessions are working at the same time on: shared/.',
-      );
+      await expect
+        .poll(() => fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8'))
+        .toContain('Other sessions are working at the same time on: shared/.');
       go(repo, 'a');
       go(repo, 'c');
       await until(b, a.id, 'done');
@@ -1326,35 +1349,144 @@ test.describe('sessions at once', () => {
       expect((await state(b)).runs.map(r => r.agent)).toEqual(['hermes', 'codex']);
     }));
 
-  test("Claude Code's shell commands: inside its section its own, line for line; outside, put back and it is told", () =>
+  test("without a sandbox, Claude Code's shell commands outside its section are put back, kept, and restored in one click", () =>
+    twoSessions(
+      async (b, repo) => {
+        const h = (await start(b, ['apps/'], 'edit:apps/console/main.ts wait:a')).body as unknown as RunDTO;
+        const prompt = 'Log it. shell:shared/log.ts shell:notes.md';
+        const c = (await call(b, '/api/runs', { agent: 'claude', prompt, scope: ['shared/'] }))
+          .body as unknown as RunDTO;
+        await until(b, c.id, 'done');
+        const run = await runOf(b, c.id);
+        expect(run.changes.map(ch => ch.path)).toEqual(['shared/log.ts']);
+        expect(run.agentLines).toEqual({ 'shared/log.ts': [[1, 1]] });
+        // Outside its section: undone at once, and the agent told why.
+        expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
+        expect(run.summary).toContain('notes.md: League of Agents scope lock: a shell command changed notes.md');
+        expect(run.stream.map(e => e.text).join('\n')).toContain('Put back what a shell command changed outside');
+        // Kept: restored as the command left it, once asked.
+        expect(run.putBack).toEqual([{ path: 'notes.md', ref: `refs/loa/runs/${c.id}/put-back-0`, restored: false }]);
+        expect((await call(b, `/api/runs/${c.id}/put-back`, { path: 'notes.md' })).status).toBe(200);
+        expect(fs.readFileSync(path.join(repo, 'notes.md'), 'utf8')).toBe('// written by a shell command\n');
+        expect((await runOf(b, c.id)).putBack?.[0]?.restored).toBe(true);
+        fs.rmSync(path.join(repo, 'notes.md'));
+        go(repo, 'a');
+        await until(b, h.id, 'done');
+        // Nothing left over, and the session reverts on its own.
+        expect((await state(b)).runs.map(r => r.agent)).toEqual(['hermes', 'claude']);
+        expect((await call(b, `/api/runs/${c.id}/revert`, {})).status).toBe(200);
+        expect(fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8')).toBe(SEED['shared/log.ts']);
+        // A terminal session, with no section, passes its shell commands through at once.
+        const t0 = Date.now();
+        const hook = spawnSync(process.execPath, [path.join(repo, '.loa/bridge.mjs'), 'hook', 'pre'], {
+          cwd: repo,
+          input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' }, cwd: repo }),
+          env: { ...process.env, LOA_SCOPE_FILE: '' },
+        });
+        expect(hook.status).toBe(0);
+        expect(Date.now() - t0).toBeLessThan(1000);
+      },
+      { LOA_SANDBOX: 'off' },
+    ));
+
+  test("in the sandbox, Claude Code's shell commands write in its section, credited line for line, and nowhere else", () =>
     twoSessions(async (b, repo) => {
-      const h = (await start(b, ['apps/'], 'edit:apps/console/main.ts wait:a')).body as unknown as RunDTO;
-      const prompt = 'Log it. shell:shared/log.ts shell:notes.md';
+      const prompt = 'Log it. shell:shared/log.ts shell:notes.md shell:apps/console/main.ts';
       const c = (await call(b, '/api/runs', { agent: 'claude', prompt, scope: ['shared/'] })).body as unknown as RunDTO;
       await until(b, c.id, 'done');
       const run = await runOf(b, c.id);
       expect(run.changes.map(ch => ch.path)).toEqual(['shared/log.ts']);
       expect(run.agentLines).toEqual({ 'shared/log.ts': [[1, 1]] });
-      // Outside its section: undone at once, and the agent told why.
+      // Refused by the system: never written, so nothing to put back.
+      expect(run.summary).toContain('notes.md: EPERM');
+      expect(run.summary).toContain('apps/console/main.ts: EPERM');
       expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
-      expect(run.summary).toContain('notes.md: League of Agents scope lock: a shell command changed notes.md');
-      expect(run.stream.map(e => e.text).join('\n')).toContain('Put back what a shell command changed outside');
-      go(repo, 'a');
-      await until(b, h.id, 'done');
-      // Nothing left over, and the session reverts on its own.
-      expect((await state(b)).runs.map(r => r.agent)).toEqual(['hermes', 'claude']);
-      expect((await call(b, `/api/runs/${c.id}/revert`, {})).status).toBe(200);
-      expect(fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8')).toBe(SEED['shared/log.ts']);
-      // A terminal session, with no section, passes its shell commands through at once.
-      const t0 = Date.now();
-      const hook = spawnSync(process.execPath, [path.join(repo, '.loa/bridge.mjs'), 'hook', 'pre'], {
-        cwd: repo,
-        input: JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'ls' }, cwd: repo }),
-        env: { ...process.env, LOA_SCOPE_FILE: '' },
-      });
-      expect(hook.status).toBe(0);
-      expect(Date.now() - t0).toBeLessThan(1000);
+      expect(fs.readFileSync(path.join(repo, 'apps/console/main.ts'), 'utf8')).toBe(SEED['apps/console/main.ts']);
+      expect(run.putBack).toBeUndefined();
     }));
+
+  test('the section lock holds every program a session starts: its section and ignored output only', () =>
+    twoSessions(async (b, repo) => {
+      fs.writeFileSync(path.join(repo, '.gitignore'), 'dist/\n*.log\n');
+      git(repo, 'add', '.gitignore');
+      git(repo, '-c', 'user.name=t', '-c', 'user.email=t@e.t', 'commit', '-qm', 'ignore');
+      const cmd = [
+        "printf 'x\\n' >> shared/log.ts",
+        "printf 'y\\n' >> apps/console/main.ts",
+        "printf 'n\\n' > notes.md",
+        "python3 -c \"open('apps/console/main.ts','a').write('p')\"",
+        'mv shared/allowlist.ts moved.ts',
+        "mkdir -p dist && printf 'b' > dist/out.js",
+        "printf 'l' > debug.log",
+      ].join('; ');
+      const h = (await start(b, ['shared/'], `exec: ${cmd}`)).body as unknown as RunDTO;
+      await until(b, h.id, 'done');
+      expect(fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8')).toBe(SEED['shared/log.ts'] + 'x\n');
+      expect(fs.readFileSync(path.join(repo, 'apps/console/main.ts'), 'utf8')).toBe(SEED['apps/console/main.ts']);
+      expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
+      expect(fs.existsSync(path.join(repo, 'moved.ts'))).toBe(false);
+      expect(fs.existsSync(path.join(repo, 'shared/allowlist.ts'))).toBe(true);
+      expect(fs.readFileSync(path.join(repo, 'dist/out.js'), 'utf8')).toBe('b');
+      expect(fs.readFileSync(path.join(repo, 'debug.log'), 'utf8')).toBe('l');
+      expect((await runOf(b, h.id)).summary).toContain('Operation not permitted');
+    }));
+
+  test('npm install and a test suite run in a section holding the package; a lockfile outside the section is refused', () =>
+    twoSessions(async (b, repo) => {
+      const put = (p: string, text: string) => {
+        fs.mkdirSync(path.dirname(path.join(repo, p)), { recursive: true });
+        fs.writeFileSync(path.join(repo, p), text);
+      };
+      put('.gitignore', 'node_modules/\n');
+      put('vendor/dep/package.json', JSON.stringify({ name: 'dep', version: '1.0.0', main: 'index.js' }));
+      put('vendor/dep/index.js', 'module.exports = () => 42;\n');
+      put('vendor/extra/package.json', JSON.stringify({ name: 'extra', version: '1.0.0' }));
+      put(
+        'app/package.json',
+        JSON.stringify({
+          name: 'app',
+          version: '1.0.0',
+          scripts: { test: 'node --test' },
+          dependencies: { dep: 'file:../vendor/dep' },
+        }),
+      );
+      put(
+        'app/dep.test.js',
+        "const test = require('node:test');\nconst assert = require('node:assert');\ntest('dep', () => assert.equal(require('dep')(), 42));\n",
+      );
+      execFileSync('npm', ['install', '--no-audit', '--no-fund'], { cwd: path.join(repo, 'app'), stdio: 'ignore' });
+      fs.rmSync(path.join(repo, 'app/node_modules'), { recursive: true });
+      git(repo, 'add', '-A');
+      git(repo, '-c', 'user.name=t', '-c', 'user.email=t@e.t', 'commit', '-qm', 'app');
+      const lock = fs.readFileSync(path.join(repo, 'app/package-lock.json'), 'utf8');
+      const npm = 'cd app && npm install --no-audit --no-fund && npm test';
+      const inside = (await start(b, ['app/'], `exec: ${npm}`)).body as unknown as RunDTO;
+      await until(b, inside.id, 'done');
+      expect((await runOf(b, inside.id)).summary).toMatch(/^exit 0:/);
+      expect(fs.existsSync(path.join(repo, 'app/node_modules/dep'))).toBe(true);
+      // Adding a package rewrites app/package.json and its lockfile, outside a session on app's tests alone.
+      const narrow = (await start(b, ['app/test/'], 'exec: cd app && npm install --no-audit --no-fund ../vendor/extra'))
+        .body as unknown as RunDTO;
+      await until(b, narrow.id, 'done');
+      expect((await runOf(b, narrow.id)).summary).toMatch(/^exit [1-9]/);
+      expect(fs.readFileSync(path.join(repo, 'app/package-lock.json'), 'utf8')).toBe(lock);
+      expect(JSON.parse(fs.readFileSync(path.join(repo, 'app/package.json'), 'utf8')).dependencies).toEqual({
+        dep: 'file:../vendor/dep',
+      });
+    }));
+
+  test("a session on a section never runs unlocked: if the sandbox can't start, it is refused", () =>
+    twoSessions(
+      async b => {
+        const r = await call(b, '/api/runs', { agent: 'claude', prompt: 'Log it', scope: ['shared/'] });
+        expect(r.status).toBe(409);
+        expect(r.body).toMatchObject({ code: 'no-sandbox' });
+        expect((await state(b)).runs).toEqual([]);
+        // The whole repository needs no section lock.
+        expect((await call(b, '/api/runs', { agent: 'claude', prompt: 'Log it', scope: [] })).status).toBe(200);
+      },
+      { LOA_SANDBOX_EXEC: '/usr/bin/false' },
+    ));
 
   test('sections of sessions at work never overlap, and a whole-repository run works alone', () =>
     twoSessions(async (b, repo) => {
@@ -2185,9 +2317,9 @@ test('scope lock on a line range: edits inside pass, any change outside is block
   fs.rmSync(path.dirname(repo), { recursive: true, force: true });
 });
 
-test('a run limited to lines flags changes outside them, for any agent', () =>
+test('a run limited to lines flags changes outside them; a file outside its file is never written', () =>
   watching(async (repo, b) => {
-    // The stand-in agent changes line 9 of allowlist.ts, appends to it, and creates policy-cache.ts.
+    // The stand-in agent changes line 9 of allowlist.ts, appends to it, and tries to create policy-cache.ts.
     const start = await call(b, '/api/runs', {
       agent: 'claude',
       prompt: 'Only touch loadPolicy',
@@ -2196,10 +2328,9 @@ test('a run limited to lines flags changes outside them, for any agent', () =>
     expect(start.status).toBe(200);
     await expect.poll(async () => (await runsOf(b))[0]?.status, { timeout: 15_000 }).toBe('done');
     const [run] = await runsOf(b);
-    expect(run!.outOfScope).toEqual(['shared/allowlist.ts outside lines 3–5', 'shared/policy-cache.ts']);
-    expect(run!.stream.map(e => e.text)).toContain(
-      'Changed outside scope: shared/allowlist.ts outside lines 3–5, shared/policy-cache.ts',
-    );
+    expect(run!.outOfScope).toEqual(['shared/allowlist.ts outside lines 3–5']);
+    expect(run!.stream.map(e => e.text)).toContain('Changed outside scope: shared/allowlist.ts outside lines 3–5');
+    expect(fs.existsSync(path.join(repo, 'shared/policy-cache.ts'))).toBe(false);
   }));
 
 test('lines selected in the editor scope a live run; changes outside them are flagged; revert is exact', async ({
@@ -2225,8 +2356,9 @@ test('lines selected in the editor scope a live run; changes outside them are fl
     await expect(page.locator('#editorReview')).toBeVisible({ timeout: 15_000 });
     const [run] = (await runsOf(b)).filter(r => r.agent === 'claude');
     expect(run!.scope).toEqual(['shared/allowlist.ts:3-5']);
-    // The stand-in agent changed line 9 and created a file: both are flagged, on the run and in its review.
-    expect(run!.outOfScope).toEqual(['shared/allowlist.ts outside lines 3–5', 'shared/policy-cache.ts']);
+    // The stand-in agent changed line 9, flagged on the run and in its review; the file it tried to create, the
+    // sandbox refused.
+    expect(run!.outOfScope).toEqual(['shared/allowlist.ts outside lines 3–5']);
     await expect(page.locator('#editor .cm-added').first()).toBeVisible();
     await expect(page.locator('#editor .cm-removed')).toContainText(["    throw new Error('ALLOWLIST_VIOLATION');"]);
     await page.locator('#rejectChange').click();

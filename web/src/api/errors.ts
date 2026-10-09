@@ -17,6 +17,8 @@ export const BY_CODE: Record<string, string> = {
   'lines-changed': 'The lines you selected in {name} changed. Select them again.',
   'run-active': 'Run {id} is still active',
   'sections-overlap': 'Run {id} is working on {path}. Pick a section outside it, or wait for it to finish.',
+  'no-sandbox':
+    "A session on a section runs in macOS's sandbox, which can't start here. Start the bridge from a regular terminal.",
   'wait-for-run': 'Wait for the run to finish',
   'hooks-run-active': 'A run is in progress. Remove the hooks once it finishes.',
   'no-commit': 'There is no commit yet.',

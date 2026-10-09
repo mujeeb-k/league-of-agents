@@ -15,7 +15,7 @@ import { emit } from '../events.mjs';
 export function streamConnector(bin, argsOf) {
   return {
     start(run, prompt, scopeFile) {
-      const { child, closed } = launch(run, [bin(), ...argsOf(prompt, run.sessionId)], {
+      const { child, closed } = launch(run, [bin(), ...argsOf(prompt, run)], {
         env: { LOA_SCOPE_FILE: scopeFile },
         onLine: line => onAgentLine(run, line),
         onStderr: d => {

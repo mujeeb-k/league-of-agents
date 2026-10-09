@@ -33,7 +33,7 @@ function startAcp(run, prompt, name, command, env) {
     outcome = null;
   // Harnesses log freely to stderr: kept in the raw log, and its last line said only if the run fails.
   const { child, closed } = launch(run, command, {
-    env,
+    env: typeof env === 'function' ? env(run) : env,
     stdin: true,
     onLine: line => {
       try {
@@ -85,6 +85,8 @@ function startAcp(run, prompt, name, command, env) {
       const tool = { ...calls.get(u.toolCallId), ...u };
       calls.set(u.toolCallId, tool);
       if (tool.kind === 'edit') noteEdit(u.toolCallId, { content: u.content });
+      // DeepSeek Harness's edit or write, done without asking (its full-access mode, in the sandbox): its arguments.
+      else if (isEdit(tool) && u.status === 'completed') noteEdit(u.toolCallId, tool);
       if (u.status === 'failed') {
         const said = (u.content || []).map(c => c?.content?.text || '').join(' ');
         // DeepSeek Harness's read-only mode denies each write until it asks (dsh-sandbox-policy): expected.
@@ -168,11 +170,12 @@ function startAcp(run, prompt, name, command, env) {
     done,
   };
 }
+/** An edit: a call of kind "edit" (Hermes), or DeepSeek Harness's edit or write tool, sent as kind "other". */
+const isEdit = tool => tool.kind === 'edit' || (tool.kind === 'other' && ['edit', 'write'].includes(tool.title));
 /**
  * What an ACP harness asks before doing it (the tool call, as told so far): an edit is allowed when every file it
  * names is in the repo (not its .git or .loa) and in the run's scope, if it has one. Anything else is refused, and
- * the run says what. An edit is a call of kind "edit" (Hermes), or DeepSeek Harness's edit or write tool, which it
- * sends as kind "other" with the file in its arguments.
+ * the run says what.
  */
 function permitAcp(run, tool, options) {
   const files = [
@@ -184,8 +187,7 @@ function permitAcp(run, tool, options) {
   const inRepo = rel.every(
     r => r && !r.startsWith('../') && r !== '..' && !path.isAbsolute(r) && !/^\.(git|loa)\//.test(r),
   );
-  const edit = tool.kind === 'edit' || (tool.kind === 'other' && ['edit', 'write'].includes(tool.title));
-  const ok = edit && rel.length > 0 && inRepo && (!run.scope?.length || rel.every(r => inScope(run.scope, r)));
+  const ok = isEdit(tool) && rel.length > 0 && inRepo && (!run.scope?.length || rel.every(r => inScope(run.scope, r)));
   const option = options.find(o => (ok ? /^allow/ : /^reject/).test(o.kind));
   if (!ok) {
     const what = acpToolLabel({ title: 'a request', ...tool });

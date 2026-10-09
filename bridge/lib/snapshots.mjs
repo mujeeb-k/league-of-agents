@@ -37,7 +37,8 @@ export const SECRET_FILES = [
  * The working tree as a git tree, written through a private index. The index is kept between snapshots, so
  * git hashes only the files that changed since the last one. `fresh` starts it again from HEAD.
  */
-export async function writeTree(fresh = false) {
+/** `paths` limits the update to those paths: the rest of the tree is as last written. */
+export async function writeTree(fresh = false, paths = /** @type {string[] | null} */ (null)) {
   const env = { ...process.env, GIT_INDEX_FILE: snapIndex() };
   if (fresh || !fs.existsSync(snapIndex())) {
     try {
@@ -54,13 +55,25 @@ export async function writeTree(fresh = false) {
       '--others',
       '--exclude-standard',
       '--',
-      ...SECRET_FILES.map(g => `:(glob)**/${g}`),
+      // Limited to the paths when given: a scan of every untracked path takes seconds in a repo the size of llvm.
+      ...SECRET_FILES.flatMap(g =>
+        paths
+          ? paths.map(
+              p =>
+                `:(glob)${p.endsWith('/') ? `${p}**/` : path.posix.dirname(p) === '.' ? '' : `${path.posix.dirname(p)}/`}${g}`,
+            )
+          : [`:(glob)**/${g}`],
+      ),
     ])
   )
     .split('\0')
     .filter(Boolean);
-  await gitAsync(['add', '-A'], { env });
-  if (untrackedSecrets.length) await gitAsync(['rm', '--cached', '-q', '--', ...untrackedSecrets], { env });
+  // A path that doesn't exist yet (a file the section names, not yet created) fails a limited update: then all of it.
+  await gitAsync(['add', '-A', ...(paths ? ['--', ...paths] : [])], { env }).catch(() =>
+    gitAsync(['add', '-A'], { env }),
+  );
+  if (untrackedSecrets.length)
+    await gitAsync(['rm', '--cached', '-q', '--ignore-unmatch', '--', ...untrackedSecrets], { env });
   return (await gitAsync(['write-tree'], { env })).trim();
 }
 /** A commit of the tree on top of HEAD, reachable only from the refs it is pinned to. */
@@ -86,9 +99,9 @@ export async function headNow() {
   }
 }
 /** The working tree now, as a snapshot commit: the baseline's shape, `{ head, tree, commit }`. */
-export async function snapshotNow(label) {
+export async function snapshotNow(label, paths = /** @type {string[] | null} */ (null)) {
   const head = await headNow(),
-    tree = await writeTree();
+    tree = await writeTree(false, paths);
   return { head, tree, commit: await commitTree(tree, label, head) };
 }
 /** A file's content id in a commit, or null when the commit doesn't have it. */
