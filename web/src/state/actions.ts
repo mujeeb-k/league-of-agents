@@ -262,7 +262,10 @@ export function send(): Promise<void> {
     return sendQueue;
   }
   if (!v) return sendQueue;
-  const refused = clashOf(scopeFromSelection(), workingRuns());
+  const fu = followTarget();
+  // Nothing selected, a follow-up keeps its session's own section.
+  const scope = scopeFromSelection().length ? scopeFromSelection() : (fu?.scope ?? []);
+  const refused = clashOf(scope, workingRuns());
   if (refused) {
     toast(clashText(refused));
     return sendQueue;
@@ -273,8 +276,8 @@ export function send(): Promise<void> {
     const body = {
       agent: st.agent,
       prompt: v,
-      scope: scopeFromSelection(),
-      resumeFrom: followTarget()?.id ?? null,
+      scope,
+      resumeFrom: fu?.id ?? null,
       lines: held ? { [held.path]: held.anchor.text.join('\n') } : undefined,
       context: held
         ? { [held.path]: { before: held.anchor.before, after: held.anchor.after, twin: held.anchor.twin } }

@@ -248,13 +248,15 @@ function applyState(s: StateResponse, first: boolean) {
  */
 function openFinished(run: Run, was: Run | null) {
   justFinished.delete(run.id);
+  // By id: a state event meanwhile makes new run objects.
   requestAnimationFrame(() =>
     setTimeout(() => {
-      if (st.run !== was || !S.RUNS.includes(run)) return;
-      st.run = run;
+      const now = S.RUNS.find(r => r.id === run.id);
+      if ((st.run?.id ?? null) !== (was?.id ?? null) || !now) return;
+      st.run = now;
       st.mode = 'diff';
       renderAll();
-      flyRun(run);
+      flyRun(now);
     }),
   );
 }

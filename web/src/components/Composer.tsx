@@ -5,13 +5,16 @@ import { agentOf } from '../lib/constants';
 import { examplePrompt } from '../lib/examplePrompt';
 import { DEMO_AGENTS } from '../demo/sample';
 import { S, dom, st } from '../state/app';
-import { eachSection, followTarget, isOffline, send, sendEach } from '../state/actions';
+import { eachSection, followTarget, isOffline, selectRun, send, sendEach } from '../state/actions';
+import type { Run } from '../lib/types';
+import { cn } from '@/lib/utils';
 import { clearLines, ed, rangeScope, staleSelection } from '../state/editing';
 import { renderComposer, renderSel, useRegion } from '../state/render';
 import { Button } from './ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -34,10 +37,14 @@ function ScopeRow() {
       : { k, label: (S.FILES.get(k)?.name || k) + (range ? `:${range.split(':').pop()!.replace('-', '–')}` : '') },
   );
   const fu = followTarget();
+  // Nothing selected, a follow-up works on its session's own section (actions.ts send).
+  const from = !items.length && fu?.scope?.length ? fu.scope : null;
   return (
     <>
       <span className="text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase">{t('Scope')}</span>
-      {items.length ? (
+      {from ? (
+        from.map(s => <ScopeChip key={s} label={s} className="from" title={t('Run {id}’s section', { id: fu!.id })} />)
+      ) : items.length ? (
         items.map(i => (
           <ScopeChip
             key={i.k}
@@ -61,21 +68,68 @@ function ScopeRow() {
       ) : (
         <ScopeChip label={t('Whole repository')} tone="neutral" className="all font-sans" />
       )}
-      {fu ? (
-        <ScopeChip
-          label={t('Follow-up to run {id}', { id: fu.id })}
-          tone="neutral"
-          className="fu"
-          title={t('Continues the same {agent} session', { agent: agentOf(fu.agent).name })}
-          removeLabel={t('Start a new session instead')}
-          removeData={{ 'data-nofollow': fu.id }}
-          onRemove={() => {
-            st.noFollow = fu.id;
+      <FollowChip fu={fu} />
+    </>
+  );
+}
+
+/**
+ * Which session a prompt replies to: the open run's, or a new one. With several sessions, the menu lists the ones a
+ * prompt can continue (finished, not reverted, their agent here), newest first, to switch between.
+ */
+function FollowChip({ fu }: { fu: Run | null }) {
+  const runs = S.LIVE
+    ? S.RUNS.filter(r => r.status !== 'running' && !r.reverted && r.sessionId && S.LIVE_AGENTS?.[r.agent]?.available)
+        .reverse()
+        .slice(0, 8)
+    : [];
+  if (!runs.length) return null;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          id="followChip"
+          title={fu ? t('Continues the same {agent} session', { agent: agentOf(fu.agent).name }) : undefined}
+          className={cn(
+            'chip inline-flex h-6 max-w-full items-center gap-1 rounded-md bg-muted px-2 font-mono text-xs text-ink2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none',
+            fu ? 'fu' : 'new',
+          )}
+        >
+          <span className="truncate">{fu ? t('Follow-up to run {id}', { id: fu.id }) : t('New session')}</span>
+          <ChevronDown className="size-3 shrink-0" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent id="followMenu" align="start" side="top" sideOffset={8} className="w-80">
+        {runs.map(r => (
+          <DropdownMenuItem
+            key={r.id}
+            data-follow={r.id}
+            className="gap-2"
+            onSelect={() => {
+              st.agent = r.agent;
+              st.noFollow = null;
+              selectRun(r, false);
+            }}
+          >
+            <Dot c={agentOf(r.agent).c} />
+            <span className="truncate">
+              {t('Run {id} · {agent}', { id: r.id, agent: agentOf(r.agent).name })} · {r.title}
+            </span>
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          data-follow="new"
+          onSelect={() => {
+            if (fu) st.noFollow = fu.id;
             renderComposer();
           }}
-        />
-      ) : null}
-    </>
+        >
+          {t('Start a new session instead')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

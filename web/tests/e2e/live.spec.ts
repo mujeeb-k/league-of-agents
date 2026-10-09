@@ -147,7 +147,8 @@ test('live run, review and revert', async ({ page }) => {
     await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
     // Removing the follow-up chip on a finished run starts the next prompt fresh.
     await expect(page.locator('#scopeRow .chip.fu > span')).toHaveText('Follow-up to run 2');
-    await page.locator('[data-nofollow="2"]').click();
+    await page.locator('#followChip').click();
+    await page.locator('#followMenu [data-follow="new"]').click();
     await expect(page.locator('#scopeRow .chip.fu')).toHaveCount(0);
     fs.appendFileSync(path.join(repo, 'shared/allowlist.ts'), '// edited after the run\n');
     // Watch mode records the later edit as a run of its own.
@@ -1937,6 +1938,49 @@ test.describe('sessions at once, in the app', () => {
       // It opens as it ends.
       await expect(page.locator('#runbar b')).toHaveText('Run 1');
       await expect(page.locator('#insp .problem')).toHaveText('Claude Code hit its usage limit. Try again later.');
+    }));
+
+  test('follow-ups: the composer names the session it replies to, switches between them, and keeps its section', async ({
+    page,
+  }) =>
+    withHermes(page, async (repo, b) => {
+      await folder(page, 'shared').click();
+      await run(page, 'Tidy the log. edit:shared/log.ts');
+      // Alone, it opens as it finishes.
+      await expect(page.locator('#runbar b')).toHaveText('Run 1', { timeout: 15_000 });
+      await expect(page.locator('[data-act="keep"]')).toBeVisible();
+      // Closed, so the next prompt starts a session of its own; then the whole map.
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('0');
+      await folder(page, 'apps').click();
+      await run(page, 'Tidy the app. edit:apps/console/main.ts');
+      await expect(page.locator('#runbar b')).toHaveText('Run 2', { timeout: 15_000 });
+      // Nothing selected: the follow-up works on the session's own section.
+      await page.keyboard.press('Escape');
+      await page.locator('#sideList [data-run="2"]').click();
+      const chip = page.locator('#followChip');
+      await expect(chip).toHaveText('Follow-up to run 2');
+      await expect(page.locator('#scopeRow .chip.from > span')).toHaveText(['apps/']);
+      await chip.click();
+      await expect(page.locator('#followMenu [data-follow]')).toHaveText([
+        'Run 2 · Hermes · Tidy the app. edit:apps/console/main.ts',
+        'Run 1 · Hermes · Tidy the log. edit:shared/log.ts',
+        'Start a new session instead',
+      ]);
+      await page.locator('#followMenu [data-follow="1"]').click();
+      await expect(page.locator('#runbar b')).toHaveText('Run 1');
+      await expect(chip).toHaveText('Follow-up to run 1');
+      await expect(page.locator('#scopeRow .chip.from > span')).toHaveText(['shared/']);
+      await run(page, 'And the allowlist. edit:shared/allowlist.ts');
+      await expect(page.locator(TOAST)).toHaveText('Hermes started run 3');
+      const third = ((await call(b, '/api/state')).body as unknown as StateResponse).runs.find(r => r.id === 3)!;
+      expect(third).toMatchObject({ resumeFrom: 1, scope: ['shared/'] });
+      // A new session instead: no follow-up, and the selection (none: the whole repository) is the scope.
+      await expect(page.locator('#runbar b')).toHaveText('Run 3', { timeout: 15_000 });
+      await chip.click();
+      await page.locator('#followMenu [data-follow="new"]').click();
+      await expect(chip).toHaveText('New session');
+      await expect(page.locator('#scopeRow .chip.all')).toHaveText('Whole repository');
     }));
 
   test('a session finishing while another is reviewed leaves the view where it is', async ({ page }) =>

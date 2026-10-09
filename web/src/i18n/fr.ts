@@ -505,5 +505,7 @@ const catalogue: Catalogue = {
   '{n} sessions at work': { one: '{n} session at work', other: '{n} sessions at work' },
   'Stopped {n} sessions': { one: 'Stopped {n} session', other: 'Stopped {n} sessions' },
   '{agent} hit its usage limit. Try again later.': '{agent} hit its usage limit. Try again later.',
+  'New session': 'New session',
+  'Run {id}’s section': 'Run {id}’s section',
 };
 export default catalogue;
