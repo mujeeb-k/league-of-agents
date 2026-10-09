@@ -543,5 +543,11 @@ const catalogue: Catalogue = {
   'That was already answered.': 'That was already answered.',
   'A command tried to write outside your selection. Blocked.':
     'A command tried to write outside your selection. Blocked.',
+  Reading: 'Reading',
+  Editing: 'Editing',
+  'Running a command': 'Running a command',
+  Working: 'Working',
+  'Follow run {id} on the map': 'Follow run {id} on the map',
+  'Stop following run {id}': 'Stop following run {id}',
 };
 export default catalogue;

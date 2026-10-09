@@ -13,6 +13,7 @@ import type {
   SaveResponse,
   StartRunBody,
   StateResponse,
+  StepDTO,
 } from './types';
 import type { AuthorRange } from '../lib/attribution';
 import type { SavedLayout } from '../lib/layout';
@@ -90,6 +91,10 @@ export const bridge = {
   /** Answers a write a session asked to make outside its section: allowed, it joins the section. */
   answerWant: (c: Conn, id: number, path: string, allow: boolean) =>
     request<OkResponse>(c, `/api/runs/${id}/wants`, { method: 'POST', body: { path, allow } }),
+  /** A run's steps from the `from`th on. Bridges before 0.2.0 answer 404. */
+  steps: (c: Conn, id: number, from: number) => request<{ steps: StepDTO[] }>(c, `/api/runs/${id}/steps?from=${from}`),
+  /** The text of a step's file as its edit left it. */
+  stepText: (c: Conn, id: number, i: number) => request<{ text: string }>(c, `/api/runs/${id}/steps/${i}`),
   /** Turns on checks the bridge found, by name. */
   enableChecks: (c: Conn, names: string[], share: boolean) =>
     request<{ checks: { name: string; run: string }[] }>(c, '/api/checks', {

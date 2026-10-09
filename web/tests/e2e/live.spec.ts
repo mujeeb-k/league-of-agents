@@ -2511,6 +2511,68 @@ test.describe('sessions at once, in the app', () => {
       }),
   );
 
+  test('where each session is: a marker on the file its latest step names, on the map and the minimap', async ({
+    page,
+  }) =>
+    withHermes(page, async repo => {
+      await folder(page, 'shared').click();
+      await run(page, 'edit:shared/log.ts wait:a');
+      const one = page.locator('#markers .marker[data-run="1"]');
+      await expect(one).toHaveAttribute('data-path', 'shared/log.ts', { timeout: 15_000 });
+      await expect(one).toHaveText('Editing');
+      await page.keyboard.press('Escape');
+      await folder(page, 'apps').click();
+      await run(page, 'hold:b edit:apps/console/main.ts');
+      // Its first step reads a file outside its section: the marker goes where the session is, wherever that is.
+      const two = page.locator('#markers .marker[data-run="2"]');
+      await expect(two).toHaveAttribute('data-path', 'shared/allowlist.ts', { timeout: 15_000 });
+      await expect(two).toHaveText('Reading');
+      await expect(page.locator('#mini')).toHaveAttribute('data-here', '1 shared/log.ts,2 shared/allowlist.ts');
+      go(repo, 'b');
+      await expect(two).toHaveAttribute('data-path', 'apps/console/main.ts', { timeout: 15_000 });
+      go(repo, 'a');
+      await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+      await expect(page.locator('#markers .marker')).toHaveCount(0);
+      await expect(page.locator('#mini')).toHaveAttribute('data-here', '');
+    }));
+
+  test('following a session: the map goes to each file it turns to, until the person moves the map', async ({ page }) =>
+    withHermes(page, async repo => {
+      await folder(page, 'shared').click();
+      await run(page, 'hold:a edit:shared/log.ts wait:b');
+      const follow = page.locator('#sideList [data-run="1"] [data-follow]');
+      await expect(page.locator('#markers .marker[data-run="1"]')).toHaveAttribute('data-path', 'shared/allowlist.ts', {
+        timeout: 15_000,
+      });
+      await follow.click();
+      await expect(follow).toHaveAttribute('aria-pressed', 'true');
+      const centred = (p: string) =>
+        expect
+          .poll(
+            async () => {
+              const r = (await page.locator(`#nodes [data-path="${p}"]`).first().boundingBox())!;
+              const s = (await page.locator('#stage').boundingBox())!;
+              return (
+                Math.hypot(r.x + r.width / 2 - (s.x + s.width / 2), r.y + r.height / 2 - (s.y + s.height / 2)) < 60
+              );
+            },
+            { timeout: 5_000 },
+          )
+          .toBe(true);
+      await centred('shared/allowlist.ts');
+      go(repo, 'a');
+      await centred('shared/log.ts');
+      // Moving the map by hand stops following.
+      const s = (await page.locator('#stage').boundingBox())!;
+      await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(s.x + s.width / 2 + 120, s.y + s.height / 2 + 60, { steps: 4 });
+      await page.mouse.up();
+      await expect(follow).toHaveAttribute('aria-pressed', 'false');
+      go(repo, 'b');
+      await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+    }));
+
   test('several sections and one prompt start a session on each; sections that overlap start none', async ({ page }) =>
     withHermes(page, async (repo, b) => {
       await folder(page, 'shared').click();

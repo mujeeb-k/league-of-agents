@@ -576,6 +576,8 @@ interface Measured {
   zoomDropped: number;
   selection: number;
   stateEvent: number;
+  /** With three sessions at work: from a step's progress event to the first frame with its marker on the file. */
+  marker: number | null;
 }
 
 type Mode = 'as it opens' | 'colored by author' | 'three sessions at once';
@@ -595,20 +597,23 @@ const SECTIONS = [
  */
 async function measureReactRouter(page: Page, b: Bridge, repo: string, file: string, mode: Mode): Promise<Measured> {
   const held = SECTIONS.map(() => `s${Math.random().toString(36).slice(2, 8)}`);
+  // The first session waits before its edit, so its step comes while the map is measured.
+  const hold = `h${Math.random().toString(36).slice(2, 8)}`;
   if (mode === 'three sessions at once') {
     await expect
       .poll(async () => ((await call(b, '/api/state')).body.agents as Record<string, { available: boolean }>).hermes)
       .toMatchObject({ available: true });
     for (const [i, [scope, file]] of SECTIONS.entries()) {
-      const prompt = `edit:${file} wait:${held[i]}`;
+      const prompt = `${i ? '' : `hold:${hold} `}edit:${file} wait:${held[i]}`;
       const r = await call(b, '/api/runs', { agent: 'hermes', prompt, scope: [scope] });
       expect(r.status, 'a session starts').toBe(200);
     }
   }
   await page.addInitScript(() => {
-    const w = window as unknown as { mapVisible: number | null; stateEvents: number[] };
+    const w = window as unknown as { mapVisible: number | null; stateEvents: number[]; stepEvents: number[] };
     w.mapVisible = null;
     w.stateEvents = [];
+    w.stepEvents = [];
     // The map is visible on the first frame that shows its folders.
     const look = () =>
       document.querySelector('#world .frame') ? (w.mapVisible = performance.now()) : requestAnimationFrame(look);
@@ -623,8 +628,9 @@ async function measureReactRouter(page: Page, b: Bridge, repo: string, file: str
         void res
           .clone()
           .json()
-          .then((b: { events: { type: string }[] }) => {
+          .then((b: { events: { type: string; run?: { steps?: unknown[] } }[] }) => {
             if (b.events.some(e => e.type === 'state')) w.stateEvents.push(t);
+            if (b.events.some(e => e.run?.steps?.length)) w.stepEvents.push(t);
           });
       return res;
     };
@@ -678,6 +684,25 @@ async function measureReactRouter(page: Page, b: Bridge, repo: string, file: str
   );
   await page.mouse.click(spot!.x, spot!.y);
   const selection = await selected;
+  // A session's step, to the first frame that shows its marker on the file it edits.
+  let marker: number | null = null;
+  if (mode === 'three sessions at once') {
+    const steps = await page.evaluate(() => (window as unknown as { stepEvents: number[] }).stepEvents.length);
+    fs.writeFileSync(path.join(repo, `.loa/go-${hold}`), '');
+    const shownAt = await page.evaluate(
+      file =>
+        new Promise<number>(resolve => {
+          const look = () =>
+            document.querySelector(`#markers .marker[data-path="${file}"]`)
+              ? requestAnimationFrame(() => resolve(performance.now()))
+              : requestAnimationFrame(look);
+          requestAnimationFrame(look);
+        }),
+      SECTIONS[0]![1]!,
+    );
+    const stepAt = await page.evaluate(n => (window as unknown as { stepEvents: number[] }).stepEvents[n]!, steps);
+    marker = shownAt - stepAt;
+  }
   // From the state event to the first frame that shows it: an edit outside the app as a new run, or a session's
   // end as one session fewer at work.
   const sessions = mode === 'three sessions at once';
@@ -703,7 +728,7 @@ async function measureReactRouter(page: Page, b: Bridge, repo: string, file: str
     for (const h of held.slice(1)) fs.writeFileSync(path.join(repo, `.loa/go-${h}`), '');
     await expect(page.locator(counted)).toHaveCount(0, { timeout: 30_000 });
   }
-  return { mapVisible, panDropped, zoomDropped, selection, stateEvent: shown - event };
+  return { mapVisible, panDropped, zoomDropped, selection, stateEvent: shown - event, marker };
 }
 
 // Measured as it opens; colored by author (spec 017), every line of every file labelled on each state; and with
@@ -729,7 +754,7 @@ for (const mode of ['as it opens', 'colored by author', 'three sessions at once'
       fs.writeFileSync(path.join(OUT, `react-router, ${mode}.json`), JSON.stringify(runs, null, 2));
       report(runs);
     });
-    const of = (k: keyof Measured) => median(runs.map(r => r[k]));
+    const of = (k: keyof Measured) => median(runs.map(r => r[k] ?? NaN));
     // Coloring is turned on after the map is visible, so that budget is measured once, as it opens.
     if (mode === 'as it opens')
       test('react-router: map visible under 2 s', () => expect(of('mapVisible')).toBeLessThan(2000));
@@ -740,4 +765,7 @@ for (const mode of ['as it opens', 'colored by author', 'three sessions at once'
     test('react-router: selection visible under 100 ms', () => expect(of('selection')).toBeLessThan(100));
     test('react-router: canvas updated under 200 ms after a state event', () =>
       expect(of('stateEvent')).toBeLessThan(200));
+    if (mode === 'three sessions at once')
+      test("react-router: a session's marker on its file under 200 ms after its step", () =>
+        expect(of('marker')).toBeLessThan(200));
   });

@@ -3,11 +3,22 @@ import { S, dom, st } from '../state/app';
 import { CH, CW } from './constants';
 import { allDirs, existsNow } from './model';
 import type { Run } from './types';
+import { markers } from '../state/watch';
+import { sessionSlot } from '../state/sessions';
 
 const css: Record<string, string> = {};
 export function readCss() {
   const cs = getComputedStyle(document.documentElement);
-  for (const k of ['surface', 'hair', 'spark', 'sel', 'add', 'mod', 'ink3'])
+  for (const k of [
+    'surface',
+    'hair',
+    'spark',
+    'sel',
+    'add',
+    'mod',
+    'ink3',
+    ...[1, 2, 3, 4, 5].map(n => `session-${n}`),
+  ])
     css[k] = cs.getPropertyValue('--' + k).trim();
 }
 
@@ -105,4 +116,14 @@ export function drawMini() {
   c.strokeStyle = css.sel ?? '';
   c.lineWidth = 1.5;
   c.strokeRect(ox + (-x / s) * k, oy + (-y / s) * k, (dom.stage.clientWidth / s) * k, (dom.stage.clientHeight / s) * k);
+  // Where each session at work is: a dot in its colour on its file, over the painted files (state/watch.ts).
+  const here = markers();
+  for (const { run, at } of here) {
+    const f = S.FILES.get(at.file!)!;
+    c.fillStyle = css[`session-${sessionSlot(run)}`] ?? '';
+    c.beginPath();
+    c.arc(ox + (f.x + CW / 2) * k, oy + (f.y + CH / 2) * k, 3.5, 0, Math.PI * 2);
+    c.fill();
+  }
+  cv.dataset.here = here.map(m => `${m.run.id} ${m.at.file}`).join(',');
 }

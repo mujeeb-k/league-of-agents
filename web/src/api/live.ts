@@ -11,6 +11,7 @@ import { t, tn } from '../i18n';
 import { fmtDur, relTime } from '../lib/util';
 import { S, st } from '../state/app';
 import { noteEnded, opensOnFinish } from '../state/sessions';
+import { addSteps, stepped } from '../state/watch';
 import { noticeAsks, noticeEnded } from '../state/notices';
 import { stopDemoTimers } from '../demo/sessions';
 import { loadDemo, selectRun } from '../state/actions';
@@ -242,6 +243,22 @@ function applyState(s: StateResponse, first: boolean) {
     st.v = openingView();
     applyView(true);
   } else if (opening) openFinished(opening, st.run);
+  // Sessions already at work when the app connected or reloaded: their steps so far.
+  for (const id of S.WORKING) if (!stepsFetched.has(id)) void loadSteps(id);
+}
+
+/** Runs whose steps were fetched whole: later ones come with progress events. */
+const stepsFetched = new Set<number>();
+/** A run's steps, fetched whole (bridge/lib/steps.mjs); none from a bridge before 0.2.0. */
+async function loadSteps(id: number) {
+  stepsFetched.add(id);
+  try {
+    addSteps(id, (await bridge.steps(conn(), id, 0)).steps);
+  } catch {
+    return;
+  }
+  const run = S.RUNS.find(r => r.id === id);
+  if (run) stepped(run);
 }
 
 /**
@@ -301,7 +318,13 @@ async function poll() {
               checksRunning: p.checksRunning,
               cost: p.cost,
               turn: p.turn,
+              model: p.model ?? run.model,
             });
+            if (p.steps?.length) {
+              // A step that came ahead of others means an event was missed: all of them, fetched again.
+              if (addSteps(run.id, p.steps)) void loadSteps(run.id);
+              stepped(run);
+            }
             // A run that just ended needs the whole state, unless its delta came with it.
             if (wasRunning && run.status !== 'running' && !deltas.some(d => d.run.id === run.id)) needState = true;
             if (st.run === run) renderInspector();

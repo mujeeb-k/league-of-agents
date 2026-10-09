@@ -74,6 +74,8 @@ export const st = {
   /** A file is open in the editor; in auto mode the sidebar steps aside for it (panels.ts). */
   editing: false,
   noFollow: null as number | null,
+  /** The session the map follows from file to file (state/watch.ts), until the person moves the map. */
+  following: null as number | null,
   connectOpen: false,
   /** Opening with a bridge link or a saved connection: nothing is shown until the bridge answers. */
   starting: false,

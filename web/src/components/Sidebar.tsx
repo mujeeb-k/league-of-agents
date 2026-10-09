@@ -1,5 +1,5 @@
 // Sidebar: Files and Runs.
-import { Bell, ChevronRight, Pin, Square } from 'lucide-react';
+import { Bell, ChevronRight, Eye, Pin, Square } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { flyAll, flyDir, flyFile } from '../lib/camera';
 import { agentOf } from '../lib/constants';
@@ -14,6 +14,7 @@ import { isOffline, runAction, selectRun, stopSessions, toggleSel } from '../sta
 import { renderSel, renderSide, useRegion } from '../state/render';
 import { asking, endedAs, holderOf, reachOf, sessionColour, sessionsCost, workingRuns } from '../state/sessions';
 import { answerWant } from '../api/live';
+import { follow, stepsOf } from '../state/watch';
 import { money } from '../lib/util';
 import { notifying, toggleNotifying } from '../state/notices';
 import { cn } from '@/lib/utils';
@@ -179,6 +180,27 @@ function RunRow({ r }: { r: Run }) {
           <div className="t min-w-0 flex-1 leading-snug font-medium text-pretty [overflow-wrap:anywhere]">
             {r.title}
           </div>
+          {running && stepsOf(r.id).length ? (
+            <Tip
+              label={
+                st.following === r.id
+                  ? t('Stop following run {id}', { id: r.id })
+                  : t('Follow run {id} on the map', { id: r.id })
+              }
+            >
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                data-follow
+                aria-pressed={st.following === r.id}
+                aria-label={t('Follow run {id} on the map', { id: r.id })}
+                className="-mt-0.5 shrink-0 text-ink2 aria-pressed:bg-accent aria-pressed:text-foreground"
+                onClick={() => follow(st.following === r.id ? null : r)}
+              >
+                <Eye className="size-3.5" />
+              </Button>
+            </Tip>
+          ) : null}
           {running ? (
             <Tip label={t('Stop run {id}', { id: r.id })}>
               <Button

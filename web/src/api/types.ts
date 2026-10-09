@@ -157,6 +157,20 @@ export interface StateResponse {
   watchOff?: string | null;
 }
 
+/**
+ * A tool call of a run's agent (bridges from 0.2.0): what it did, the file it named, when; `text` when the file as an
+ * edit left it is kept (GET /api/runs/:id/steps/:i).
+ */
+export interface StepDTO {
+  i: number;
+  at: number;
+  act: 'read' | 'edit' | 'run' | 'other';
+  tool: string;
+  file?: string;
+  text?: boolean;
+  refused?: boolean;
+}
+
 /** Progress payload carried by `progress` events (bridge emit()). */
 export interface RunProgress {
   id: number;
@@ -168,6 +182,9 @@ export interface RunProgress {
   checksRunning: boolean;
   cost: number | null;
   turn?: TurnSummary;
+  /** Bridges from 0.2.0: the model, and the steps added or changed since its last progress event. */
+  model?: string | null;
+  steps?: StepDTO[];
 }
 
 export interface BridgeEvent {

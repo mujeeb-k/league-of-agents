@@ -20,6 +20,8 @@ import { UpdateBanner } from './UpdateBanner';
 import { Kbd } from './ui/kbd';
 import { Phrase } from './bits';
 import { useScene } from './Scene';
+import { Markers } from './Markers';
+import { stopFollowing } from '../state/watch';
 
 interface Drag {
   sx: number;
@@ -107,6 +109,7 @@ function bindStage(stage: HTMLElement) {
       });
     } else {
       stage.classList.add('panning');
+      stopFollowing();
       st.v.x = drag.vx + dx;
       st.v.y = drag.vy + dy;
       applyView();
@@ -195,6 +198,7 @@ function bindStage(stage: HTMLElement) {
     if (inChrome(e.target as Element)) return;
     e.preventDefault();
     hideTip();
+    stopFollowing();
     const k = e.deltaMode === 1 ? 16 : 1;
     if (e.ctrlKey || e.metaKey) {
       const r = stage.getBoundingClientRect();
@@ -233,6 +237,7 @@ function World() {
       {/* Import lines: drawn on focus by updateEdgeFocus (lib/scene.ts), not by React. */}
       <svg id="links" ref={setLinks} />
       <div id="sels">{sels}</div>
+      <Markers />
     </div>
   );
 }

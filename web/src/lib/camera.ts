@@ -127,6 +127,11 @@ export const flyFile = (p: string) => {
   const f = S.FILES.get(p);
   if (f) flyTo(fitView(fileBox(f), 40, 1.1));
 };
+/** A box to the middle of the stage, at the zoom the person chose (following a session, state/watch.ts). */
+export function centreOn(b: Box) {
+  const s = st.v.s;
+  flyTo({ s, x: dom.stage.clientWidth / 2 - (b.x + b.w / 2) * s, y: dom.stage.clientHeight / 2 - (b.y + b.h / 2) * s });
+}
 export const flyDir = (p: string) => {
   endFirstLoad();
   const d = S.DIRMAP.get(p);

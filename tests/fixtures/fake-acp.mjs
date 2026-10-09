@@ -165,6 +165,9 @@ async function turn(sessionId, text) {
     if (!edits.length) return 'end_turn';
   }
   if (edits.length) {
+    // "hold:<name>": wait before the edits, as "wait:" does after them.
+    const before = /\bhold:(\S+)/.exec(text)?.[1];
+    if (before) while (!fs.existsSync(`.loa/go-${before}`)) await new Promise(r => setTimeout(r, 20));
     for (const [i, file] of edits.entries()) {
       const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
       const after = `${before}// edited in ${sessionId}\n`;

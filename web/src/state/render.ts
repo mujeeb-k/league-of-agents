@@ -7,7 +7,7 @@ import { computeScene, reselect } from '../lib/scene';
 import { dom, st } from './app';
 
 export type Region =
-  'scene' | 'top' | 'side' | 'composer' | 'inspector' | 'conn' | 'crumb' | 'dialog' | 'palette' | 'editor';
+  'scene' | 'top' | 'side' | 'composer' | 'inspector' | 'conn' | 'crumb' | 'dialog' | 'palette' | 'editor' | 'watch';
 
 const revs: Record<Region, number> = {
   scene: 0,
@@ -20,6 +20,7 @@ const revs: Record<Region, number> = {
   dialog: 0,
   palette: 0,
   editor: 0,
+  watch: 0,
 };
 const subs = new Set<() => void>();
 

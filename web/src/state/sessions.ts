@@ -25,7 +25,9 @@ export const asking = (r: Run) => (r.status === 'running' ? (r.wants ?? []).filt
 export const holderOf = (r: Run, path: string) =>
   workingRuns().find(o => o !== r && !!o.scope?.length && covers(o.scope, path));
 
-export const sessionColour = (run: Run) => `var(--session-${((run.slot ?? run.id) % MAX_SESSIONS) + 1})`;
+/** A session's colour, 1 to 5 (theme.css --session-1 to 5). */
+export const sessionSlot = (run: Run) => ((run.slot ?? run.id) % MAX_SESSIONS) + 1;
+export const sessionColour = (run: Run) => `var(--session-${sessionSlot(run)})`;
 
 /**
  * The sessions at work and those that worked beside them: what their costs add up to, where their harnesses report
