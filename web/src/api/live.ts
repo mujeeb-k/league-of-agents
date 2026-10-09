@@ -466,10 +466,11 @@ function openFinished(run: Run, was: Run | null) {
   // By id: a state event meanwhile makes new run objects.
   requestAnimationFrame(() =>
     setTimeout(() => {
-      const now = S.RUNS.find(r => r.id === run.id);
-      if ((st.run?.id ?? null) !== (was?.id ?? null) || !now) return;
-      void ensureDetails([now.id]).then(() => {
-        if ((st.run?.id ?? null) !== (was?.id ?? null)) return;
+      if ((st.run?.id ?? null) !== (was?.id ?? null) || !S.RUNS.some(r => r.id === run.id)) return;
+      void ensureDetails([run.id]).then(() => {
+        // The run as it is now: a state event while its details came (its checks ending, say) made a new one.
+        const now = S.RUNS.find(r => r.id === run.id);
+        if ((st.run?.id ?? null) !== (was?.id ?? null) || !now) return;
         st.run = now;
         st.mode = 'diff';
         renderAll();

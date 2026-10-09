@@ -22,6 +22,7 @@ import {
   call,
   git,
   homeOf,
+  startedBridges,
   makeRepo,
   publishedBridge,
   startBridge,
@@ -57,6 +58,17 @@ function gitRows(repo: string, file: string) {
 
 /** The section lock's sandbox is macOS's own (bridge/lib/sandbox.mjs): its tests run on a Mac. */
 const SANDBOX = process.platform === 'darwin';
+
+// A test that fails says what its bridges printed and whether they were still running: a bridge that stopped
+// answering on CI shows why.
+test.afterEach(({ browserName }, info) => {
+  const bridges = startedBridges();
+  if (info.status === info.expectedStatus) return;
+  for (const b of bridges)
+    process.stdout.write(
+      `Bridge on port ${b.port}, ${browserName} (${b.proc.exitCode === null ? 'running' : `exited ${b.proc.exitCode}`}):\n${b.output()}\n`,
+    );
+});
 const onMac = SANDBOX ? test : test.skip;
 
 // Keep the sidebar open: these tests use it at every zoom.
@@ -200,6 +212,28 @@ test('live run, review and revert', async ({ page }) => {
     await expect(page.locator('#conn')).toHaveText('Demo');
     await expect(page.locator('#repoName')).toHaveText('relay');
     await expect(page.locator(TOAST)).toHaveText('Disconnected');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test('a run that opens as its checks end shows them ended, not still running', async ({ page }) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo);
+  try {
+    // The finished run's details come slowly: its checks end while they're on their way.
+    await page.route(/\/api\/runs\/\d+$/, async route => {
+      await new Promise(r => setTimeout(r, 2500));
+      await route.continue();
+    });
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+    await page.locator('#prompt').fill('Name the action and origin in allowlist errors');
+    await page.locator('#prompt').press('Enter');
+    await expect(page.locator('#runbar b')).toHaveText('Run 1', { timeout: 15_000 });
+    await expect(page.locator('.check .sm')).toHaveText(['3 passed'], { timeout: 15_000 });
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });

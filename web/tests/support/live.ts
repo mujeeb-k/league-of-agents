@@ -123,6 +123,11 @@ export interface Bridge {
   stop(): void;
 }
 
+/** The bridges a test started, for its failure to show what they printed (startedBridges). */
+const started: Bridge[] = [];
+/** The bridges started since last asked, and forgotten: what a failed test reports. */
+export const startedBridges = () => started.splice(0);
+
 export async function startBridge(
   repo: string,
   agentBin = FAKE_CLAUDE,
@@ -160,7 +165,7 @@ export async function startBridge(
     await new Promise(r => setTimeout(r, 50));
   }
   const { token } = JSON.parse(fs.readFileSync(path.join(repo, '.loa/bridge.json'), 'utf8')) as { token: string };
-  return {
+  const b: Bridge = {
     port,
     token,
     repo,
@@ -174,6 +179,8 @@ export async function startBridge(
       }
     },
   };
+  started.push(b);
+  return b;
 }
 
 /** Calls the bridge's API as the app does: GET, or POST with a JSON body. */
