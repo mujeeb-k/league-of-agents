@@ -7,6 +7,7 @@ import { refusedWrite, relPaths, repoRelative, toolError, toolLabel, toolText } 
 import { launch } from './process.mjs';
 import { shellAccess } from '../shell.mjs';
 import { blocked, commandBlocked, push } from '../runs.mjs';
+import { step, stepDone, stepRefused } from '../steps.mjs';
 import { lockOfRun } from '../sandbox.mjs';
 import { emit } from '../events.mjs';
 
@@ -37,13 +38,61 @@ export function streamConnector(bin, argsOf) {
 }
 /** Claude Code's tools that write a file they name. */
 const EDIT_TOOLS = /^(Edit|Write|MultiEdit|NotebookEdit)$/;
-/** Each run's edit and shell tool calls so far, by id: the file an edit names, or SHELL, for its result. */
+/** What a Claude Code tool does, as a step (steps.mjs). */
+const actOf = name => (EDIT_TOOLS.test(name) ? 'edit' : name === 'Read' ? 'read' : name === 'Bash' ? 'run' : 'other');
+/**
+ * Each run's tool calls so far, by the agent's id for the call: its step, what it does and the file it names, for its
+ * result. Codex's file changes, one call for several files, have a step each.
+ * @type {Map<number, Map<string, { i: number; act: string; file?: string }[]>>}
+ */
 const calls = new Map();
-const SHELL = Symbol('shell');
 const callsOf = run => {
   if (!calls.has(run.id)) calls.set(run.id, new Map());
   return calls.get(run.id);
 };
+/** A tool call of the agent's, as a step for each file it names (or one with none). */
+function called(run, id, act, tool, files) {
+  const made = (files.length ? files : [undefined]).map(file => ({ i: step(run, act, tool, file), act, file }));
+  if (id) callsOf(run).set(id, made);
+}
+const repoPath = f => repoRelative(f).split(path.sep).join('/');
+/**
+ * A Codex item as steps: a command it runs, or the files a change of its edits (Codex reads files by commands, so
+ * reads aren't told apart). From Codex's own event types (exec_events.rs); no recorded run here yet.
+ */
+function codexStep(run, type, it) {
+  const seen = callsOf(run).get(it.id);
+  if (type === 'item.started' && it.type === 'command_execution') called(run, it.id, 'run', 'command', []);
+  if (it.type !== 'file_change' || !Array.isArray(it.changes)) return;
+  if (!seen)
+    called(
+      run,
+      it.id,
+      'edit',
+      'file_change',
+      it.changes.map(c => repoPath(String(c.path))),
+    );
+  if (type === 'item.completed' && it.status === 'completed')
+    for (const c of callsOf(run).get(it.id) ?? []) stepDone(run, c.i);
+}
+/**
+ * A Cursor tool call as a step: started, then completed. From Cursor's documented stream-json (a call named by its
+ * kind, as readToolCall, with its args); no recorded run here yet.
+ */
+function cursorStep(run, m) {
+  const [kind, call] = Object.entries(m.tool_call ?? {})[0] ?? [];
+  const file = typeof call?.args?.path === 'string' ? [repoPath(call.args.path)] : [];
+  const act = /^read/.test(kind)
+    ? 'read'
+    : /^(write|edit|delete)/.test(kind)
+      ? 'edit'
+      : /^shell/.test(kind)
+        ? 'run'
+        : 'other';
+  if (m.subtype === 'started') called(run, m.call_id, act, String(kind).replace(/ToolCall$/, ''), file);
+  else if (m.subtype === 'completed' && act === 'edit')
+    for (const c of callsOf(run).get(m.call_id) ?? []) stepDone(run, c.i);
+}
 /** One line of a Claude Code, Cursor or Codex stream (or a captured terminal turn's), read into the run. */
 export function onAgentLine(run, line) {
   let m;
@@ -70,9 +119,7 @@ export function onAgentLine(run, line) {
         push(run, { t: 'tool', text: toolLabel(c.name, c.input) });
         noteWrites(run, c.name, c.input);
         const file = c.input?.file_path || c.input?.notebook_path;
-        if (EDIT_TOOLS.test(c.name) && typeof file === 'string')
-          callsOf(run).set(c.id, repoRelative(file).split(path.sep).join('/'));
-        if (c.name === 'Bash') callsOf(run).set(c.id, SHELL);
+        called(run, c.id, actOf(c.name), c.name, typeof file === 'string' ? [repoPath(file)] : []);
       }
     }
   } else if (m.type === 'user' && Array.isArray(m.message?.content)) {
@@ -80,13 +127,16 @@ export function onAgentLine(run, line) {
     for (const c of m.message.content) {
       if (c.type !== 'tool_result') continue;
       const text = toolText(c.content),
-        call = callsOf(run).get(c.tool_use_id);
+        [call] = callsOf(run).get(c.tool_use_id) ?? [];
       // A shell command the sandbox refused a write, failed or not (a command may carry on past it).
-      if (call === SHELL && sandboxed && refusedWrite(text, true)) commandBlocked(run);
+      if (call?.act === 'run' && sandboxed && refusedWrite(text, true)) commandBlocked(run);
+      if (call?.act === 'edit' && !c.is_error) stepDone(run, call.i);
       if (!c.is_error) continue;
       // An edit refused outside the section: the person is asked (runs.mjs blocked).
-      if (call && call !== SHELL && refusedWrite(text, sandboxed)) blocked(run, call);
-      else push(run, toolError(text));
+      if (call?.act === 'edit' && call.file && refusedWrite(text, sandboxed)) {
+        stepRefused(run, call.i);
+        blocked(run, call.file);
+      } else push(run, toolError(text));
     }
   } else if (m.type === 'system' && m.subtype === 'post_turn_summary') {
     // Claude Code's own verdict on the turn: completed or blocked, and what it needs from you. A later
@@ -105,5 +155,7 @@ export function onAgentLine(run, line) {
     const it = m.item || m.tool_call || m;
     push(run, { t: 'tool', text: it.type || it.name || m.type });
     if (it.text && m.type === 'item.completed' && /message/.test(it.type || '')) run.summary = it.text;
+    if (m.type === 'tool_call') cursorStep(run, m);
+    else codexStep(run, m.type, it);
   }
 }

@@ -19,6 +19,7 @@ import {
 import { base, setBase, rebase, settle } from './watch.mjs';
 import { NO_SANDBOX, lockOfRun } from './sandbox.mjs';
 import { emit, emitRun } from './events.mjs';
+import { pinSteps } from './steps.mjs';
 
 export const runs = new Map();
 /** The runs recorded before, from .loa/runs/. */
@@ -49,12 +50,13 @@ export function pruneRuns() {
         .flatMap(id => [
           `delete refs/loa/runs/${id}/before`,
           `delete refs/loa/runs/${id}/after`,
+          `delete refs/loa/runs/${id}/steps`,
           ...[...new Set((runs.get(id).putBack ?? []).map(k => k.ref))].map(ref => `delete ${ref}`),
         ])
         .join('\n') + '\n',
   });
   for (const id of old) {
-    for (const ext of ['.json', '.stream.jsonl', '.stderr.log'])
+    for (const ext of ['.json', '.stream.jsonl', '.stderr.log', '.steps.jsonl'])
       fs.rmSync(path.join(RUNS_DIR, id + ext), { force: true });
     runs.delete(id);
   }
@@ -140,6 +142,7 @@ export async function finishRun(run, status = 'done', { checks = true } = {}) {
   if (out.length) run.stream.push({ t: 'warn', text: `Changed outside scope: ${out.join(', ')}` });
   run.outOfScope = out;
   run.waiting = null;
+  await pinSteps(run);
   working.delete(run.id);
   if (checks) checksFor(run);
   // The last run of sessions that overlapped is said to be finished once what none of them made is recorded.

@@ -168,7 +168,10 @@ async function turn(sessionId, text) {
     for (const [i, file] of edits.entries()) {
       const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
       const after = `${before}// edited in ${sessionId}\n`;
-      if (await permit(`edit-${i}`, file, before, after)) fs.writeFileSync(file, after);
+      if (await permit(`edit-${i}`, file, before, after)) {
+        fs.writeFileSync(file, after);
+        update(sessionId, { sessionUpdate: 'tool_call_update', toolCallId: `edit-${i}`, status: 'completed' });
+      }
     }
     await held(text);
     say(sessionId, ` Edited ${edits.join(', ')}.`);

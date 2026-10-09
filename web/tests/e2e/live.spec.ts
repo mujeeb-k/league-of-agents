@@ -1960,6 +1960,69 @@ test.describe('sessions at once', () => {
       }),
   );
 
+  type Step = { i: number; at: number; act: string; file?: string; tool: string; text?: boolean; refused?: boolean };
+  const stepsOf = async (b: Bridge, id: number, from = 0) =>
+    ((await call(b, `/api/runs/${id}/steps?from=${from}`)).body as unknown as { steps: Step[] }).steps;
+
+  test("each tool call is a step, as it happens: what it did, the file it named, and an edit's file as it left it", () =>
+    twoSessions(async (b, repo) => {
+      const h = (await start(b, ['shared/'], 'edit:shared/log.ts edit:shared/.env.local wait:a'))
+        .body as unknown as RunDTO;
+      // While it works: its steps so far, each with when it happened.
+      await expect
+        .poll(async () => (await stepsOf(b, h.id)).map(s => `${s.act} ${s.file ?? ''}`), { timeout: 15_000 })
+        .toEqual(['read shared/allowlist.ts', 'edit shared/log.ts', 'edit shared/.env.local']);
+      const steps = await stepsOf(b, h.id);
+      expect(steps.map(s => s.i)).toEqual([0, 1, 2]);
+      for (const s of steps) expect(Math.abs(s.at - Date.now())).toBeLessThan(15_000);
+      // The edit's file, as the edit left it; never a file that usually holds secrets.
+      await expect.poll(async () => (await stepsOf(b, h.id))[1]!.text, { timeout: 5_000 }).toBe(true);
+      const at = (await call(b, `/api/runs/${h.id}/steps/1`)).body as unknown as { text: string };
+      expect(at.text).toBe(SEED['shared/log.ts'] + `// edited in ${(await runOf(b, h.id)).sessionId}\n`);
+      expect((await stepsOf(b, h.id))[2]!.text).toBeUndefined();
+      expect((await call(b, `/api/runs/${h.id}/steps/2`)).status).toBe(404);
+      expect((await call(b, `/api/runs/${h.id}/steps/0`)).status).toBe(404);
+      expect((await stepsOf(b, h.id, 2)).map(s => s.i)).toEqual([2]);
+      // The steps reached the app as they came: in progress events, with the model.
+      const events = (await call(b, '/api/events?since=0')).body as unknown as {
+        events: { type: string; run?: { id: number; steps?: Step[]; model?: string } }[];
+      };
+      const told = events.events
+        .filter(e => e.type === 'progress' && e.run?.id === h.id)
+        .flatMap(e => e.run!.steps ?? []);
+      expect([...new Set(told.map(s => s.i))]).toEqual([0, 1, 2]);
+      expect(events.events.some(e => e.run?.id === h.id && e.run.model === 'fake-model-1')).toBe(true);
+      go(repo, 'a');
+      await until(b, h.id, 'done');
+      // Kept whole once it ends, past any restart: its file, and the edit's text pinned under the run.
+      expect((await stepsOf(b, h.id)).length).toBe(3);
+      expect(fs.readFileSync(path.join(repo, `.loa/runs/${h.id}.steps.jsonl`), 'utf8')).toContain('shared/log.ts');
+      expect(git(repo, 'ls-tree', '-r', `refs/loa/runs/${h.id}/steps`)).toContain('blob');
+      expect(((await call(b, `/api/runs/${h.id}/steps/1`)).body as unknown as { text: string }).text).toBe(at.text);
+    }));
+
+  test("Claude Code's steps: an edit refused, then allowed and made; a shell command as a step that runs", () =>
+    twoSessions(async (b, repo) => {
+      const c = (await call(b, '/api/runs', { agent: 'claude', prompt: 'want:apps/new.ts', scope: ['shared/'] }))
+        .body as unknown as RunDTO;
+      await waitsOn(b, c.id);
+      expect((await stepsOf(b, c.id)).map(s => [s.act, s.file, s.tool, !!s.refused])).toEqual([
+        ['edit', 'apps/new.ts', 'Write', true],
+      ]);
+      expect((await answer(b, c.id, 'apps/new.ts', true)).status).toBe(200);
+      await until(b, c.id, 'done');
+      const steps = await stepsOf(b, c.id);
+      expect(steps.map(s => [s.i, s.act, s.file, !!s.refused, !!s.text])).toEqual([
+        [0, 'edit', 'apps/new.ts', true, false],
+        [1, 'edit', 'apps/new.ts', false, true],
+      ]);
+      const s = (await call(b, '/api/runs', { agent: 'claude', prompt: 'shell:shared/log.ts', scope: ['shared/'] }))
+        .body as unknown as RunDTO;
+      await until(b, s.id, 'done');
+      expect((await stepsOf(b, s.id)).map(x => [x.act, x.tool])).toEqual([['run', 'Bash']]);
+      expect(fs.existsSync(path.join(repo, 'apps/new.ts'))).toBe(true);
+    }));
+
   onMac("in a worktree, a session can't write the repo's git folder outside it", async () => {
     const main = makeRepo(),
       wt = path.join(path.dirname(main), 'wt');

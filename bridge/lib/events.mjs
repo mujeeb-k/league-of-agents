@@ -1,6 +1,7 @@
 // Events, by long polling (it works where WebSockets get blocked): a run's progress, and state changes.
 import { listFiles, treeEntry } from './files.mjs';
 import { working, publicRun } from './runs.mjs';
+import { takeSteps } from './steps.mjs';
 
 export let seq = 0;
 export const events = [];
@@ -31,6 +32,9 @@ export function emit(type, run, delta) {
           checksRunning: !!run.checksRunning,
           cost: run.cost,
           turn: run.turn,
+          model: run.model,
+          // Its steps added or changed since its last progress event (steps.mjs).
+          steps: takeSteps(run),
         }
       : undefined,
   });

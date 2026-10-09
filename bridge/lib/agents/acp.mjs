@@ -4,6 +4,7 @@ import { VERSION } from '../paths.mjs';
 import { inScope } from '../scope.mjs';
 import { ROOT } from '../repo.mjs';
 import { blocked, commandBlocked, push } from '../runs.mjs';
+import { step, stepDone, stepRefused } from '../steps.mjs';
 import { lockOfRun } from '../sandbox.mjs';
 import { emit } from '../events.mjs';
 import { noteLines } from './lines.mjs';
@@ -26,6 +27,8 @@ function startAcp(run, prompt, name, command, env) {
   // Each tool call as told so far: a permission request may name only the call (DeepSeek Harness does).
   const waiting = new Map(),
     calls = new Map(),
+    // Each tool call's steps (steps.mjs), by its id.
+    steps = new Map(),
     diffsSeen = new Set();
   let next = 1,
     said = '',
@@ -89,6 +92,12 @@ function startAcp(run, prompt, name, command, env) {
       flush();
       calls.set(u.toolCallId, u);
       push(run, { t: 'tool', text: acpToolLabel(u) });
+      const files = filesOf(u);
+      const act = isEdit(u) ? 'edit' : u.kind === 'read' ? 'read' : u.kind === 'execute' ? 'run' : 'other';
+      steps.set(
+        u.toolCallId,
+        (files.length ? files : [undefined]).map(f => step(run, act, String(u.title || u.kind), f)),
+      );
       if (u.kind === 'edit') noteEdit(u.toolCallId, { content: u.content });
     } else if (u.sessionUpdate === 'tool_call_update') {
       const tool = { ...calls.get(u.toolCallId), ...u };
@@ -98,6 +107,7 @@ function startAcp(run, prompt, name, command, env) {
       else if (!isEdit(tool) && lockOfRun(run) === 'sandbox' && refusedWrite(textOf(u), true)) commandBlocked(run);
       // DeepSeek Harness's edit or write, done without asking (its full-access mode, in the sandbox): its arguments.
       else if (isEdit(tool) && u.status === 'completed') noteEdit(u.toolCallId, tool);
+      if (isEdit(tool) && u.status === 'completed') for (const i of steps.get(u.toolCallId) ?? []) stepDone(run, i);
       if (u.status === 'failed') {
         const said = textOf(u);
         const outside = isEdit(tool) ? filesOf(tool).filter(f => run.scope?.length && !inScope(run.scope, f)) : [];
@@ -105,9 +115,10 @@ function startAcp(run, prompt, name, command, env) {
         if (/\[sandbox: file access denied/.test(said))
           push(run, { t: 'warn', text: `Needs permission: ${acpToolLabel(tool)}` });
         // An edit outside the section the system refused (DeepSeek Harness's full-access mode, in the sandbox).
-        else if (outside.length && refusedWrite(said, lockOfRun(run) === 'sandbox'))
+        else if (outside.length && refusedWrite(said, lockOfRun(run) === 'sandbox')) {
+          for (const i of steps.get(u.toolCallId) ?? []) stepRefused(run, i);
           for (const f of outside) blocked(run, f);
-        else push(run, { t: 'err', text: `${acpToolLabel(tool)} failed` });
+        } else push(run, { t: 'err', text: `${acpToolLabel(tool)} failed` });
       }
     } else if (u.sessionUpdate === 'config_option_update') {
       run.model = acpModel(u) ?? run.model;
@@ -130,6 +141,7 @@ function startAcp(run, prompt, name, command, env) {
       const answer = permitAcp(run, tool, req.options || []);
       if (answer.optionId && /^allow/.test(req.options.find(o => o.optionId === answer.optionId)?.kind))
         noteEdit(id, tool);
+      else if (isEdit(tool)) for (const i of steps.get(id) ?? []) stepRefused(run, i);
       send({ id: m.id, result: { outcome: answer } });
     } else if (m.id !== undefined) send({ id: m.id, error: { code: -32601, message: 'Not offered' } });
   };

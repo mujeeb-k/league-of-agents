@@ -27,6 +27,7 @@ import { runs, working, saveRun, publicRun, beginRun, finishRun, push, revertRun
 import { armIdle, ownWrite, writeConfig, watchOff } from './watch.mjs';
 import { seq, events, waiters, emit, emitRun } from './events.mjs';
 import { answerWant, cancelSession, startSession } from './sessions.mjs';
+import { publicStep, stepText, stepsOf } from './steps.mjs';
 import { restorePutBack, shellEnds, shellStarts } from './shell.mjs';
 import { commitPreview, commitRun } from './commit.mjs';
 
@@ -234,6 +235,27 @@ async function answer({ params, body }) {
   const { path: file, allow } = await body();
   await answerWant(run, String(file ?? ''), allow === true);
   return [200, { ok: true }];
+}
+/**
+ * A run's steps from the `from`th on: each tool call its agent made (lib/steps.mjs).
+ * @param {Request} request
+ * @returns {Promise<Reply>}
+ */
+async function steps({ params, url }) {
+  const run = runOf(params);
+  if (!run) return noRun;
+  const from = Math.max(0, Number(url.searchParams.get('from')) || 0);
+  return [200, { steps: stepsOf(run).slice(from).map(publicStep) }];
+}
+/**
+ * The text of a step's file as its edit left it.
+ * @param {Request} request
+ * @returns {Promise<Reply>}
+ */
+async function stepFile({ params }) {
+  const run = runOf(params);
+  const text = run && (await stepText(run, Number(params[1])));
+  return text === null || !run ? [404, { error: 'No text kept for that step' }] : [200, { text }];
 }
 /**
  * @param {Request} request
@@ -470,6 +492,8 @@ export const ROUTES = [
   ['POST', /^\/api\/runs\/(\d+)\/shell$/, shell],
   ['POST', /^\/api\/runs\/(\d+)\/put-back$/, restore],
   ['POST', /^\/api\/runs\/(\d+)\/wants$/, answer],
+  ['GET', /^\/api\/runs\/(\d+)\/steps$/, steps],
+  ['GET', /^\/api\/runs\/(\d+)\/steps\/(\d+)$/, stepFile],
   ['GET', /^\/api\/runs\/(\d+)\/commit$/, commitInfo],
   ['POST', /^\/api\/runs\/(\d+)\/commit$/, commit],
   ['POST', '/api/attribution/export', exportNote],
