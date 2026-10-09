@@ -466,5 +466,12 @@ const catalogue: Catalogue = {
   '{agent} started runs {ids}': '{agent} started runs {ids}',
   "A session on a section runs in macOS's sandbox, which can't start here. Start the bridge from a regular terminal.":
     "A session on a section runs in macOS's sandbox, which can't start here. Start the bridge from a regular terminal.",
+  'Put back {n} files': { one: 'Put back {n} file', other: 'Put back {n} files' },
+  'A shell command changed these files outside the section. They were put back as they were; what it wrote is kept.':
+    'A shell command changed these files outside the section. They were put back as they were; what it wrote is kept.',
+  Restored: 'Restored',
+  Restore: 'Restore',
+  'Restored {name}': 'Restored {name}',
+  'Write {name} back as the shell command left it': 'Write {name} back as the shell command left it',
 };
 export default catalogue;

@@ -101,6 +101,8 @@ export interface Run {
   /** The model the agent reported, if it did. */
   model?: string | null;
   outOfScope?: string[];
+  /** Without a sandbox, files a shell command changed outside the section and the bridge put back (bridge/lib/shell.mjs). */
+  putBack?: { path: string; restored: boolean }[];
   /** Files and folders (ending in /) the run was limited to. Empty means the whole repository. */
   scope?: string[];
   /** Claude Code's verdict on its last turn: blocked, or what it needs from you. */

@@ -447,6 +447,25 @@ export async function liveAction(act: string, run: Run) {
   }
 }
 
+/** Restores a file the bridge put back after the run's shell command changed it outside the section. */
+export async function restorePutBack(run: Run, path: string) {
+  if (st.busy) return;
+  st.busy = `restore:${run.id}`;
+  renderInspector();
+  try {
+    await bridge.restorePutBack(conn(), run.id, path);
+    const kept = run.putBack?.find(k => k.path === path);
+    if (kept) kept.restored = true;
+    toast(t('Restored {name}', { name: path }));
+    queueRefresh();
+  } catch (e) {
+    toast(explain(e));
+  } finally {
+    st.busy = null;
+    renderInspector();
+  }
+}
+
 /** Minute tick for relative run times. */
 export function tickTimes() {
   if (S.LIVE) {

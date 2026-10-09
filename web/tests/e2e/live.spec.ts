@@ -2317,6 +2317,33 @@ test('scope lock on a line range: edits inside pass, any change outside is block
   fs.rmSync(path.dirname(repo), { recursive: true, force: true });
 });
 
+test('without a sandbox, a file put back after a shell command is named on the run, and restored in one click', async ({
+  page,
+}) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo, FAKE_CLAUDE, { LOA_SANDBOX: 'off' });
+  try {
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+    await page.locator('#prompt').fill('Note it. shell:notes.md');
+    await page.locator('#prompt').press('Enter');
+    await expect(page.locator('#sideList [data-run="1"] .tags')).toContainText('Put back 1 file', { timeout: 15_000 });
+    // It opens when it finishes.
+    await expect(page.locator('#runbar b')).toHaveText('Run 1');
+    const notice = page.locator('#putBack');
+    await expect(notice).toContainText('A shell command changed these files outside the section. They were put back');
+    await expect(notice.locator('li')).toHaveText(['notes.mdRestore']);
+    expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
+    await notice.locator('[data-restore="notes.md"]').click();
+    await expect(notice.locator('li')).toHaveText(['notes.mdRestored']);
+    expect(fs.readFileSync(path.join(repo, 'notes.md'), 'utf8')).toBe('// written by a shell command\n');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('a run limited to lines flags changes outside them; a file outside its file is never written', () =>
   watching(async (repo, b) => {
     // The stand-in agent changes line 9 of allowlist.ts, appends to it, and tries to create policy-cache.ts.

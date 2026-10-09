@@ -79,6 +79,9 @@ export const bridge = {
   startRun: (c: Conn, body: StartRunBody) => request<RunDTO>(c, '/api/runs', { method: 'POST', body }),
   cancel: (c: Conn, id: number) => request<OkResponse>(c, `/api/runs/${id}/cancel`, { method: 'POST' }),
   keep: (c: Conn, id: number) => request<OkResponse>(c, `/api/runs/${id}/keep`, { method: 'POST' }),
+  /** Writes back a file as the run's shell command left it, before the bridge put it back. */
+  restorePutBack: (c: Conn, id: number, path: string) =>
+    request<OkResponse>(c, `/api/runs/${id}/put-back`, { method: 'POST', body: { path } }),
   /** Turns on checks the bridge found, by name. */
   enableChecks: (c: Conn, names: string[], share: boolean) =>
     request<{ checks: { name: string; run: string }[] }>(c, '/api/checks', {

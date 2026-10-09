@@ -154,6 +154,7 @@ function RunRow({ r }: { r: Run }) {
           : r.kept
             ? 'Kept'
             : null;
+  const putBack = r.putBack?.filter(k => !k.restored).length ?? 0;
   // A session at work is marked in the colour its section has on the map.
   const zone = running && workingRuns().includes(r) ? sessionColour(r) : null;
   return (
@@ -201,9 +202,14 @@ function RunRow({ r }: { r: Run }) {
                 <span>{t('No changes')}</span>
               )}
             </div>
-            {status || r.checks?.length || r.checksRunning ? (
+            {status || putBack || r.checks?.length || r.checksRunning ? (
               <div className="m tags mt-2 flex flex-wrap items-center gap-1">
                 {status ? <span className={tag + ' bg-muted text-ink2'}>{status}</span> : null}
+                {putBack ? (
+                  <span className={tag + ' bg-muted text-ink2'}>
+                    {tn(putBack, 'Put back {n} file', 'Put back {n} files')}
+                  </span>
+                ) : null}
                 <CheckBadge r={r} />
               </div>
             ) : null}

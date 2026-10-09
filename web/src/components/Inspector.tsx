@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { enableChecks, turnOffCheck } from '../api/live';
+import { enableChecks, restorePutBack, turnOffCheck } from '../api/live';
 import { flyFile } from '../lib/camera';
 import { shareOf, type Author, type Owner } from '../lib/attribution';
 import { runsRepoCode } from '../lib/checks';
@@ -142,6 +142,48 @@ function ActButton({ run, act, children, ...props }: React.ComponentProps<typeof
       {mine ? <Spinner className="text-current" /> : null}
       {children}
     </Button>
+  );
+}
+
+/**
+ * Without a sandbox, files the run's shell commands changed outside its section were put back at once. What the
+ * command wrote is kept: each file restores in one click.
+ */
+function PutBack({ run }: { run: Run }) {
+  return (
+    <div id="putBack" className="warnbox mt-3 flex gap-2 rounded-lg border border-l-2 border-l-mod bg-card px-3 py-2">
+      <span className="flex h-5 shrink-0 items-center">
+        <TriangleAlert className="size-4 text-mod" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-pretty">
+          {t(
+            'A shell command changed these files outside the section. They were put back as they were; what it wrote is kept.',
+          )}
+        </p>
+        <ul className="mt-2 flex flex-col gap-1">
+          {run.putBack!.map(k => (
+            <li key={k.path} className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 font-mono text-xs [overflow-wrap:anywhere]">{k.path}</span>
+              {k.restored ? (
+                <span className="text-xs text-muted-foreground">{t('Restored')}</span>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="xs"
+                  data-restore={k.path}
+                  disabled={!!st.busy || isOffline()}
+                  title={t('Write {name} back as the shell command left it', { name: k.path })}
+                  onClick={() => void restorePutBack(run, k.path)}
+                >
+                  {t('Restore')}
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }
 
@@ -390,6 +432,7 @@ function RunView({ run }: { run: Run }) {
               </span>
             </div>
           ) : null}
+          {run.putBack?.length ? <PutBack run={run} /> : null}
           {run.reverted ? (
             <div className="outcome mt-4 flex items-center gap-2 text-ink2">
               <Undo2 className="size-4 text-ink3" />
