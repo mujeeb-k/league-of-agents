@@ -1,13 +1,13 @@
 // A large map draws only what is near the view: tiles zoomed out, cards zoomed in. Ten thousand of either switched on
-// together as the map zooms across take over a second a frame. A map of up to CULL_OVER files draws them all, as it
-// always has.
+// together as the map zooms across take over a second a frame. A map of fewer than CULL_FROM files draws them all, as
+// it always has.
 import { S, dom, st } from '../state/app';
 import type { Box } from './types';
 
-/** Files a map has before it draws only the cards in view. */
-export const CULL_OVER = 1500;
+/** Files from which a map draws only what is near the view: as many as from which the bridge sends no lines. */
+export const CULL_FROM = 1500;
 
-export const culling = () => S.FILES.size > CULL_OVER;
+export const culling = () => S.FILES.size >= CULL_FROM;
 
 /** The part of the map drawn: the view when it was last drawn, and half the view again around it; and at which zoom. */
 let shown: Box | null = null,

@@ -531,5 +531,12 @@ const catalogue: Catalogue = {
   'ran {n} commands': { other: 'ran {n} commands' },
   'Edited {n} files': { other: 'Edited {n} files' },
   'Ran {n} commands': { other: 'Ran {n} commands' },
+  'Map a folder': 'Map a folder',
+  '{repo} has {n} code files. A map shows up to {max}: pick a folder.':
+    '{repo} has {n} code files. A map shows up to {max}: pick a folder.',
+  'Pick the folder the map shows.': 'Pick the folder the map shows.',
+  'Find a folder': 'Find a folder',
+  'Loading…': 'Loading…',
+  'Map another folder': 'Map another folder',
 };
 export default catalogue;

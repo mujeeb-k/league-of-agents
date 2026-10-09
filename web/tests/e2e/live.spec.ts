@@ -990,6 +990,10 @@ test("a folder as the map: the state holds its files; the repo's folders are lis
         { path: 'shared/', files: 2 },
       ]),
     );
+    // The folder last mapped is the map the next time, until another is asked for; '' is the whole repository.
+    expect(((await call(b, '/api/state')).body as unknown as StateResponse).root).toBe('apps/');
+    expect(((await call(b, '/api/state?root=')).body as unknown as StateResponse).root).toBe('');
+    expect(((await call(b, '/api/state')).body as unknown as StateResponse).root).toBe('');
     // A file outside the map still opens: the map is a view, not a limit.
     const shared = await call(b, '/api/file?path=shared/log.ts');
     expect(shared.status).toBe(200);
@@ -1055,6 +1059,66 @@ test("a run's details on demand: the state's runs leave out each file as the run
       ['shared/log.ts', false, true, null],
       ['shared/logger.ts', true, false, 'shared/log.ts'],
     ]);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test('a repository larger than a map: the app asks for a folder, maps it, remembers it, and can map the whole again', async ({
+  page,
+}) => {
+  const repo = makeRepo();
+  for (let i = 0; i < 6; i++) {
+    fs.mkdirSync(path.join(repo, 'apps/web'), { recursive: true });
+    fs.writeFileSync(path.join(repo, `apps/web/page${i}.ts`), `export const page${i} = ${i};\n`);
+  }
+  // A map shows up to 5 files here, so the repository's 10 don't fit.
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_MAX_FILES: '5' });
+  try {
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    const picker = page.locator('#mapPicker');
+    await expect(picker).toContainText('sample-repo has 10 code files. A map shows up to 5: pick a folder.');
+    await expect(picker.locator('[data-folder="apps/"]')).toContainText('7 files');
+    await picker.locator('input').fill('web');
+    await expect(picker.locator('[data-folder]')).toHaveCount(1);
+    await picker.locator('[data-folder="apps/web/"]').click();
+    await expect(picker).toHaveCount(0);
+    await expect(page.locator('#mapRoot')).toHaveText('apps/web/');
+    await expect(page.locator('#nodes .fr[data-path="shared/log.ts"]')).toHaveCount(0);
+    await expect(page.locator('#nodes .fr[data-path="apps/web/page0.ts"]')).toHaveCount(1);
+    // Remembered: a reload maps the same folder, without asking.
+    await page.reload();
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await expect(page.locator('#mapRoot')).toHaveText('apps/web/');
+    await expect(picker).toHaveCount(0);
+    // The whole repository again, by choice: its first 5 files, and no asking.
+    await page.locator('#mapRoot').click();
+    await picker.locator('[data-folder=""]').click();
+    await expect(page.locator('#mapRoot')).toHaveCount(0);
+    await expect(page.locator('#nodes .fr')).toHaveCount(5);
+    await expect(picker).toHaveCount(0);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test("a map of over 1,500 files: a card shows its lines once it's in view", async ({ page }) => {
+  const repo = makeRepo();
+  fs.mkdirSync(path.join(repo, 'big'), { recursive: true });
+  for (let i = 0; i < 1600; i++)
+    fs.writeFileSync(path.join(repo, `big/f${String(i).padStart(4, '0')}.ts`), `export const v${i} = ${i};\n`);
+  const b = await startBridge(repo);
+  try {
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live', { timeout: 30_000 });
+    await page.keyboard.press('ControlOrMeta+p');
+    await page.keyboard.type('f0007');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#nodes .card[data-path="big/f0007.ts"] .ln')).toContainText(['export const v7 = 7;']);
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });

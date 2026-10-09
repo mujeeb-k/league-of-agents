@@ -65,7 +65,17 @@ async function request<T>(
 }
 
 export const bridge = {
-  state: (c: Conn) => request<StateResponse>(c, '/api/state'),
+  /** The state, with the map of a folder ('' the whole repo); without one, the folder last mapped (0.2.0 on). */
+  state: (c: Conn, root?: string | null) =>
+    request<StateResponse>(c, typeof root === 'string' ? `/api/state?root=${encodeURIComponent(root)}` : '/api/state'),
+  /** The folders a map can be of, with their code files. Bridges before 0.2.0 answer 404. */
+  folders: (c: Conn) => request<{ folders: { path: string; files: number }[] }>(c, '/api/folders'),
+  /** Files' lengths and first lines, for a map too large to carry them. */
+  heads: (c: Conn, paths: string[]) =>
+    request<{ files: { path: string; total: number; lines: string[] }[] }>(c, '/api/heads', {
+      method: 'POST',
+      body: { paths },
+    }),
   exportAttribution: (c: Conn, format: string, files: Record<string, AuthorRange[]>) =>
     request<{ ref: string; commit: string; files: number }>(c, '/api/attribution/export', {
       method: 'POST',

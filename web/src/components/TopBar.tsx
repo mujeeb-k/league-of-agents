@@ -8,6 +8,7 @@ import { drawMini, readCss } from '../lib/minimap';
 import type { Mode } from '../lib/types';
 import { S, dom, st } from '../state/app';
 import { selectRun, setMode, toggleByAuthor } from '../state/actions';
+import { openMapPicker } from '../api/live';
 import { renderSide, useRegion } from '../state/render';
 import { panels, sideVisibleAt, toggleInsp, toggleSide } from '../state/panels';
 import { toggleTheme, useResolvedTheme } from '../state/theme';
@@ -141,6 +142,18 @@ function Crumb() {
       <b id="repoName" className="font-medium text-foreground">
         {S.repoName}
       </b>
+      {S.mapRoot ? (
+        <Tip label={t('Map another folder')}>
+          <button
+            type="button"
+            id="mapRoot"
+            onClick={() => openMapPicker(true)}
+            className="max-w-60 truncate rounded px-1 font-mono text-xs text-foreground hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            {S.mapRoot}
+          </button>
+        </Tip>
+      ) : null}
       <span className="br font-mono text-xs text-ink2">{S.branch}</span>
     </div>
   );

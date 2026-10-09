@@ -72,6 +72,8 @@ export type CardData =
       from: string | null;
       /** The step of the open run's timeline it is shown at, if one is picked. */
       at: number | null;
+      /** Its lines are on their way (a large map). */
+      loading: boolean;
       above: number;
       rows: CodeRow[];
       rest: number;
@@ -262,6 +264,8 @@ export function computeScene(): SceneData {
     ].join(' ');
     const from = run?.changes.get(f.path)?.renamedFrom?.split('/').pop() ?? null;
     const at = momentOf(f.path)?.i ?? null;
+    // On a large map, a file whose lines haven't come yet (api/live.ts wantHeads).
+    const loading = S.HEADLESS.has(f.path);
     // A card that shows what it showed last time is the same object: memoized, it isn't highlighted or drawn again.
     const key = byAuthor
       ? null
@@ -271,6 +275,7 @@ export function computeScene(): SceneData {
           cls,
           from,
           at,
+          loading,
           v.kind && [v.a, v.d],
           start,
           rest,
@@ -308,7 +313,8 @@ export function computeScene(): SceneData {
         ln: byAuthor && r.n ? r.n : null,
       })),
       rest,
-      empty: !rows.length,
+      empty: !rows.length && !loading,
+      loading,
       imports: 0,
       usedBy: 0,
     };

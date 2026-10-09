@@ -24,7 +24,7 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
-import { connect, disconnect } from '../api/live';
+import { connect, disconnect, openMapPicker } from '../api/live';
 import { flyAll, flyFile, flyRun, flySelection, viewCenter, zoomAt } from '../lib/camera';
 import { agentOf } from '../lib/constants';
 import { fileKind } from '../lib/fileKind';
@@ -145,6 +145,9 @@ function Commands() {
           <Item label={t('Zoom in')} icon={<ZoomIn />} keys="+" onSelect={() => zoom(1.4)} />
           <Item label={t('Zoom out')} icon={<ZoomOut />} keys="−" onSelect={() => zoom(1 / 1.4)} />
           <Item label={t('Tidy layout')} icon={<LayoutGrid />} onSelect={tidyLayout} />
+          {S.mapRoot !== null ? (
+            <Item label={t('Map a folder')} icon={<FolderOpen />} onSelect={() => openMapPicker(true)} />
+          ) : null}
           <Item
             label={st.byAuthor ? t('Stop coloring by author') : t('Color by author')}
             icon={<Users />}

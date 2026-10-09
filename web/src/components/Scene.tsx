@@ -1,6 +1,6 @@
 // Canvas content: folder frames, file tiles, code cards, wires, import edges, selection.
 // Renders the scene that computeScene() in lib/scene.ts builds.
-import { Fragment, memo, useLayoutEffect } from 'react';
+import { Fragment, memo, useEffect, useLayoutEffect } from 'react';
 import { CH, CW } from '../lib/constants';
 import type { Token } from '../lib/highlight';
 import { t, tn } from '../i18n';
@@ -17,6 +17,7 @@ import {
 } from '../lib/scene';
 import { fitLabels } from '../lib/labels';
 import { culling, drawn } from '../lib/cull';
+import { wantHeads } from '../api/live';
 import { dom, st } from '../state/app';
 import { useRegion } from '../state/render';
 import { Stat } from './bits';
@@ -134,6 +135,7 @@ const Card = memo(function Card({ c }: { c: CardData }) {
         ))}
         {c.rest > 0 ? <div className="more">{tn(c.rest, '{n} more line', '{n} more lines')}</div> : null}
         {c.empty ? <div className="more">{t('Empty file')}</div> : null}
+        {c.loading ? <div className="more">{t('Loading…')}</div> : null}
       </div>
       {c.imports || c.usedBy ? (
         <div className="uses">
@@ -186,9 +188,14 @@ function Files() {
         ))}
       </>
     );
-  return st.near
-    ? sc.cards.filter(c => drawn(c, CW, CH)).map(c => <Card key={c.path} c={c} />)
-    : sc.tiles.filter(f => drawn(f, CW, CH)).map(f => <Tile key={'t:' + f.path} f={f} />);
+  if (!st.near) return sc.tiles.filter(f => drawn(f, CW, CH)).map(f => <Tile key={'t:' + f.path} f={f} />);
+  return <CardsInView cards={sc.cards.filter(c => drawn(c, CW, CH))} />;
+}
+
+/** The cards near the view, which ask for the lines of those still without them (a large map carries none). */
+function CardsInView({ cards }: { cards: CardData[] }) {
+  useEffect(() => wantHeads(cards.flatMap(c => (!c.ghost && c.loading ? [c.path] : []))));
+  return cards.map(c => <Card key={c.path} c={c} />);
 }
 
 /**

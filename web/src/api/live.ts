@@ -128,6 +128,8 @@ async function loadLayout(c: Conn, root: string): Promise<SavedLayout | null> {
 /** Saves the layout once it has stayed the same for a second, and only when it changed. */
 export function saveLayoutSoon() {
   clearTimeout(layoutTimer);
+  // The repository's layout is of the whole of it, not of a folder mapped.
+  if (S.mapRoot) return;
   layoutTimer = window.setTimeout(() => {
     const c = S.CONN,
       layout = S.LAYOUT;
@@ -178,6 +180,70 @@ export async function ensureDetails(ids = S.RUNS.map(r => r.id)) {
   }
 }
 
+/** Files' first lines fetched for a large map, by path, with the length they were fetched at. */
+const heads = new Map<string, { total: number; lines: string[] }>();
+let headsWanted = new Set<string>(),
+  headsTimer = 0;
+/**
+ * Cards of a large map came into view without their lines: fetched together, a moment after, then drawn. A file's
+ * lines are asked for once.
+ */
+export function wantHeads(paths: string[]) {
+  const asked = paths.filter(p => S.HEADLESS.has(p) && !headsWanted.has(p));
+  if (!asked.length || !S.CONN) return;
+  for (const p of asked) headsWanted.add(p);
+  clearTimeout(headsTimer);
+  headsTimer = window.setTimeout(async () => {
+    const batch = [...headsWanted].filter(p => S.HEADLESS.has(p));
+    headsWanted = new Set();
+    try {
+      for (const f of (await bridge.heads(conn(), batch)).files) {
+        heads.set(f.path, { total: f.total, lines: f.lines });
+        const node = S.FILES.get(f.path);
+        if (node) node.base = f.lines;
+        S.HEADLESS.delete(f.path);
+      }
+    } catch {
+      return;
+    }
+    renderScene();
+  }, 30);
+}
+
+/** Opens the folder picker, with the repository's folders as they load, or closes it. */
+export function openMapPicker(open: boolean) {
+  st.mapPicker = open;
+  bump('dialog');
+  if (!open || !S.CONN) return;
+  st.folders = null;
+  void bridge
+    .folders(S.CONN)
+    .then(
+      r => (st.folders = r.folders),
+      () => (st.folders = []),
+    )
+    .finally(() => bump('dialog'));
+}
+
+/** Maps a folder of the repository ('' for the whole of it): the bridge remembers it for next time. */
+export async function mapFolder(root: string) {
+  if (!S.CONN) return;
+  openMapPicker(false);
+  st.busy = 'map';
+  try {
+    const s = await bridge.state(conn(), root);
+    st.run = null;
+    st.sel.clear();
+    S.LAYOUT = root ? null : await loadLayout(conn(), s.repo.root);
+    applyState(s, true);
+  } catch (e) {
+    toast(explain(e));
+  } finally {
+    st.busy = null;
+    renderAll();
+  }
+}
+
 /** Writes who wrote each line to a git note on the last commit, once the person has said yes (ExportDialog). */
 export async function exportAttribution(format: 'agent-trace' | 'git-ai') {
   const c = S.CONN;
@@ -210,7 +276,8 @@ let last: StateResponse | null = null;
 function withDeltas(s: StateResponse, deltas: StateDelta[], seq: number): StateResponse {
   for (const d of deltas) {
     const tree = s.tree.filter(f => !(f.path in d.files));
-    for (const f of Object.values(d.files)) if (f) tree.push(f);
+    // Only files on the map: a run may change files outside the folder it shows.
+    for (const f of Object.values(d.files)) if (f && f.path.startsWith(s.root ?? '')) tree.push(f);
     tree.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
     const runs = s.runs.filter(r => r.id !== d.run.id).concat(d.run);
     runs.sort((a, b) => a.id - b.id);
@@ -256,11 +323,21 @@ function applyState(s: StateResponse, first: boolean) {
     present = new Set<string>(),
     paths: string[] = [];
   S.TOTALS = new Map(s.tree.map(f => [f.path, f.total]));
+  // A large map carries no lines: those fetched as cards came into view are kept, while the file's length holds.
+  S.HEADLESS = new Set();
   for (const f of s.tree) {
     paths.push(f.path);
-    code[f.path] = f.lines.join('\n');
+    const lines =
+      f.lines.length || !f.total ? f.lines : heads.get(f.path)?.total === f.total ? heads.get(f.path)!.lines : null;
+    if (!lines) S.HEADLESS.add(f.path);
+    code[f.path] = (lines ?? []).join('\n');
     present.add(f.path);
   }
+  S.mapRoot = s.root ?? null;
+  S.codeFiles = s.codeFiles ?? s.tree.length;
+  S.mapMax = S.codeFiles > s.tree.length ? s.tree.length : 0;
+  // Too large to map whole, and no map ever asked for: which folder, first.
+  if (first && S.mapMax && !s.root && s.rootChosen === false) openMapPicker(true);
   // A file a run removed stays on the map, marked gone, while a run lists it; a renamed one is under its new name.
   const runs = s.runs.map(liveRun);
   const gone = new Set<string>(),
@@ -403,7 +480,7 @@ function openFinished(run: Run, was: Run | null) {
 
 async function refresh() {
   try {
-    applyState(await bridge.state(conn()), false);
+    applyState(await bridge.state(conn(), S.mapRoot), false);
   } catch (e) {
     onDisconnect(e);
   }
@@ -456,7 +533,7 @@ async function poll() {
       // Runs alone changed: their deltas update the state already here. Anything else fetches it whole.
       if (deltas.length && !last) needState = true;
       if (needState || deltas.length) {
-        const s = needState ? await bridge.state(conn()) : withDeltas(last!, deltas, r.seq);
+        const s = needState ? await bridge.state(conn(), S.mapRoot) : withDeltas(last!, deltas, r.seq);
         followSessions(S.WORKING, workingOf(s), s);
         noteEnded(S.WORKING, workingOf(s), s.runs);
         noticeEnded(S.WORKING, workingOf(s), s.runs, id => selectRun(S.RUNS.find(r => r.id === id) ?? null));
@@ -496,8 +573,9 @@ export async function connect(c: Conn, quiet = false): Promise<string | null> {
     st.sel.clear();
     st.mode = 'after';
     st.tab = 'runs';
-    // A repository is laid out as it was last time, or afresh; later state events keep this layout.
-    S.LAYOUT = await loadLayout(c, s.repo.root);
+    // A repository is laid out as it was last time, or afresh; later state events keep this layout. A map of one of
+    // its folders is laid out afresh, as the same folder always is.
+    S.LAYOUT = s.root ? null : await loadLayout(c, s.repo.root);
     forgetAll();
     stepsFetched.clear();
     foundAs.clear();

@@ -11,7 +11,8 @@ export const SKIP =
   /(^|\/)(node_modules|\.git|\.loa|dist|build|coverage|\.next|\.turbo)(\/|$)|(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$|(^|\/)\.env/;
 export const MAX_LINES = 400,
   // Most files a map shows; a larger folder is mapped by one of its folders instead (the app asks which).
-  MAX_FILES = 10000,
+  // LOA_MAX_FILES sets another (tests).
+  MAX_FILES = Number(process.env.LOA_MAX_FILES) || 10000,
   // A map of more files than this carries no lines in the state: the app asks for files' first lines as it shows
   // them (heads).
   LINES_UNDER = 1500,

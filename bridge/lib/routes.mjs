@@ -6,7 +6,7 @@ import { VERSION } from './paths.mjs';
 import { readJson, textLines } from './util.mjs';
 import { relocate, scopeEntry } from './scope.mjs';
 import { HOOK_AGENT } from './hook.mjs';
-import { ROOT, CONFIG_FILE, CONF, LAYOUT_FILE, git } from './repo.mjs';
+import { ROOT, LOA, CONFIG_FILE, CONF, LAYOUT_FILE, git } from './repo.mjs';
 import {
   CHECKS_OFF,
   saveAllowed,
@@ -38,21 +38,30 @@ import { commitPreview, commitRun } from './commit.mjs';
  * @typedef {(r: Request) => Reply | Promise<Reply>} Handler
  */
 
+/** The folder last mapped, kept across starts: a state asked for without one maps it again. */
+const mapFile = () => path.join(LOA, 'map.json');
 /**
- * The state, with the map of a folder (`root`, ending in /) or of the whole repo.
+ * The state, with the map of a folder (`root`, ending in /, '' for the whole repo), or of the folder last mapped.
  * @param {Request} request
  * @returns {Reply}
  */
 function state({ url }) {
-  const root = url.searchParams.get('root') ?? '';
-  if (root && (!root.endsWith('/') || root.split('/').some(s => s === '..' || s === '.') || root.startsWith('/')))
+  const asked = url.searchParams.get('root');
+  const root = asked ?? readJson(mapFile(), { root: '' }).root;
+  if (
+    typeof root !== 'string' ||
+    (root && (!root.endsWith('/') || root.startsWith('/') || root.split('/').some(s => s === '..' || s === '.')))
+  )
     return [400, { error: 'Not a folder of the repo' }];
+  if (asked !== null) fs.writeFileSync(mapFile(), JSON.stringify({ root }));
   return [
     200,
     {
       repo: { name: path.basename(ROOT), branch: safeBranch(), root: ROOT },
       agents: AGENTS,
       root,
+      // Whether a map was ever asked for here: until then, the app asks which folder to map when the repo is too large.
+      rootChosen: fs.existsSync(mapFile()),
       codeFiles: codeFiles().files.length,
       tree: readTree(root),
       runs: [...runs.values()].sort((a, b) => a.id - b.id).map(publicRun),

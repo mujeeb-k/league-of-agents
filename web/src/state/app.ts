@@ -48,6 +48,13 @@ export const S = {
   checksOn: [] as string[],
   /** Why the bridge's watch mode is off, if it is. */
   watchOff: null as string | null,
+  /** The folder the map is of ('' the whole repository), as the bridge said; null from a bridge before 0.2.0. */
+  mapRoot: null as string | null,
+  /** Code files in the whole repository, and the most a map shows when the repository has more. */
+  codeFiles: 0,
+  mapMax: 0,
+  /** Files on a large map whose lines aren't here yet: fetched as their cards come into view. */
+  HEADLESS: new Set<string>(),
   /** Shown in the top bar crumb. */
   repoName: '',
   /** The repository's absolute path when live; empty in the demo. */
@@ -87,6 +94,10 @@ export const st = {
   busy: null as string | null,
   /** A revert that would undo later edits, shown as a dialog (ConflictDialog.tsx). */
   conflict: null as Conflict | null,
+  /** The folder picker is open: which folder of the repository the map is of (MapPicker.tsx). */
+  mapPicker: false,
+  /** The folders it offers, with their code files; null while they load. */
+  folders: null as { path: string; files: number }[] | null,
   /** The commit being written in the commit dialog (CommitDialog.tsx). */
   commit: null as CommitDraft | null,
   /** Quick open (⌘P) or the command menu (⌘K), when one is open. */

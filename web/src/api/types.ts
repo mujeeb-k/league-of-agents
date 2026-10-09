@@ -152,6 +152,8 @@ export interface StateResponse {
   root?: string;
   /** Code files in the whole repository, on the map or not (bridges from 0.2.0). */
   codeFiles?: number;
+  /** Whether a map was ever asked for in this repository (bridges from 0.2.0). */
+  rootChosen?: boolean;
   /** root: the repository's absolute path on this computer, for opening files in another editor. */
   repo: { name: string; branch: string; root: string };
   agents: Record<string, AgentInfo>;
