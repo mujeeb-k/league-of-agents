@@ -478,7 +478,10 @@ export async function commitDraft() {
     renderInspector();
     queueRefresh();
   } catch (e) {
-    toast(explain(e));
+    // A git hook refused: its own words stay in the dialog, to fix and commit again.
+    const output = e instanceof BridgeError && e.data.code === 'hook-failed' ? e.data.args?.output : undefined;
+    if (typeof output === 'string') c.hookOutput = output;
+    else toast(explain(e));
   } finally {
     st.busy = null;
     bump('dialog');

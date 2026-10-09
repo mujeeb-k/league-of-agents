@@ -1408,6 +1408,73 @@ test.describe('commit a session', () => {
       expect(git(repo, 'status', '--porcelain')).toBe(' M shared/allowlist.ts\n');
     }));
 
+  test("your git hooks run: they see only the session's files staged, can change the message, and can stop the commit", () =>
+    committing(async (repo, b) => {
+      const hooks = path.join(repo, '.git/hooks');
+      // pre-commit: records what it sees staged; refuses while a file named STOP exists.
+      fs.writeFileSync(
+        path.join(hooks, 'pre-commit'),
+        '#!/bin/sh\ngit diff --cached --name-only > "$(git rev-parse --git-dir)/seen"\nif [ -e STOP ]; then echo "secret found in shared/log.ts" >&2; exit 1; fi\n',
+        { mode: 0o755 },
+      );
+      fs.writeFileSync(path.join(hooks, 'commit-msg'), '#!/bin/sh\nprintf "\\nReviewed-by: hook\\n" >> "$1"\n', {
+        mode: 0o755,
+      });
+      fs.appendFileSync(path.join(repo, 'apps/console/main.ts'), '// staged by me\n');
+      git(repo, 'add', 'apps/console/main.ts');
+      const staged = git(repo, 'diff', '--cached');
+      const was = head(repo);
+      const run = await session(b, 'edit:shared/log.ts');
+      fs.writeFileSync(path.join(repo, 'STOP'), '');
+      const refused = await commit(b, run.id, { message: 'Log it' });
+      expect(refused.status).toBe(409);
+      expect(refused.body).toMatchObject({ code: 'hook-failed' });
+      expect((refused.body as { args: { output: string } }).args.output).toContain('secret found in shared/log.ts');
+      expect(head(repo)).toBe(was);
+      expect(git(repo, 'diff', '--cached')).toBe(staged);
+      fs.rmSync(path.join(repo, 'STOP'));
+      expect((await commit(b, run.id, { message: 'Log it' })).status).toBe(200);
+      expect(fs.readFileSync(path.join(repo, '.git/seen'), 'utf8')).toBe('shared/log.ts\n');
+      expect(git(repo, 'log', '-1', '--format=%B').trim()).toBe('Log it\n\nReviewed-by: hook');
+      expect(git(repo, 'diff', '--cached')).toBe(staged);
+      expect(git(repo, 'status', '--porcelain')).toBe('M  apps/console/main.ts\n');
+    }));
+
+  test('a hook that reformats a file: what it committed is what your staging area holds, so the file shows clean', () =>
+    committing(async (repo, b) => {
+      fs.writeFileSync(
+        path.join(repo, '.git/hooks/pre-commit'),
+        '#!/bin/sh\nprintf "// formatted\\n" >> shared/log.ts\ngit add shared/log.ts\n',
+        { mode: 0o755 },
+      );
+      const run = await session(b, 'edit:shared/log.ts');
+      expect((await commit(b, run.id, { message: 'Format' })).status).toBe(200);
+      expect(git(repo, 'show', 'HEAD:shared/log.ts')).toContain('// formatted');
+      expect(git(repo, 'status', '--porcelain')).toBe('');
+    }));
+
+  test('in the app, a hook that stops the commit shows its own words, and the dialog stays open', ({ page }) =>
+    committing(async (repo, b) => {
+      fs.writeFileSync(
+        path.join(repo, '.git/hooks/pre-commit'),
+        '#!/bin/sh\necho "prettier: shared/log.ts is not formatted" >&2\nexit 1\n',
+        { mode: 0o755 },
+      );
+      await page.goto(linkFor(b));
+      await expect(page.locator('#conn')).toHaveText('Live');
+      await page.locator('#agentBtn').click();
+      await page.locator('#agentMenu [data-agent="hermes"]').click();
+      await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+      await page.locator('#prompt').fill('Log it. edit:shared/log.ts');
+      await page.locator('#prompt').press('Enter');
+      await page.locator('[data-act="keep"]').click({ timeout: 15_000 });
+      await page.locator('#commitBtn').click();
+      await page.locator('#commitConfirm').click();
+      await expect(page.locator('#commitHookOutput')).toContainText('prettier: shared/log.ts is not formatted');
+      await expect(page.locator('#commitDlg')).toBeVisible();
+      expect(git(repo, 'log', '--oneline').trim().split('\n')).toHaveLength(1);
+    }));
+
   test('signs the commit when git is set to sign', () =>
     committing(async (repo, b) => {
       const gpg = path.join(path.dirname(repo), 'fake-gpg.sh');

@@ -12,7 +12,7 @@ export interface Graph {
 }
 
 /** A commit being written: what the bridge says it would hold, the message, and the person's own files ticked. */
-export type CommitDraft = CommitPreview & { run: Run; message: string; include: Set<string> };
+export type CommitDraft = CommitPreview & { run: Run; message: string; include: Set<string>; hookOutput?: string };
 
 export const S = {
   LIVE: false,

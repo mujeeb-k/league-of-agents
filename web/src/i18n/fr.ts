@@ -492,5 +492,8 @@ const catalogue: Catalogue = {
   'Nothing to commit. Tick a file to include it.': 'Nothing to commit. Tick a file to include it.',
   '{name} changed since it was put back. Restoring it would lose that change.':
     '{name} changed since it was put back. Restoring it would lose that change.',
+  'Your git hooks stopped the commit:': 'Your git hooks stopped the commit:',
+  'Your git hooks stopped the commit.': 'Your git hooks stopped the commit.',
+  'Your branch moved while committing. Try again.': 'Your branch moved while committing. Try again.',
 };
 export default catalogue;

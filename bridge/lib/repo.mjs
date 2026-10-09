@@ -70,7 +70,9 @@ export function gitAsync(args, { input, ...opts } = {}) {
       'git',
       args,
       { cwd: ROOT, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, ...opts },
-      (e, out) => (e ? reject(e) : resolve(String(out))),
+      // A failure carries what git printed: a hook's own words, when one refused.
+      (e, out, err) =>
+        e ? reject(Object.assign(e, { stdout: String(out), stderr: String(err) })) : resolve(String(out)),
     );
     if (input !== undefined) child.stdin.end(input);
   });

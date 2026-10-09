@@ -1,8 +1,8 @@
 // Committing one session's files, and only when the person clicks Commit: the bridge never commits or stages on its
 // own. The commit is built in an index of its own from HEAD plus the session's files as the session left them, so
-// nothing else the person has staged or changed goes in. HEAD moves only if it is still where it was. In the person's
-// own index, only the committed files' entries change, to what was committed, so they show clean and everything else
-// staged stays exactly as it was. Git's commit hooks don't run (they belong to `git commit`); signing does.
+// nothing else the person has staged or changed goes in, and committed by git itself, so the person's hooks and
+// signing apply. In the person's own index, only the committed files' entries change, to what was committed, so they
+// show clean and everything else staged stays exactly as it was.
 import fs from 'node:fs';
 import path from 'node:path';
 import { serial } from './util.mjs';
@@ -66,17 +66,29 @@ export function commitRun(run, { message = '', include = [] } = {}) {
           ? gitAsync(['update-index', '--add', '--cacheinfo', `${entry[0]},${entry[2]},${p}`], { env })
           : gitAsync(['update-index', '--force-remove', '--', p], { env }));
     };
+    // Committed by git itself, from an index of its own: the person's hooks run (pre-commit sees only these files
+    // staged; commit-msg may change the message) and signing is as they set it. A failing hook stops the commit.
     const index = path.join(LOA, 'commit.index');
     const env = { ...process.env, GIT_INDEX_FILE: index };
     await gitAsync(['read-tree', head.commit], { env });
     await setEntries(env);
-    const tree = (await gitAsync(['write-tree'], { env })).trim();
-    fs.rmSync(index, { force: true });
-    const sign = (await gitAsync(['config', '--type=bool', 'commit.gpgsign']).catch(() => '')).trim() === 'true';
-    const sha = (
-      await gitAsync(['commit-tree', tree, '-p', head.commit, ...(sign ? ['-S'] : []), '-F', '-'], { input: message })
-    ).trim();
-    await gitAsync(['update-ref', '-m', `League of Agents: commit run ${run.id}`, head.ref, sha, head.commit]);
+    if ((await headNow()).commit !== head.commit) throw refused('head-moved', 'HEAD moved. Try again.');
+    try {
+      await gitAsync(['commit', '-q', '-F', '-'], { env, input: message });
+    } catch (e) {
+      const output = `${e.stdout ?? ''}${e.stderr ?? ''}`.trim();
+      throw refused('hook-failed', `Git refused the commit: ${output}`, { output });
+    } finally {
+      fs.rmSync(index, { force: true });
+    }
+    const sha = (await gitAsync(['rev-parse', 'HEAD'])).trim();
+    // In the person's index, only the committed files change, to what was committed (a hook may have reformatted
+    // one): they show clean, and everything else staged stays as it was.
+    entries.length = 0;
+    for (const p of chosen) {
+      const line = (await gitAsync(['ls-tree', sha, '--', p])).trim();
+      entries.push([p, line ? line.split(/\s+/).slice(0, 3) : null]);
+    }
     await setEntries(process.env);
     run.committed = { sha, at: Date.now(), files: chosen };
     saveRun(run);

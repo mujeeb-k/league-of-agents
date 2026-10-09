@@ -87,6 +87,20 @@ export function CommitDialog() {
                 {t('HEAD is detached. Check out a branch to commit to.')}
               </p>
             ) : null}
+            {c.hookOutput ? (
+              <div className="mb-4">
+                <p className="mb-2 flex gap-2 text-ink2 text-pretty">
+                  <TriangleAlert className="mt-0.5 size-4 shrink-0 text-mod" />
+                  {t('Your git hooks stopped the commit:')}
+                </p>
+                <pre
+                  id="commitHookOutput"
+                  className="max-h-40 overflow-auto rounded-lg border bg-card px-3 py-2 font-mono text-xs whitespace-pre-wrap"
+                >
+                  {c.hookOutput}
+                </pre>
+              </div>
+            ) : null}
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="outline">{t('Cancel')}</Button>
