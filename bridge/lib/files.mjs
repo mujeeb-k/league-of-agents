@@ -57,9 +57,12 @@ export function codeFiles() {
  * MAX_FILES (the app asks for as many as it draws well).
  */
 export function listFiles(root = '', max = MAX_FILES) {
-  const { files } = codeFiles();
-  return (root ? files.filter(p => p.startsWith(root)) : files).slice(0, Math.min(max, MAX_FILES));
+  return inFolder(root).slice(0, mapMax(max));
 }
+/** The code files in a folder, '' for the whole repo. */
+export const inFolder = (root = '') => (root ? codeFiles().files.filter(p => p.startsWith(root)) : codeFiles().files);
+/** The most files a map holds: what the app asks for, at most MAX_FILES. */
+export const mapMax = (max = MAX_FILES) => Math.min(max, MAX_FILES);
 /** Every folder holding code files, with how many are in it and under it: the folders a map can be of. */
 export function folders() {
   const { files } = codeFiles();

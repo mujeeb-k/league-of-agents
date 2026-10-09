@@ -335,7 +335,8 @@ function applyState(s: StateResponse, first: boolean) {
   }
   S.mapRoot = s.root ?? null;
   S.codeFiles = s.codeFiles ?? s.tree.length;
-  S.mapMax = S.codeFiles > s.tree.length ? s.tree.length : 0;
+  // The map is full: the folder has more code files than a map shows.
+  S.mapMax = s.mapFiles !== undefined && s.mapMax !== undefined && s.mapFiles > s.mapMax ? s.mapMax : 0;
   // Too large to map whole, and no map ever asked for: which folder, first.
   if (first && S.mapMax && !s.root && s.rootChosen === false) openMapPicker(true);
   // A file a run removed stays on the map, marked gone, while a run lists it; a renamed one is under its new name.

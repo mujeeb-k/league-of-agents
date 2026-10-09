@@ -20,7 +20,7 @@ import { AGENTS } from './agents/registry.mjs';
 import { checkClaude } from './agents/claude.mjs';
 import { onAgentLine } from './agents/stream.mjs';
 import { removeHooks } from './hooks-install.mjs';
-import { codeFiles, folders, readTree, hashOf, repoFile, treeEntry } from './files.mjs';
+import { codeFiles, folders, inFolder, mapMax, readTree, hashOf, repoFile, treeEntry } from './files.mjs';
 import { showAt } from './snapshots.mjs';
 import { recordedAuthors, exportAttribution } from './authorship.mjs';
 import { runs, working, saveRun, publicRun, fullRun, beginRun, finishRun, push, revertRun } from './runs.mjs';
@@ -54,6 +54,7 @@ function state({ url }) {
   )
     return [400, { error: 'Not a folder of the repo' }];
   if (asked !== null) fs.writeFileSync(mapFile(), JSON.stringify({ root }));
+  const max = Number(url.searchParams.get('max')) || undefined;
   return [
     200,
     {
@@ -63,7 +64,9 @@ function state({ url }) {
       // Whether a map was ever asked for here: until then, the app asks which folder to map when the repo is too large.
       rootChosen: fs.existsSync(mapFile()),
       codeFiles: codeFiles().files.length,
-      tree: readTree(root, Number(url.searchParams.get('max')) || undefined),
+      mapFiles: inFolder(root).length,
+      mapMax: mapMax(max),
+      tree: readTree(root, max),
       runs: [...runs.values()].sort((a, b) => a.id - b.id).map(publicRun),
       active: working.keys().next().value ?? null,
       working: [...working.keys()],

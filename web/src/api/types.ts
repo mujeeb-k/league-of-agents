@@ -154,6 +154,9 @@ export interface StateResponse {
   codeFiles?: number;
   /** Whether a map was ever asked for in this repository (bridges from 0.2.0). */
   rootChosen?: boolean;
+  /** Code files in the folder mapped, and the most a map holds: the map is full when they're more (0.2.0 on). */
+  mapFiles?: number;
+  mapMax?: number;
   /** root: the repository's absolute path on this computer, for opening files in another editor. */
   repo: { name: string; branch: string; root: string };
   agents: Record<string, AgentInfo>;

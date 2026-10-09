@@ -103,10 +103,16 @@ export async function startInBackground(hooks) {
     env: { ...process.env, LOA_MANAGED: '' },
   });
   child.unref();
-  for (const t0 = Date.now(); Date.now() - t0 < 15000; await new Promise(r => setTimeout(r, 100))) {
+  // A first start reads the whole repository: seconds for a large one. Waited for while the bridge runs, and said so.
+  let told = false;
+  for (const t0 = Date.now(); Date.now() - t0 < 600000; await new Promise(r => setTimeout(r, 100))) {
     const b = await running();
     if (b?.pid === child.pid) open(b);
     if (child.exitCode !== null) break;
+    if (!told && Date.now() - t0 > 2000) {
+      told = true;
+      console.log(`  Reading ${path.basename(ROOT)}. A large repository takes a few seconds.`);
+    }
   }
   console.error(fs.readFileSync(path.join(LOA, 'bridge.log'), 'utf8').trim() || "The bridge didn't start.");
   process.exit(1);
