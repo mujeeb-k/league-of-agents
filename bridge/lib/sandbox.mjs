@@ -160,19 +160,27 @@ function runLater(gitDir, commonDir, hooksDir) {
 
 /**
  * Where each agent keeps its own state, read and written by its sessions and by no other agent's: [kind, path].
- * Claude Code also writes ~/.claude.json through files beside it (.lock, .tmp, .backup), and keeps its login in the
- * macOS keychain, whose file it reads and, when its token is renewed, writes: a session that couldn't write it would
- * log the person out. macOS still guards the keychain's items one by one.
+ * Claude Code also writes ~/.claude.json through files beside it (.lock, .tmp, .backup).
+ *
+ * Its login is in the macOS login keychain. When its token is renewed the new one must be saved there, or the person
+ * is logged out (the old one is spent). macOS saves a keychain item by writing a temp file beside the keychain and
+ * renaming it over it, under a lock file, all by the process itself: tried in the sandbox, nothing less works. So a
+ * Claude Code session may write those three kinds of file and no other in the keychains' folder.
  */
 const AGENT_STATE = {
   claude: home => [
     ['subpath', path.join(home, '.claude')],
     ['regex', `^${escape(path.join(home, '.claude.json'))}(\\..*)?$`],
-    ['subpath', path.join(home, 'Library/Keychains')],
+    [
+      'regex',
+      `^${escape(path.join(home, 'Library/Keychains'))}/(login\\.keychain-db(\\.sb-[A-Za-z0-9-]+)?|\\.fl[0-9A-F]+)$`,
+    ],
   ],
   hermes: home => [['subpath', process.env.HERMES_HOME || path.join(home, '.hermes')]],
   dsh: home => [['subpath', process.env.DSH_HOME || path.join(home, '.dsh')]],
 };
+/** What else an agent reads in the home folder and never writes: for Claude Code, the rest of the keychains' folder. */
+const AGENT_READS = { claude: home => [['subpath', path.join(home, 'Library/Keychains')]] };
 /** Caches any agent's tools keep in the home folder: read and written. */
 const CACHES = ['.cache', 'Library/Caches', '.npm'];
 
@@ -339,6 +347,7 @@ export async function prepareSandbox(run, command) {
     ['literal', path.join(home, '.gitconfig')],
     ['subpath', path.join(config, 'git')],
     ...state,
+    ...(AGENT_READS[run.agent]?.(home) ?? []),
     ...toolchain(home, command),
   ].map(([kind, p]) => [kind, kind === 'regex' ? p : realish(p)]);
   // The folders above each: their names resolve (stat), their contents stay unlisted. Node also reads the
