@@ -23,9 +23,14 @@
   },
   "files": [
     "NOTICE",
+    "THIRD-PARTY-NOTICES.txt",
     "bridge/loa.mjs",
     "bridge/lib/",
-    "web/dist/"
+    "web/dist/",
+    "!web/dist/robots.txt",
+    "!web/dist/sitemap.xml",
+    "!web/dist/llms.txt",
+    "!web/dist/brand/og.png"
   ],
   "engines": {
     "node": ">=20"

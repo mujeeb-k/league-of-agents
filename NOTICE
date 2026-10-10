@@ -3,3 +3,4 @@ Copyright 2026 Mujeeb Khan
 
 Licensed under the Apache License, Version 2.0 (see LICENSE).
 IBM Plex fonts in web/public/fonts are licensed separately under the SIL Open Font License (see the license files there).
+The app in web/dist is built from third-party libraries, each under its own license: see THIRD-PARTY-NOTICES.txt.
