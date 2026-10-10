@@ -14,6 +14,8 @@ export interface StreamEntry {
   act?: 'read' | 'edit' | 'run' | 'other';
   path?: string;
   cmd?: string;
+  /** With say 'path-blocked': the path outside the repo the sandbox refused, ~ for home. */
+  outside?: string;
 }
 
 /**
@@ -122,6 +124,8 @@ export interface RunDTO {
   stays?: boolean;
   /** A shell command of it tried to write outside its section, and the sandbox refused. */
   commandBlocked?: boolean;
+  /** Paths outside the repo a command or tool of the session tried to open and the sandbox refused, ~ for home. */
+  blockedPaths?: string[];
 }
 
 /** Claude Code's verdict on its last turn (post_turn_summary): completed or blocked, and what it needs. */

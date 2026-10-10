@@ -247,6 +247,11 @@ function RunRow({ r }: { r: Run }) {
           <p className="reach mt-1 text-xs text-muted-foreground text-pretty">{reachOf(r.stays)}</p>
         ) : null}
         {running ? <Asks r={r} /> : null}
+        {r.blockedPaths?.map(p => (
+          <p key={p} className="blocked mt-1 text-xs text-ink2 [overflow-wrap:anywhere]">
+            {t('Tried to open {path}. Blocked.', { path: p })}
+          </p>
+        ))}
         {r.commandBlocked ? (
           <p className="blocked mt-1 text-xs text-ink2 text-pretty">
             {t('A command tried to write outside your selection. Blocked.')}

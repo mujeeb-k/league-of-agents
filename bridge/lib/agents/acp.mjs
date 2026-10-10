@@ -3,7 +3,7 @@ import path from 'node:path';
 import { VERSION } from '../paths.mjs';
 import { inScope } from '../scope.mjs';
 import { ROOT } from '../repo.mjs';
-import { blocked, commandBlocked, push } from '../runs.mjs';
+import { blocked, push, refusedBySandbox } from '../runs.mjs';
 import { step, stepDone, stepRefused, stepsOf } from '../steps.mjs';
 import { lockOfRun } from '../sandbox.mjs';
 import { emit } from '../events.mjs';
@@ -39,8 +39,8 @@ function startAcp(run, prompt, name, command, env) {
     prompted = false,
     outcome = null;
   // Harnesses log freely to stderr: kept in the raw log, and its last line said only if the run fails.
-  const { child, closed } = launch(run, command, {
-    env: typeof env === 'function' ? env(run) : env,
+  const { child, closed } = launch(run, () => command, {
+    env: sandboxed => (typeof env === 'function' ? env(sandboxed) : (env ?? {})),
     stdin: true,
     onLine: line => {
       try {
@@ -127,7 +127,8 @@ function startAcp(run, prompt, name, command, env) {
       calls.set(u.toolCallId, tool);
       if (tool.kind === 'edit') noteEdit(u.toolCallId, { content: u.content });
       // A command whose write the sandbox refused, failed or not (Hermes's terminal tool, DeepSeek Harness's bash).
-      else if (!isEdit(tool) && lockOfRun(run) === 'sandbox' && refusedWrite(textOf(u), true)) commandBlocked(run);
+      else if (!isEdit(tool) && lockOfRun(run) === 'sandbox' && refusedWrite(textOf(u), true))
+        refusedBySandbox(run, textOf(u));
       // DeepSeek Harness's edit or write, done without asking (its full-access mode, in the sandbox): its arguments.
       else if (isEdit(tool) && u.status === 'completed') noteEdit(u.toolCallId, tool);
       if (isEdit(tool) && u.status === 'completed')

@@ -43,7 +43,7 @@ export const ACP = {
   dsh: {
     name: 'DeepSeek Harness',
     command: [process.env.LOA_DSH_BIN || 'dsh', '--profile', 'acp'],
-    env: run => ({ DSH_PERMISSION_MODE: lockOfRun(run) === 'sandbox' ? 'danger-full-access' : 'read-only' }),
+    env: sandboxed => ({ DSH_PERMISSION_MODE: sandboxed ? 'danger-full-access' : 'read-only' }),
   },
 };
 /** Which agents are on this machine, and the harnesses the person added. */
@@ -77,16 +77,18 @@ export function loadAgents() {
 const STREAMED = {
   claude: streamConnector(
     () => BIN.claude,
-    (prompt, run) => [
+    (prompt, run, sandboxed) => [
       '-p',
       prompt,
       '--output-format',
       'stream-json',
       '--verbose',
+      // Inside the sandbox, the sandbox is the limit: Claude Code runs commands without its own permission check,
+      // which refused harmless ones (pipes, loops, its own verification). Anywhere else, it keeps that check.
       '--permission-mode',
-      'acceptEdits',
+      sandboxed ? 'bypassPermissions' : 'acceptEdits',
       // Inside the section's sandbox, Claude Code's own can't start (one sandbox can't start another).
-      ...(lockOfRun(run) === 'sandbox' ? ['--settings', '{"sandbox":{"enabled":false}}'] : []),
+      ...(sandboxed ? ['--settings', '{"sandbox":{"enabled":false}}'] : []),
       ...(run.sessionId ? ['--resume', run.sessionId] : []),
     ],
   ),
@@ -113,6 +115,8 @@ const STREAMED = {
     ],
   ),
 };
+/** The command an agent the bridge starts is run by. */
+export const commandOf = id => BIN[id] ?? ACP[id]?.command[0];
 /** What starts an agent's run, or undefined for one the bridge doesn't start (watch mode, a captured terminal). */
 export const connectorOf = id => STREAMED[id] ?? (ACP[id] ? acpConnector(ACP[id]) : undefined);
 /**

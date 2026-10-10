@@ -9,7 +9,7 @@ import { finishRun, push, saveRun, working } from './runs.mjs';
 import { emitRun } from './events.mjs';
 import { forgetSandbox, lockOfRun, prepareSandbox } from './sandbox.mjs';
 import { forgetShell } from './shell.mjs';
-import { connectorOf, lockOf } from './agents/registry.mjs';
+import { commandOf, connectorOf, lockOf } from './agents/registry.mjs';
 
 /**
  * Each run's agent at work, and its run finishing once the agent stops.
@@ -76,7 +76,7 @@ export async function startSession(run, read = {}) {
 async function turn(run, prompt) {
   if (lockOfRun(run) === 'sandbox')
     try {
-      await prepareSandbox(run);
+      await prepareSandbox(run, commandOf(run.agent));
     } catch (e) {
       push(run, { t: 'err', text: `The sandbox for this section couldn't be set up: ${e.message}` });
       await end(run, 'failed');

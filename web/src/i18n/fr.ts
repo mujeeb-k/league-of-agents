@@ -575,5 +575,6 @@ const catalogue: Catalogue = {
   Denied: 'Denied',
   Note: 'Note',
   'Waiting for you': 'Waiting for you',
+  'Tried to open {path}. Blocked.': 'Tried to open {path}. Blocked.',
 };
 export default catalogue;

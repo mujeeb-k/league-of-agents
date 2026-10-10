@@ -319,7 +319,9 @@ function RunView({ run }: { run: Run }) {
                         ? t('Tried to change {file}. Blocked.', { file: e.file })
                         : e.say === 'command-blocked'
                           ? t('A command tried to write outside your selection. Blocked.')
-                          : e.text}
+                          : e.say === 'path-blocked' && e.outside
+                            ? t('Tried to open {path}. Blocked.', { path: e.outside })
+                            : e.text}
                     </span>
                   </li>
                 );

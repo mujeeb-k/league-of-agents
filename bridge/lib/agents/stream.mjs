@@ -6,7 +6,7 @@ import { noteWrites } from './lines.mjs';
 import { refusedWrite, relPaths, repoRelative, toolError, toolLabel, toolSaid, toolText } from './labels.mjs';
 import { launch } from './process.mjs';
 import { shellAccess } from '../shell.mjs';
-import { blocked, commandBlocked, push } from '../runs.mjs';
+import { blocked, push, refusedBySandbox } from '../runs.mjs';
 import { step, stepDone, stepRefused } from '../steps.mjs';
 import { lockOfRun } from '../sandbox.mjs';
 import { emit } from '../events.mjs';
@@ -19,8 +19,8 @@ import { emit } from '../events.mjs';
 export function streamConnector(bin, argsOf) {
   return {
     start(run, prompt, scopeFile) {
-      const { child, closed } = launch(run, [bin(), ...argsOf(prompt, run)], {
-        env: { LOA_SCOPE_FILE: scopeFile, ...shellAccess(run) },
+      const { child, closed } = launch(run, sandboxed => [bin(), ...argsOf(prompt, run, sandboxed)], {
+        env: () => ({ LOA_SCOPE_FILE: scopeFile, ...shellAccess(run) }),
         onLine: line => onAgentLine(run, line),
         onStderr: d => {
           const t = d.trim();
@@ -131,7 +131,7 @@ export function onAgentLine(run, line) {
       const text = toolText(c.content),
         [call] = callsOf(run).get(c.tool_use_id) ?? [];
       // A shell command the sandbox refused a write, failed or not (a command may carry on past it).
-      if (call?.act === 'run' && sandboxed && refusedWrite(text, true)) commandBlocked(run);
+      if (call?.act !== 'edit' && sandboxed && refusedWrite(text, true)) refusedBySandbox(run, text);
       if (call?.act === 'edit' && !c.is_error) stepDone(run, call.i);
       if (!c.is_error) continue;
       // An edit refused outside the section: the person is asked (runs.mjs blocked).

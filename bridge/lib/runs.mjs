@@ -1,5 +1,6 @@
 // Runs: each change recorded with its before and after snapshots, kept, reverted, and pruned when old.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { readJson, splitLines, serial } from './util.mjs';
 import { inScope, rangeKept, scopeEntry } from './scope.mjs';
@@ -207,6 +208,31 @@ export function commandBlocked(run) {
   if (run.commandBlocked) return;
   run.commandBlocked = true;
   push(run, { t: 'deny', text: 'A command tried to write outside the selection. Blocked.', say: 'command-blocked' });
+  saveRun(run);
+  emitRun(run);
+}
+/**
+ * A command or tool the sandbox refused, as its output says. A path outside the repo it names (the home folder is
+ * closed to a session, and writes outside the repo go only to temp) is said on the card, by name; with none, it was a
+ * write outside the section (commandBlocked).
+ */
+export function refusedBySandbox(run, text) {
+  const home = os.homedir();
+  const named = [
+    // An absolute path only: one inside the repo is named relative to it, and is a write outside the section.
+    ...String(text).matchAll(
+      /(?:^|[\s'"])(\/[^\s:'"]+): Operation not permitted|operation not permitted, \w+ '(\/[^']+)'/gm,
+    ),
+  ].map(m => path.resolve(m[1] ?? m[2]));
+  const outside = [...new Set(named)].filter(p => p !== ROOT && !p.startsWith(ROOT + path.sep));
+  if (!outside.length) return commandBlocked(run);
+  run.blockedPaths ??= [];
+  for (const p of outside) {
+    const shown = p === home || p.startsWith(home + path.sep) ? `~${p.slice(home.length)}` : p;
+    if (run.blockedPaths.includes(shown) || run.blockedPaths.length >= 20) continue;
+    run.blockedPaths.push(shown);
+    push(run, { t: 'deny', text: `Tried to open ${shown}. Blocked.`, say: 'path-blocked', outside: shown });
+  }
   saveRun(run);
   emitRun(run);
 }

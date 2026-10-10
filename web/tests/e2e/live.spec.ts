@@ -13,6 +13,7 @@ import {
   FAKE_ACP,
   FAKE_CLAUDE,
   FAKE_CODEX,
+  PROBE_AGENT,
   REPLAY_AGENT,
   REPO_ROOT,
   SEED,
@@ -2684,6 +2685,72 @@ test.describe('sessions at once', () => {
       fs.rmSync(path.dirname(main), { recursive: true, force: true });
     }
   });
+
+  onMac("a session can't read the home folder: the card names the path, and the file's content lands nowhere", () =>
+    twoSessions(async (b, repo) => {
+      const key = path.join(homeOf(repo), '.ssh/id_ed25519');
+      fs.mkdirSync(path.dirname(key), { recursive: true });
+      fs.writeFileSync(key, `${MARKER}\n`);
+      const r = await runToEnd(b, {
+        agent: 'hermes',
+        prompt: 'exec: cat ~/.ssh/id_ed25519',
+        scope: ['shared/'],
+        resumeFrom: null,
+      });
+      expect(r.blockedPaths).toEqual(['~/.ssh/id_ed25519']);
+      expect(r.stream).toContainEqual({
+        t: 'deny',
+        text: 'Tried to open ~/.ssh/id_ed25519. Blocked.',
+        say: 'path-blocked',
+        outside: '~/.ssh/id_ed25519',
+      });
+      // Not a write outside the selection: that line is for those.
+      expect(r.commandBlocked).toBeUndefined();
+      expect(landings(MARKER, repo, [])).toEqual([]);
+    }),
+  );
+
+  // Claude Code runs without its own permission check only inside the sandbox: the same code that puts the sandbox
+  // in front of it gives it that, so one can't come without the other.
+  const permissionOf = async (env: Record<string, string>, scope: string[]) => {
+    const repo = makeRepo();
+    const log = path.join(path.dirname(repo), 'probe.log');
+    const b = await startBridge(repo, PROBE_AGENT, { PROBE_LOG: log, PROBE_TRY: path.join(repo, 'notes.md'), ...env });
+    try {
+      const r = await call(b, '/api/runs', { agent: 'claude', prompt: 'Probe', scope, resumeFrom: null });
+      if (r.status !== 200) return { refused: r.body.code };
+      await expect
+        .poll(
+          async () =>
+            ((await call(b, `/api/runs/${(r.body as unknown as RunDTO).id}`)).body as unknown as RunDTO).status,
+        )
+        .not.toBe('running');
+      const { args, wrote } = JSON.parse(fs.readFileSync(log, 'utf8').trim().split('\n')[0]!) as {
+        args: string[];
+        wrote: boolean;
+      };
+      return { mode: args[args.indexOf('--permission-mode') + 1], wrote };
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+    }
+  };
+  onMac('inside the sandbox, Claude Code runs without its own permission check, and the sandbox holds it', async () => {
+    expect(await permissionOf({}, ['shared/'])).toEqual({ mode: 'bypassPermissions', wrote: false });
+  });
+  test('where there is no sandbox, Claude Code keeps its own permission check', async () => {
+    // A system without one (Linux, Windows), and a run on the whole repository anywhere.
+    expect(await permissionOf({ LOA_SANDBOX: 'off' }, ['shared/'])).toEqual({ mode: 'acceptEdits', wrote: true });
+    expect(await permissionOf({}, [])).toEqual({ mode: 'acceptEdits', wrote: true });
+  });
+  onMac(
+    "a sandbox that can't start starts no session on a section; a whole-repository run keeps the check",
+    async () => {
+      const broken = { LOA_SANDBOX_EXEC: '/usr/bin/false' };
+      expect(await permissionOf(broken, ['shared/'])).toEqual({ refused: 'no-sandbox' });
+      expect(await permissionOf(broken, [])).toEqual({ mode: 'acceptEdits', wrote: true });
+    },
+  );
 
   onMac("a session on a section never runs unlocked: if the sandbox can't start, it is refused", () =>
     twoSessions(

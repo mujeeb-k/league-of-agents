@@ -126,6 +126,7 @@ export interface Run {
   stays?: boolean;
   /** A shell command of it tried to write outside its section, and the sandbox refused. */
   commandBlocked?: boolean;
+  blockedPaths?: string[];
   startedAt?: number;
   endedAt?: number | null;
 }

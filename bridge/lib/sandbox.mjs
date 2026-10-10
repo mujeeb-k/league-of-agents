@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { ROOT, git, gitAsync } from './repo.mjs';
 import { scopeEntry } from './scope.mjs';
 import { BRIDGE_DIR } from './paths.mjs';
@@ -158,6 +158,71 @@ function runLater(gitDir, commonDir, hooksDir) {
   return out;
 }
 
+/**
+ * Where each agent keeps its own state, read and written by its sessions and by no other agent's: [kind, path].
+ * Claude Code also writes ~/.claude.json through files beside it (.lock, .tmp, .backup), and keeps its login in the
+ * macOS keychain, whose file it reads and, when its token is renewed, writes: a session that couldn't write it would
+ * log the person out. macOS still guards the keychain's items one by one.
+ */
+const AGENT_STATE = {
+  claude: home => [
+    ['subpath', path.join(home, '.claude')],
+    ['regex', `^${escape(path.join(home, '.claude.json'))}(\\..*)?$`],
+    ['subpath', path.join(home, 'Library/Keychains')],
+  ],
+  hermes: home => [['subpath', process.env.HERMES_HOME || path.join(home, '.hermes')]],
+  dsh: home => [['subpath', process.env.DSH_HOME || path.join(home, '.dsh')]],
+};
+/** Caches any agent's tools keep in the home folder: read and written. */
+const CACHES = ['.cache', 'Library/Caches', '.npm'];
+
+/** A command as found on PATH, or as given when it names a path; null when it isn't there. */
+const found = command =>
+  command.includes(path.sep)
+    ? path.resolve(command)
+    : ((process.env.PATH || '')
+        .split(path.delimiter)
+        .map(dir => path.join(dir, command))
+        .find(p => fs.existsSync(p)) ?? null);
+
+/**
+ * What in the home folder a session's programs are read from, and nothing more: Node, the agent's own command (the
+ * file, the package beside its node_modules, or its Python environment and that environment's Python), and the
+ * folders PATH names there, with the install each `bin` folder belongs to (never the home folder or ~/.local whole).
+ * @returns {[string, string][]} [kind, path]
+ */
+function toolchain(home, command) {
+  /** @type {[string, string][]} */
+  const out = [];
+  const under = p => p.startsWith(home + path.sep);
+  for (const file of [process.execPath, found(command)]) {
+    if (!file) continue;
+    const real = realish(file);
+    for (const p of new Set([file, real])) if (under(p)) out.push(['literal', p]);
+    const pkg = real.indexOf(`${path.sep}node_modules${path.sep}`);
+    if (pkg > 0 && under(real)) out.push(['subpath', real.slice(0, pkg)]);
+    const env = path.dirname(path.dirname(file)),
+      cfg = path.join(env, 'pyvenv.cfg');
+    if (!fs.existsSync(cfg)) continue;
+    if (under(env)) out.push(['subpath', env]);
+    const base = /^home\s*=\s*(.+)$/m.exec(fs.readFileSync(cfg, 'utf8'))?.[1].trim();
+    if (base && under(realish(base))) out.push(['subpath', path.dirname(realish(base))]);
+  }
+  for (const entry of (process.env.PATH || '').split(path.delimiter).filter(Boolean)) {
+    const dir = realish(entry);
+    if (!under(dir)) continue;
+    out.push(['subpath', dir]);
+    const install = path.dirname(dir);
+    if (
+      ['bin', 'condabin', 'shims'].includes(path.basename(dir)) &&
+      install !== home &&
+      install !== path.join(home, '.local')
+    )
+      out.push(['subpath', install]);
+  }
+  return out;
+}
+
 /** What the repo ignored as each run at work started, by run (prepareSandbox). */
 const ignoredAtStart = new Map();
 /** A run ended: what it was held by goes, and a sandbox prepared for a turn it never started. */
@@ -186,13 +251,16 @@ const REPO_SETTINGS = [
 ];
 
 /**
- * Prepares the sandbox that locks a run to its section: writes inside the repo only to the section, to what the
+ * Prepares the sandbox that holds a run. Reads: nothing in the home folder but the repo, the run's own agent's state,
+ * caches, git's settings and the programs it runs (toolchain); the rest of the machine as usual. Writes: nothing
+ * outside the repo but temp folders, /dev, that agent's state and caches. `command` is the agent's command.
+ * Inside the repo, it locks the run to its section: writes only to the section, to what the
  * repo ignores, and to the temporary files an agent's edit tool writes beside a file before renaming it over the
  * file (TEMP_BESIDE); no tracked file outside the section, even one that matches an ignore rule; nothing that runs
  * later outside the sandbox (runLater, REPO_SETTINGS); and no reading the bridge's own token. Asynchronous: in a repo the size of
  * llvm, git's listings take a second.
  */
-export async function prepareSandbox(run) {
+export async function prepareSandbox(run, command) {
   const real = fs.realpathSync(ROOT);
   const params = [['ROOT', real]];
   const allow = [],
@@ -258,14 +326,57 @@ export async function prepareSandbox(run) {
   for (const d of parents) deny.push(add('literal', d));
   // The bridge's token, in its settings and in the link its log prints.
   const token = ['bridge.json', 'bridge.log'].map(f => add('literal', path.join(real, '.loa', f))).join(' ');
+  // The home folder: unreadable but for what a session needs, so its keys, browsers and other repos stay private.
+  const home = realish(os.homedir());
+  const state = [...AGENT_STATE[run.agent](home), ...CACHES.map(c => ['subpath', path.join(home, c)])].map(
+    ([kind, p]) => [kind, kind === 'regex' ? p : realish(p)],
+  );
+  const config = process.env.XDG_CONFIG_HOME || path.join(home, '.config');
+  const readable = [
+    ['subpath', real],
+    ['subpath', gitDir.trim()],
+    ['subpath', path.resolve(real, commonDir.trim())],
+    ['literal', path.join(home, '.gitconfig')],
+    ['subpath', path.join(config, 'git')],
+    ...state,
+    ...toolchain(home, command),
+  ].map(([kind, p]) => [kind, kind === 'regex' ? p : realish(p)]);
+  // The folders above each: their names resolve (stat), their contents stay unlisted. Node also reads the
+  // package.json of each folder above a module, to find where its package ends: that one file name is readable there.
+  const through = new Set([home]);
+  for (const [kind, p] of readable)
+    if (kind !== 'regex' && p.startsWith(home + path.sep))
+      for (const d of above(p)) if (d.startsWith(home)) through.add(d);
+  // Outside the repo: temp folders and devices. The repo and the home folder stay closed even when they sit in a temp
+  // folder; inside them, only the section, what the repo ignores, and the agent's own state and caches.
+  const temp = [
+    ['subpath', '/dev'],
+    ['subpath', '/private/tmp'],
+    ['subpath', '/private/var/tmp'],
+    ['subpath', path.dirname(realish(os.tmpdir()))],
+  ];
+  const each = list => list.map(([kind, p]) => add(kind, p)).join(' ');
   const profile = [
     '(version 1)',
     '(allow default)',
-    '(deny file-write* (subpath (param "ROOT")))',
-    ...(allow.length ? [`(allow file-write* ${allow.join(' ')})`] : []),
+    `(deny file-read* ${add('subpath', home)})`,
+    `(allow file-read* ${each(readable)})`,
+    `(allow file-read-metadata ${[...through].map(d => add('literal', d)).join(' ')})`,
+    `(allow file-read* ${[...through].map(d => add('literal', path.join(d, 'package.json'))).join(' ')})`,
+    '(deny file-write*)',
+    `(allow file-write* ${each(temp)})`,
+    `(deny file-write* (subpath (param "ROOT")) ${add('subpath', home)})`,
+    `(allow file-write* ${[...allow, each(state)].join(' ')})`,
     ...(folders.length ? [`(allow file-write-create ${folders.join(' ')})`] : []),
     `(deny file-write* ${deny.join(' ')})`,
     `(deny file-read* ${token})`,
   ].join('\n');
-  prepared.set(run.id, [SANDBOX_EXEC, '-p', profile, ...params.flatMap(([k, v]) => ['-D', `${k}=${v}`])]);
+  const args = [SANDBOX_EXEC, '-p', profile, ...params.flatMap(([k, v]) => ['-D', `${k}=${v}`])];
+  // Confirmed before the agent starts inside it: a profile the system won't take starts nothing.
+  await new Promise((resolve, reject) =>
+    execFile(args[0], [...args.slice(1), '/usr/bin/true'], e =>
+      e ? reject(new Error('the sandbox did not start')) : resolve(null),
+    ),
+  );
+  prepared.set(run.id, args);
 }

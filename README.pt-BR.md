@@ -15,15 +15,20 @@ Agentes de código mudam mais código do que qualquer pessoa consegue revisar li
 
 Ele roda no seu computador, funciona com os agentes que você já usa e é open source.
 
-![Selecionando uma pasta no mapa, pedindo uma mudança ao Claude Code e depois revisando o diff da execução arquivo por arquivo](docs/media/demo.gif)
+![Três sessões trabalhando no mapa, uma quarta iniciada em uma pasta ao lado delas, e depois o diff dela revisado arquivo por arquivo](docs/media/demo.gif)
 
 ## O que você pode fazer
 
 - **Veja seu projeto de uma vez.** As pastas e os arquivos de código dele em um só mapa. Afaste o zoom para ver a forma, aproxime para ler o código.
-- **Aponte um agente para linhas exatas.** Selecione um arquivo, uma pasta ou algumas linhas e descreva a mudança. Com os hooks ativados, o Claude Code é impedido de editar fora da sua seleção com suas ferramentas de edição. Os hooks ficam desativados até você dizer sim: o primeiro `npx leagueofagents-cli@latest` em um terminal pergunta uma vez e lembra, e sem um terminal eles ficam desativados a menos que você passe `--hooks`. Para conferir, procure `"hooks": true` em `.loa/bridge.json`. Edições do Codex e do Cursor fora da sua seleção são sinalizadas depois da execução, e as do Claude Code também, quando os hooks estão desativados ou quando ele usa um comando de shell.
+- **Aponte um agente para linhas exatas.** Selecione um arquivo, uma pasta ou algumas linhas e descreva a mudança. Ao lado do nome do agente você vê uma de duas coisas:
+  - **"Fica dentro da sua seleção."** No macOS, o Claude Code, o Hermes e o DeepSeek Harness rodam dentro do sandbox do próprio sistema: eles, e cada programa que eles iniciam, só podem gravar dentro da sua seleção e em arquivos que o repositório ignora (saída de build, pacotes instalados). O que o sandbox permite fora do repositório está [listado abaixo](#o-sandbox-no-macos).
+  - **"Pode mudar arquivos fora da sua seleção. Você verá cada um sinalizado."** O Codex e o Cursor, e todo agente onde não há sandbox (Linux, Windows). Com os hooks ativados, as ferramentas de edição do Claude Code continuam bloqueadas fora da sua seleção, e o que os comandos de shell dele mudam fora dela é devolvido ao que era.
+
+  Quando uma sessão tenta mudar um arquivo fora da sua seleção, a gravação é bloqueada e o cartão dela pergunta: "Quer mudar <file>". **Permitir** adiciona o arquivo à seleção dela e a sessão continua de onde parou; **Recusar** mantém o arquivo de fora. Se outra sessão está trabalhando nesse arquivo, o cartão diz qual, e Permitir espera até essa sessão terminar. Os hooks ficam desativados até você dizer sim: o primeiro `npx leagueofagents-cli@latest` em um terminal pergunta uma vez e lembra, e sem um terminal eles ficam desativados a menos que você passe `--hooks`. Para conferir, procure `"hooks": true` em `.loa/bridge.json`.
+- **Acompanhe o trabalho.** Cada sessão em andamento tem um marcador no arquivo que ela está lendo ou editando, no mapa e no minimapa, e as edições dela são desenhadas conforme chegam. Siga uma sessão para o mapa se mover com ela. Os passos de uma execução são listados em ordem; clique em um para ver o arquivo dele como esse passo o deixou.
 - **Edite arquivos você mesmo.** Dê um clique duplo no código de um arquivo para abri-lo no editor. As edições salvas são registradas e podem ser desfeitas como qualquer execução de agente.
 - **Atualize o que depende de uma mudança.** Renomeie uma função e peça ao agente para atualizar cada arquivo que a usa. O diff da sua mudança vai para o prompt do agente. O mapa mostra cada arquivo que ele tocou.
-- **Revise antes de manter.** Alterne entre Antes, Depois e Diff, percorra os arquivos mudados e então mantenha a execução ou desfaça com um clique.
+- **Revise antes de manter.** Alterne entre Antes, Depois e Diff, percorra os arquivos mudados e então mantenha a execução ou desfaça com um clique. Depois de mantida, faça commit só dos arquivos dessa execução com uma mensagem que você escreve; nada é enviado com push.
 - **Rode suas verificações automaticamente.** Testes e checagens de tipos rodam depois de cada execução que muda arquivos, para você saber se ainda funciona.
 
 ## Início rápido
@@ -72,15 +77,15 @@ Salve como `~/.config/league-of-agents/agents.json` e reinicie o League of Agent
 
 ## Como usar
 
-**A partir do mapa.** Selecione arquivos, pastas ou linhas, escolha um agente, descreva a mudança e pressione Enter. Quando a execução terminar, revise e mantenha ou desfaça. Com uma execução concluída selecionada, seu próximo prompt continua a mesma sessão. Remova o chip "Continuação" para começar do zero.
+**A partir do mapa.** Selecione arquivos, pastas ou linhas, escolha um agente, descreva a mudança e pressione Enter. Quando a execução terminar, revise e mantenha ou desfaça. Com uma execução concluída selecionada, seu próximo prompt continua a mesma sessão. Para começar do zero, escolha "Começar uma nova sessão" no menu "Continuação".
 
 As linhas selecionadas são identificadas pelo texto delas e pelas linhas ao redor, não pelos números. Se edições, uma troca de branch ou um rebase moverem o código, a seleção acompanha. Se o código mudou, foi removido ou não pode ser distinguido de uma cópia idêntica, a seleção avisa e nada roda até você selecionar de novo. Quando um agente edita dentro da sua seleção, a seleção passa a ser as novas linhas.
 
-Edições feitas durante a execução de um agente contam nessa execução, inclusive as suas. Só uma execução acontece por vez.
+Sessões em seções que não se sobrepõem rodam ao mesmo tempo; uma sessão no repositório inteiro roda sozinha. Edições feitas durante uma execução contam nessa execução, inclusive as suas.
 
 **A partir do seu terminal.** Use o Claude Code, o Codex ou o Cursor como de costume. Com os hooks ativados, cada prompt que você envia vira uma execução no mapa, com o prompt como título.
 
-**A partir de qualquer editor.** É só trabalhar. Quando os arquivos que você mudou ficam parados por alguns segundos, o League of Agents os registra como uma execução, como "main.py editado". Arquivos que o git ignora e arquivos novos que costumam guardar segredos ([listados abaixo](#privacidade-e-segurança)) nunca são registrados, e trocas de branch e pulls nunca geram uma execução.
+**A partir de qualquer editor.** É só trabalhar. Quando os arquivos que você mudou ficam parados por alguns segundos, o League of Agents os registra como uma execução, como "main.py editado". Arquivos que o git ignora e arquivos novos que costumam guardar segredos ([listados abaixo](#privacidade-e-segurança)) nunca geram uma execução e nunca entram em um snapshot, e trocas de branch e pulls nunca geram uma execução.
 
 Um arquivo renomeado mantém seu lugar no mapa e aparece como renomeado, com o que mudou nele. Uma pasta renomeada por inteiro também mantém seu lugar.
 
@@ -93,7 +98,7 @@ Se o seu repositório não tem nenhuma configurada, o League of Agents procura s
 No seu repositório:
 
 - `.loa/`: registros de execuções, a porta e o token da ponte, um índice privado de snapshots, uma cópia da ponte que os hooks rodam, o layout do mapa e um log. Ela fica fora do git por meio de `.git/info/exclude`, e a ponte não inicia em um repositório que faz commit dela.
-- Snapshots: commits git sob refs privadas `refs/loa/`, guardados em `.git/objects`. Eles nunca tocam seu branch nem a área de staging.
+- Snapshots: commits git sob refs privadas `refs/loa/`, guardados em `.git/objects`. Eles nunca tocam seu branch nem a área de staging. A ponte nunca faz commit nem staging por conta própria. Um commit só acontece quando você clica em Commit, e só para os arquivos daquela sessão.
 - `loa.config.json`, só se você escolher compartilhar suas verificações com sua equipe.
 
 Na sua pasta pessoal:
@@ -143,9 +148,33 @@ Quando você roda um agente a partir do mapa, a ponte o inicia no seu repositór
 
 Uma continuação adiciona `--resume <session>` para o Claude Code e o Cursor, e `resume <session>` para o Codex. O que cada flag de permissão permite:
 
-- **Claude Code, `--permission-mode acceptEdits`:** ele cria e edita arquivos no repositório sem perguntar, e **roda `mkdir`, `touch`, `rm`, `rmdir`, `mv`, `cp` e `sed` lá sem perguntar.** Outros comandos de shell e requisições de rede precisam de uma regra que você define no Claude Code; com `-p` não há ninguém para quem perguntar, então eles são negados. ([modos de permissão](https://code.claude.com/docs/en/permission-modes#auto-approve-file-edits-with-acceptedits-mode), [execuções não interativas](https://code.claude.com/docs/en/headless#auto-approve-tools)) A trava de escopo é um dos hooks, então só funciona quando você disse sim aos hooks. Ela verifica só as ferramentas de edição do Claude Code. Uma mudança feita com um desses comandos de shell não é bloqueada; ela é sinalizada depois da execução se estiver fora da sua seleção.
+- **Claude Code, `--permission-mode acceptEdits`:** ele cria e edita arquivos no repositório sem perguntar, e **roda `mkdir`, `touch`, `rm`, `rmdir`, `mv`, `cp` e `sed` lá sem perguntar.** Outros comandos de shell e requisições de rede precisam de uma regra que você define no Claude Code; com `-p` não há ninguém para quem perguntar, então eles são negados. ([modos de permissão](https://code.claude.com/docs/en/permission-modes#auto-approve-file-edits-with-acceptedits-mode), [execuções não interativas](https://code.claude.com/docs/en/headless#auto-approve-tools)) É assim que começa uma execução no repositório inteiro, e toda execução onde não há sandbox. **Dentro do sandbox no macOS, uma sessão em uma seleção começa com `--permission-mode bypassPermissions`:** o Claude Code roda qualquer comando sem perguntar, e o sandbox é o limite. A verificação própria dele recusava comandos inofensivos (pipes, loops, a própria conferência dele), e dentro do sandbox ela não acrescenta nada que o sandbox já não imponha para arquivos.
 - **Cursor, `-p --force`:** **ele roda comandos de shell sem perguntar.** `-p` dá a ele todas as ferramentas, incluindo escrita e shell, e `--force` permite comandos a menos que você os tenha negado explicitamente. ([parâmetros da CLI](https://cursor.com/docs/cli/reference/parameters))
 - **Codex, `exec --sandbox workspace-write`:** **ele roda comandos no repositório sem perguntar.** Ele lê e edita arquivos e roda comandos dentro do repositório. O acesso à rede fica desligado, e ele não pode ir além do repositório. ([modo não interativo](https://learn.chatgpt.com/docs/non-interactive-mode), [aprovações e segurança](https://learn.chatgpt.com/docs/agent-approvals-security))
+
+### O sandbox no macOS
+
+Uma sessão em uma seleção, do Claude Code, do Hermes ou do DeepSeek Harness, roda dentro do sandbox do macOS (`sandbox-exec`). Ele contém o agente e cada programa que o agente inicia.
+
+- **Gravações dentro do repositório:** só na sua seleção e em arquivos que o repositório ignora. Um lockfile fora da seleção que o `npm install` mudaria também é recusado, então selecione a pasta que contém o pacote.
+- **Gravações fora do repositório:** só em pastas temporárias, nas pastas do próprio agente (`~/.claude` e o login do Claude Code nas chaves do sistema, `~/.hermes`, `~/.dsh`) e em caches (`~/.cache`, `~/Library/Caches`, `~/.npm`).
+- **Leituras:** nada na sua pasta pessoal, exceto o repositório, as pastas do próprio agente, esses caches, as configurações do git (`~/.gitconfig`, `~/.config/git`) e os programas que ele roda: o Node, a instalação do próprio agente e as pastas do seu `PATH`. Suas chaves SSH, perfis de navegador e outros repositórios na sua pasta pessoal não podem ser lidos. Quando um caminho é recusado a um comando, o cartão da sessão diz qual. Para o Claude Code, as pastas do próprio agente incluem `~/Library/Keychains`, onde ele guarda o login; o macOS protege cada item das chaves separadamente.
+- **Nunca gravados, mesmo dentro dessas pastas:** o token da ponte (`.loa/bridge.json` e o log dela, que também não podem ser lidos), o código da própria ponte, suas configurações do git e os hooks git do seu repositório, as verificações aprovadas da ponte (`~/.config/league-of-agents`) e os arquivos de configurações e de hooks dos agentes (`settings.json` e `settings.local.json` do Claude Code, `config.toml` e `hooks.json` do Codex, `hooks.json` do Cursor, `config.yaml` e `hooks/` do Hermes). As pastas que os contêm, e a do seu repositório, não podem ser movidas nem substituídas.
+- **Os comandos rodam sem perguntar, rede incluída.** O sandbox limita arquivos, não a rede: uma sessão pode enviar o que consegue ler, incluindo seu repositório, para qualquer lugar. Use agentes e prompts em que você confia.
+- **Arquivos que o repositório ignora continuam graváveis,** como os pacotes instalados em `node_modules`. O que os roda depois, como suas verificações, um hook git ou um servidor de desenvolvimento, roda o que a sessão gravou, fora do sandbox.
+- **Pastas fora da sua pasta pessoal** (outros discos, `/opt`, `/usr/local`) podem ser lidas como qualquer programa seu pode ler.
+- **O que uma sessão inicia fica contido; o que já está rodando, não.** Um servidor tmux, o Docker ou um servidor de desenvolvimento que grava arquivos sob pedido ainda pode gravar por ela.
+- **Se o sandbox não consegue iniciar** (a própria ponte está rodando dentro de um), uma sessão em uma seleção é recusada em vez de rodar sem ele.
+- **Uma execução no repositório inteiro não roda em sandbox.** Ela tem o alcance da sua conta, e o Claude Code mantém ali a própria verificação de permissões.
+
+### Onde não há sandbox
+
+No Linux e no Windows, e para o Codex e o Cursor em qualquer lugar:
+
+- Com os hooks ativados, as ferramentas de edição do Claude Code são bloqueadas fora da sua seleção antes de gravar.
+- Os hooks gravam um snapshot antes e depois de cada comando de shell. O que ele mudou fora da sua seleção é devolvido ao que era assim que o comando termina, guardado e indicado na execução para você restaurar com um clique. **Essa janela é o comando inteiro:** um arquivo que você salva fora de todas as seleções enquanto um teste de 3 minutos roda também é devolvido ao que era.
+- Cada comando de shell espera pelos dois snapshots: cerca de 0,2 s em um repositório de 1.200 arquivos, cerca de 5 s nos 186.000 do llvm. No macOS, cada um espera só por um snapshot da sua seleção, cerca de 0,2 s no llvm.
+- Nada limita o que uma sessão lê.
 
 ## Privacidade e segurança
 
@@ -160,11 +189,13 @@ Os snapshots ficam no seu computador a menos que você os envie: `git push`, `gi
 
 - macOS. O Linux passa em toda a suíte de testes na CI, mas ainda não foi experimentado com um agente de verdade; nele, o app local é aberto. O Windows ainda não é suportado.
 - Máquinas remotas, SSH e dev containers não são suportados. O League of Agents precisa rodar no mesmo computador que o seu navegador.
-- O mapa mostra até 1.500 arquivos de código, e as primeiras 400 linhas de cada um. Arquivos com mais de 400 KB não aparecem no mapa. Os diffs guardam as primeiras 4.000 linhas de um arquivo.
+- Um mapa mostra até 5.000 arquivos de código, e as primeiras 400 linhas de cada um no cartão dele; um arquivo abre por inteiro, em antes, depois e diff. Em um repositório maior, você escolhe uma pasta para mapear, e pode trocá-la a qualquer momento. Arquivos com mais de 16 MB não aparecem no mapa.
 - Arquivos que não são de código, como imagens, entram nos snapshots e no desfazer, mas não aparecem no mapa.
-- Arquivos que o git ignora e arquivos novos que costumam guardar segredos nunca são registrados.
-- Uma execução por vez em um repositório.
-- Comandos de shell. O Hermes os roda sem perguntar, exceto os que considera perigosos, que o League of Agents recusa. O DeepSeek Harness os roda em modo somente leitura, então um comando que grava é recusado. Tudo o que um comando muda no repositório faz parte da execução: é sinalizado se estiver fora da sua seleção, e desfeito ao reverter a execução.
+- Arquivos que o git ignora e arquivos novos que costumam guardar segredos nunca entram em um snapshot e nunca geram uma execução sozinhos. A atividade do próprio agente é diferente: o que ele lê, imprime ou edita fica guardado em `.loa/runs/` no seu computador, então, se um agente abre um arquivo de segredos, o conteúdo dele pode estar lá. `uninstall` remove isso.
+- Dentro de uma sessão, os agentes rodam comandos sem perguntar, rede incluída, e uma sessão pode enviar o conteúdo do repositório pela rede. No macOS, o sandbox limita quais arquivos uma sessão em uma seleção lê e grava ([a lista](#o-sandbox-no-macos)); ele não limita a rede. Execuções no repositório inteiro, e todas as execuções no Linux e no Windows, não rodam em sandbox.
+- Uma sessão em uma seleção pode gravar arquivos que o repositório ignora, como `node_modules` e a saída de build. Suas verificações, seus hooks git e seu servidor de desenvolvimento podem rodar esses arquivos depois, fora do sandbox.
+- Execuções em seções que não se sobrepõem trabalham ao mesmo tempo; uma execução no repositório inteiro trabalha sozinha.
+- Comandos de shell. O Hermes os roda sem perguntar, exceto os que considera perigosos, que o League of Agents recusa. No macOS, em uma seção, tanto o Hermes quanto o DeepSeek Harness rodam dentro do sandbox da seção, então nenhum comando pode gravar fora dela; o DeepSeek Harness roda então no modo de acesso total, já que o sandbox dele não consegue iniciar dentro de outro. Nos outros casos, o DeepSeek Harness os roda em modo somente leitura, então um comando que grava é recusado. O que um comando muda dentro da seção é sinalizado como não feito pelas ferramentas de edição do agente enquanto outras sessões trabalham, já que só as ferramentas de edição informam os arquivos que mudam. Reverter desfaz isso.
 - Ele guarda as 500 execuções mais recentes, e todas as execuções dos últimos 30 dias. Execuções mais antigas são apagadas, junto com seus snapshots.
 - O site precisa do Chrome, Edge, Brave ou Arc. O Safari e o Firefox usam o app local.
 
@@ -201,7 +232,7 @@ Os snapshots ficam no seu computador a menos que você os envie: `git push`, `gi
 
 O League of Agents tem duas partes:
 
-- **A ponte** (`bridge/loa.mjs`) roda no seu computador, dentro do seu repositório. Node 20 ou mais recente, sem dependências. Antes e depois de cada execução, ela grava um snapshot dos seus arquivos em um commit git usando um índice privado, então seu branch e sua área de staging nunca são tocados. Os diffs vêm da comparação dos dois snapshots. Desfazer restaura o snapshot de "antes", e pergunta primeiro se algum arquivo mudou de novo desde então.
+- **A ponte** (`bridge/loa.mjs`) roda no seu computador, dentro do seu repositório. Node 20 ou mais recente, sem dependências. Antes e depois de cada execução, ela grava um snapshot dos seus arquivos em um commit git usando um índice privado, então seu branch e sua área de staging nunca são tocados. Os diffs vêm da comparação dos dois snapshots. Desfazer restaura o snapshot de "antes", e pergunta primeiro se algum arquivo mudou de novo desde então. A ponte nunca faz commit nem staging por conta própria. Um commit só acontece quando você clica em Commit, e só para os arquivos daquela sessão: ele é montado em um índice privado a partir do seu último commit mais esses arquivos como a sessão os deixou, seu branch só se move se ainda estiver onde estava, e na sua área de staging só as entradas desses arquivos mudam, então eles aparecem limpos e todo o resto que você colocou em staging fica como estava. Um arquivo que você já tinha mudado antes da sessão é listado e fica de fora a menos que você o marque, e nada entra em commit se um arquivo mudou desde a sessão. O commit é feito pelo próprio git, então seus hooks rodam (o pre-commit vê só esses arquivos em staging, e o commit-msg pode mudar a mensagem) e os commits são assinados se você configurou o git para assiná-los. Se um hook falha, nada entra em commit e a saída dele é mostrada.
 - **O app** (`web/`, construído com Vite, React e TypeScript) é o mapa que você usa. Ele é servido em leagueofagents.dev e pela própria ponte.
 
 Mais detalhes em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

@@ -7,16 +7,23 @@ import { push } from '../runs.mjs';
 import { lockOfRun, sandboxArgs } from '../sandbox.mjs';
 
 /**
- * Starts an agent for a run. Its stdout is kept as-is in .loa/runs/<id>.stream.jsonl (fixtures, debugging) and
+ * Starts an agent for a run. `argv` and `env` are told whether it starts inside the sandbox, here and nowhere else:
+ * what an agent is allowed only there (running without its own permission check) can't reach one started outside it.
+ * Its stdout is kept as-is in .loa/runs/<id>.stream.jsonl (fixtures, debugging) and
  * handed to `onLine` a line at a time; its stderr is kept in <id>.stderr.log and handed to `onStderr`. `closed`
  * resolves with its exit code, once its logs are written.
  */
-export function launch(run, argv, { env = {}, stdin = false, onLine, onStderr }) {
+export function launch(
+  run,
+  argv,
+  { env = /** @type {(sandboxed: boolean) => Record<string, string>} */ (() => ({})), stdin = false, onLine, onStderr },
+) {
   // A session on a section runs inside the sandbox that holds it there (sandbox.mjs).
-  const [cmd, ...args] = lockOfRun(run) === 'sandbox' ? [...sandboxArgs(run), ...argv] : argv;
+  const sandboxed = lockOfRun(run) === 'sandbox';
+  const [cmd, ...args] = sandboxed ? [...sandboxArgs(run), ...argv(true)] : argv(false);
   const child = spawn(cmd, args, {
     cwd: ROOT,
-    env: { ...process.env, LOA_MANAGED: '1', ...env },
+    env: { ...process.env, LOA_MANAGED: '1', ...env(sandboxed) },
     stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   });
   // A run's later turns (it carried on once allowed a file) add to its logs.
