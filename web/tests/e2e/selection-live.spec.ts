@@ -6,13 +6,22 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import type { RunDTO, StateResponse } from '../../src/api/types';
 import { anchorAt, toLines } from '../../src/lib/anchor';
-import { BRIDGE, PROBE_AGENT, SEED, SLOW_AGENT, git, makeRepo, startBridge, type Bridge } from '../support/live';
+import {
+  BRIDGE,
+  PROBE_AGENT,
+  SEED,
+  SLOW_AGENT,
+  git,
+  linkFor,
+  makeRepo,
+  startBridge,
+  type Bridge,
+} from '../support/live';
 import { TOAST } from '../support/targets';
 
 /** macOS: a session on a section runs in the system's sandbox (bridge/lib/sandbox.mjs). */
 const SANDBOX = process.platform === 'darwin';
 const FILE = 'shared/allowlist.ts';
-const linkFor = (b: Bridge) => `http://127.0.0.1:${b.port}/#t=${b.token}`;
 // Lines 3 to 5 of the seeded file: loadPolicy.
 const SELECTED = SEED[FILE]!.split('\n').slice(2, 5);
 /** What the app sends with selected lines: their text and the lines around them, taken from `text`. */

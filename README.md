@@ -108,7 +108,7 @@ In agent settings, only after you say yes to the hooks:
 A hook file that's in git is never edited: the hooks hold this computer's paths. League of Agents says so when it starts, and that agent's terminal sessions aren't recorded.
 - Cursor: `~/.cursor/hooks.json` in your home folder. Cursor reads project hooks only from the folder it opened, which is often above the repo.
 
-Your own hooks in these files are never changed. Your browser also keeps the bridge's port and token, and your panel, theme and language choices, in its own storage.
+Your own hooks in these files are never changed. Your browser also keeps the bridge's port and a session token of its own (each link works once: the page exchanges the link's code for that token), and your panel, theme and language choices, in its own storage.
 
 To remove it:
 

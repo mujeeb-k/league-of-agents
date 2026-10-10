@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { FAKE_ACP, call, git, startBridge, type Bridge } from '../support/live';
+import { FAKE_ACP, call, git, linkFor, startBridge, type Bridge } from '../support/live';
 import { APP } from '../support/targets';
 import fr from '../../src/i18n/fr';
 
@@ -99,7 +99,7 @@ for (const n of [1000, 5000])
     const repo = bigRepo(n);
     const b = await startBridge(repo);
     try {
-      await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+      await page.goto(linkFor(b));
       await expect(page.locator('#conn')).toHaveText('Live', { timeout: 60_000 });
       await expect(page.locator('#world .frame').first()).toBeVisible({ timeout: 60_000 });
       // Fit everything, as a person would first: that ends the first-load sidebar (panels.ts), so it steps
@@ -178,7 +178,7 @@ const respond = (page: Page, action: Action, text = '') =>
 test('responses on a 1,000-file repo stay under 100 ms', async ({ page }) => {
   const b = await startBridge(bigRepo(1000));
   try {
-    await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+    await page.goto(linkFor(b));
     await expect(page.locator('.fr')).toHaveCount(1000);
     const rows: { action: string; ms: number }[] = [];
     const close = async () => {
@@ -382,7 +382,7 @@ test('a 10,000-line file opened in full: code within 200 ms, scrolling drops 2% 
     return row;
   };
   try {
-    await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+    await page.goto(linkFor(b));
     await expect(page.locator('#conn')).toHaveText('Live');
     await page.keyboard.press('0');
     const editing = await measure('the file as it is');
@@ -416,7 +416,7 @@ test('the editor on a 1,000-line file: expand at 60 fps, keystrokes under 100 ms
   git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'long file');
   const b = await startBridge(repo);
   try {
-    await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+    await page.goto(linkFor(b));
     await expect(page.locator('#conn')).toHaveText('Live');
     await page.keyboard.press('0');
     await page.locator('.fr[data-path="src/long.ts"]').click();
@@ -640,7 +640,7 @@ async function measureReactRouter(page: Page, b: Bridge, repo: string, file: str
       return res;
     };
   });
-  await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+  await page.goto(linkFor(b));
   await page.waitForFunction(() => (window as unknown as { mapVisible: number | null }).mapVisible !== null);
   const mapVisible = await page.evaluate(() => (window as unknown as { mapVisible: number }).mapVisible);
   await page.waitForTimeout(1500);
@@ -763,7 +763,7 @@ test("a run's timeline of 1,000 steps scrolls at 60 fps, and a click shows its f
         },
       )
       .toBe('done');
-    await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+    await page.goto(linkFor(b));
     await expect(page.locator('#conn')).toHaveText('Live');
     await page.locator(`#sideList [data-run="${id}"]`).click();
     // Just after the page loads, the map's first layout, and the bridge's own finishing of the run, come first.
@@ -865,7 +865,7 @@ test('a folder of 1,500 files as the map, picked from a repository too large to 
       // Each time from the whole repository, which asks for a folder.
       fs.rmSync(path.join(repo, '.loa/map.json'), { force: true });
       await page.goto('about:blank');
-      await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+      await page.goto(linkFor(b));
       const pick = page.locator(`#mapPicker [data-folder="src/area${i}/"]`);
       await expect(pick).toContainText('1,500 files', { timeout: 60_000 });
       const shown = page.evaluate(

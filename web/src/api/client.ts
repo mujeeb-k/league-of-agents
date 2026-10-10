@@ -65,6 +65,24 @@ async function request<T>(
 }
 
 /**
+ * A link's one-time code, exchanged for this browser's session token. Null from a bridge before 0.2.0, which has no
+ * such exchange: its link carries the token itself.
+ */
+export async function sessionFor(base: string, code: string): Promise<string | null> {
+  const res = await fetch(base + '/api/session', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ code }),
+    cache: 'no-store',
+  });
+  const raw: unknown = await res.json().catch(() => ({}));
+  if (res.ok) return isRecord(raw) && typeof raw.token === 'string' ? raw.token : null;
+  const data = errorBody(raw);
+  if (data.error === 'Missing token' || res.status === 404) return null;
+  throw new BridgeError(data.error || `Bridge error ${res.status}`, res.status, data);
+}
+
+/**
  * The most files a map shows: the largest a page draws within every budget (10,000 file tiles in the page take 92 to
  * 137 ms to show a selection). The bridge allows up to 10,000.
  */

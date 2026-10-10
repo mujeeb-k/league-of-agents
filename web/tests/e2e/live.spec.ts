@@ -22,7 +22,9 @@ import {
   approveChecks,
   call,
   git,
+  codeFor,
   homeOf,
+  linkFor,
   startedBridges,
   makeRepo,
   publishedBridge,
@@ -34,8 +36,6 @@ import { APP, TOAST } from '../support/targets';
 import { ZOOMS, checkLevel, zoomTo } from '../support/zoom';
 
 const SUMMARY = 'Violation errors now name the action and origin. Added isEmpty and a policy cache.';
-
-const linkFor = (b: Bridge) => `http://127.0.0.1:${b.port}/#t=${b.token}`;
 
 /** Rows shown on the canvas for one file card, as +line / -line, blank lines dropped. */
 async function cardRows(page: Page, file: string) {
@@ -254,7 +254,7 @@ test('loading states: connecting, starting a run, and keep show progress and blo
     await slow('**/api/state?*', 'GET');
     await page.goto(APP);
     await page.locator('#connectBtn').click();
-    await page.locator('#connectInput').fill(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+    await page.locator('#connectInput').fill(linkFor(b));
     await page.locator('#connectInput').press('Enter');
     // "Connecting" shows once in the top bar: the badge says it, and the button steps aside.
     await expect(page.locator('#conn')).toHaveText('Connecting');
@@ -352,7 +352,7 @@ test("a repository never shows the demo's introduction, not even before the app 
   });
   const early = () => page.evaluate(() => (window as unknown as { early: unknown }).early);
   try {
-    for (const link of [linkFor(b), `${APP}/#bridge=${b.port}&t=${b.token}`]) {
+    for (const link of [linkFor(b), `${APP}/#bridge=${b.port}&t=${codeFor(b)}`]) {
       await page.goto(link);
       expect(await early()).toEqual({ display: 'none', height: 0 });
       await expect(page.locator('#conn')).toHaveText('Live');
@@ -379,7 +379,7 @@ test('startup: a link shows "Connecting", never the demo first, and offers the d
     await route.continue();
   });
   try {
-    await page.goto(`${APP}/#bridge=${b.port}&t=${b.token}`);
+    await page.goto(`${APP}/#bridge=${b.port}&t=${codeFor(b)}`);
     await expect(page.locator('#stageState')).toContainText('Connecting to your repo');
     await expect(page.locator('#conn')).toHaveText('Connecting');
     await expect(page.locator('#insp')).toContainText('Waiting for the bridge');
@@ -774,7 +774,7 @@ test('hosted link: the app on another origin connects with #bridge=PORT', async 
   const repo = makeRepo(),
     b = await startBridge(repo);
   try {
-    await page.goto(`${APP}/#bridge=${b.port}&t=${b.token}`);
+    await page.goto(`${APP}/#bridge=${b.port}&t=${codeFor(b)}`);
     await expect(page.locator('#conn')).toHaveText('Live');
     await expect(page.locator(TOAST)).toHaveText('Connected to sample-repo');
     await page.locator('.frame[data-dir="shared"] > .flabel b').click();
@@ -843,7 +843,7 @@ test('the app on a 0.1.2 bridge: a finished run reaches the canvas through the w
     b = await startBridge(repo, FAKE_CLAUDE, {}, [], publishedBridge('0.1.2'));
   try {
     const fetches = stateFetches(page);
-    await page.goto(`${APP}/#bridge=${b.port}&t=${b.token}`);
+    await page.goto(`${APP}/#bridge=${b.port}&t=${codeFor(b)}`);
     await expect(page.locator('#conn')).toHaveText('Live');
     const before = fetches();
     await page.locator('.frame[data-dir="shared"] > .flabel b').click();
@@ -950,7 +950,7 @@ test('the layout is kept on a 0.1.2 bridge, in the browser', async ({ page }) =>
     b = await startBridge(repo, FAKE_CLAUDE, {}, [], publishedBridge('0.1.2'));
   try {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`${APP}/#bridge=${b.port}&t=${b.token}`);
+    await page.goto(`${APP}/#bridge=${b.port}&t=${codeFor(b)}`);
     await expect(page.locator('#conn')).toHaveText('Live');
     const before = await placesOf(page);
     await expect
@@ -3452,8 +3452,8 @@ test('bridge prints the leagueofagents.dev link by default, and --web overrides 
   ] as const) {
     const b = await startBridge(repo, FAKE_CLAUDE, { LOA_WEB_URL: '' }, [...args]);
     try {
-      expect(b.output()).toContain(`Open    http://127.0.0.1:${b.port}/#t=${b.token}`);
-      await expect.poll(() => b.output()).toContain(`or      ${site}/#bridge=${b.port}&t=${b.token}`);
+      expect(b.output()).toContain(`Open    http://127.0.0.1:${b.port}/#t=`);
+      await expect.poll(() => b.output()).toContain(`or      ${site}/#bridge=${b.port}&t=`);
     } finally {
       b.stop();
     }
@@ -4476,6 +4476,55 @@ test('Cursor hooks find the repo inside the workspace, and only their own conver
 
 // Who may reach the bridge (docs/THREAT-MODEL.md). Only pages it trusts may call it from a browser, only by its own address,
 // and only with the token in the Authorization header; guessing the token locks it until a restart.
+test("a link works once: its code becomes that browser's own session; a reload and a second tab still connect", async ({
+  page,
+  browser,
+}) => {
+  const repo = makeRepo();
+  const b = await startBridge(repo);
+  try {
+    const link = linkFor(b);
+    await page.goto(link);
+    await expect(page.locator('#conn')).toHaveText('Live');
+    // The address bar keeps no token, and what the browser stored is neither the link's code nor the bridge's token.
+    expect(page.url()).toBe(`http://127.0.0.1:${b.port}/`);
+    const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('loa.conn')!) as { token: string });
+    expect(link).not.toContain(kept.token);
+    expect(kept.token).not.toBe(b.token);
+    // A reload, and a second tab of the same browser, connect with what it stored.
+    await page.reload();
+    await expect(page.locator('#conn')).toHaveText('Live');
+    const tab = await page.context().newPage();
+    await tab.goto(`http://127.0.0.1:${b.port}/`);
+    await expect(tab.locator('#conn')).toHaveText('Live');
+    // The same link again in this browser (its history, a bookmark): still this browser's session.
+    await tab.goto(link);
+    await expect(tab.locator('#conn')).toHaveText('Live');
+    // The same link anywhere else opens nothing: another browser, or a program that read it from a log.
+    const other = await (await browser.newContext()).newPage();
+    await other.goto(link);
+    await expect(other.locator('#stageState')).toContainText('The bridge rejected that link');
+    await expect(other.locator('#conn')).not.toHaveText('Live');
+    await other.context().close();
+    const redeem = await fetch(`http://127.0.0.1:${b.port}/api/session`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: new URL(link).hash.slice(3) }),
+    });
+    expect(redeem.status).toBe(401);
+    // The bridge's own token is in no link it prints, and a page's session can't ask for new links.
+    expect(b.output()).not.toContain(b.token);
+    const asked = await fetch(`http://127.0.0.1:${b.port}/api/link`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + kept.token },
+    });
+    expect(asked.status).toBe(403);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('a request whose body is not JSON is answered 400, not as a fault of the bridge', async () => {
   const repo = makeRepo();
   const b = await startBridge(repo);
@@ -4550,7 +4599,7 @@ test('bridge security: foreign origins and rebinding hosts get 403 and change no
       const file = path.join(dist, p === '/' ? 'index.html' : p);
       return route.fulfill({ path: fs.existsSync(file) ? file : path.join(dist, 'index.html') });
     });
-    await page.goto(`https://evil.example/#bridge=${b.port}&t=${b.token}`);
+    await page.goto(`https://evil.example/#bridge=${b.port}&t=${codeFor(b)}`);
     // The browser would ask first, and says which site is asking.
     await expect(page.locator('#stageState')).toContainText('let evil.example reach apps on this device');
     await page.locator('#askContinue').click();
@@ -4641,7 +4690,8 @@ test('version check: an old bridge shows the update banner, a current one does n
         else json.version = version;
         await route.fulfill({ response: res, json });
       });
-    await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
     await page.reload();
     await expect(page.locator('#conn')).toHaveText('Live');
   };
@@ -5239,8 +5289,9 @@ test('start opens leagueofagents.dev in a Chrome-family default browser, the loc
   try {
     const first = start('com.google.Chrome');
     const b = JSON.parse(fs.readFileSync(path.join(repo, '.loa/bridge.json'), 'utf8')) as Bridge;
-    const site = `${SITE}/#bridge=${b.port}&t=${b.token}`,
-      local = `http://127.0.0.1:${b.port}/#t=${b.token}`;
+    // Each link ends in a code of its own, new every time.
+    const site = `${SITE}/#bridge=${b.port}&t=`,
+      local = `http://127.0.0.1:${b.port}/#t=`;
     // Opened, with the local app beside it for any browser.
     expect(first).toContain(`Open    ${site}`);
     expect(first).toContain(`or      ${local}`);
@@ -5275,7 +5326,7 @@ test('start opens leagueofagents.dev in a Chrome-family default browser, the loc
     // site in, is replaced.
     const only = start('com.google.Chrome', ['--local']);
     const lb = JSON.parse(fs.readFileSync(path.join(repo, '.loa/bridge.json'), 'utf8')) as Bridge;
-    expect(only).toContain(`Open    http://127.0.0.1:${lb.port}/#t=${lb.token}`);
+    expect(only).toContain(`Open    http://127.0.0.1:${lb.port}/#t=`);
     expect(only).not.toContain(SITE);
     // And the site can't reach it.
     const fromSite = await fetch(`http://127.0.0.1:${lb.port}/api/state`, {
@@ -5305,7 +5356,7 @@ test('without --port, a busy 43210 moves the bridge to the next free port', asyn
     const out = loa('start', '--no-open', '--no-hooks');
     const b = JSON.parse(fs.readFileSync(path.join(repo, '.loa/bridge.json'), 'utf8')) as Bridge;
     expect(b.port).toBeGreaterThan(43210);
-    expect(out).toContain(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+    expect(out).toContain(`http://127.0.0.1:${b.port}/#t=`);
     expect(
       (await fetch(`http://127.0.0.1:${b.port}/api/state`, { headers: { authorization: 'Bearer ' + b.token } })).status,
     ).toBe(200);
@@ -5336,10 +5387,10 @@ test('one bridge per repo: a second start or serve finds the running bridge inst
   const info = () => JSON.parse(fs.readFileSync(path.join(repo, '.loa/bridge.json'), 'utf8')) as Bridge;
   try {
     expect(loa('start', '--port', other, '--no-open', '--no-hooks')).toContain(
-      `League of Agents is running for sample-repo.\n  Open    http://127.0.0.1:${b.port}/#t=${b.token}`,
+      `League of Agents is running for sample-repo.\n  Open    http://127.0.0.1:${b.port}/#t=`,
     );
     expect(loa('serve', '--port', other, '--no-hooks')).toContain(
-      `League of Agents is already running for sample-repo: http://127.0.0.1:${b.port}/#t=${b.token}`,
+      `League of Agents is already running for sample-repo: http://127.0.0.1:${b.port}/#t=`,
     );
     // Nothing listens on the other port, and the running bridge still owns .loa/bridge.json.
     await expect(fetch(`http://127.0.0.1:${other}/`)).rejects.toThrow();
@@ -5410,13 +5461,13 @@ test('start, status, restart and stop the bridge in the background', async () =>
   try {
     const started = loa('start', '--port', port, '--no-open', '--no-hooks');
     const first = info();
-    expect(started).toContain(`http://127.0.0.1:${port}/#t=${first.token}`);
+    expect(started).toContain(`http://127.0.0.1:${port}/#t=`);
     // start has exited; the bridge runs on, as its own process group's leader.
     expect(await state(first.token)).toBe(200);
     expect(execFileSync('ps', ['-o', 'pgid=', '-p', String(first.pid)], { encoding: 'utf8' }).trim()).toBe(
       String(first.pid),
     );
-    expect(loa('status')).toContain(`running for sample-repo: http://127.0.0.1:${port}/#t=${first.token}`);
+    expect(loa('status')).toContain(`running for sample-repo: http://127.0.0.1:${port}/#t=`);
     // A second start finds it running and doesn't start another.
     loa('start', '--port', port, '--no-open');
     expect(info().pid).toBe(first.pid);
@@ -5445,11 +5496,11 @@ test('the app path is configurable: served there, and every link points there', 
   const repo = makeRepo(),
     b = await startBridge(repo, undefined, {}, ['--no-hooks', '--app-path', 'app']);
   try {
-    expect(b.output()).toContain(`http://127.0.0.1:${b.port}/app/#t=${b.token}`);
-    expect(b.output()).toContain(`/app/#bridge=${b.port}&t=${b.token}`);
+    expect(b.output()).toContain(`http://127.0.0.1:${b.port}/app/#t=`);
+    expect(b.output()).toContain(`/app/#bridge=${b.port}&t=`);
     const root = await fetch(`http://127.0.0.1:${b.port}/`, { redirect: 'manual' });
     expect([root.status, root.headers.get('location')]).toEqual([302, '/app/']);
-    await page.goto(`http://127.0.0.1:${b.port}/app/#t=${b.token}`);
+    await page.goto(linkFor(b, '/app/'));
     await expect(page.locator('#conn')).toHaveText('Live');
     await expect(page.locator('#repoName')).toHaveText('sample-repo');
   } finally {

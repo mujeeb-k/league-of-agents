@@ -11,6 +11,7 @@ import { CLAUDE_FIX } from './agents/claude.mjs';
 import { linkOf, siteLinkOf } from './cli.mjs';
 import { ROUTES } from './routes.mjs';
 import { setShellPort, shellTokenFits } from './shell.mjs';
+import crypto from 'node:crypto';
 import { sameSecret } from './util.mjs';
 
 function send(res, code, body, headers = {}) {
@@ -61,6 +62,28 @@ function allowedOrigin(origin) {
   }
 }
 /**
+ * A link carries a code good for one use: the page that opens it exchanges it for a session token of its own, kept
+ * in that browser, so a link left in a browser's history, a terminal's scrollback or a log opens nothing. The
+ * bridge's own token (.loa/bridge.json) is never in a link: the command line uses it, and asks for each link's code.
+ */
+const codes = new Set(),
+  sessionTokens = new Set();
+/** A fresh code for one link. The oldest unused are dropped past 50. */
+export function linkCode() {
+  const code = crypto.randomBytes(18).toString('base64url');
+  codes.add(code);
+  if (codes.size > 50) codes.delete(codes.values().next().value);
+  return code;
+}
+/** The session token a link's code is exchanged for, once; null for a code used before or never given. */
+function redeem(code) {
+  if (typeof code !== 'string' || !codes.delete(code)) return null;
+  const token = crypto.randomBytes(24).toString('base64url');
+  sessionTokens.add(token);
+  return token;
+}
+const sessionFits = auth => [...sessionTokens].some(t => sameSecret(auth, t));
+/**
  * Wrong tokens are answered ever more slowly, then lock the API until the bridge restarts. The token can't be
  * guessed in any number of tries; 50 leaves room for stale tabs after a restart, which send two each.
  */
@@ -101,14 +124,25 @@ async function handle(req, res) {
   if (!origin && /^(cross|same)-site$/.test(req.headers['sec-fetch-site'] || ''))
     return send(res, 403, 'Forbidden origin');
   if (locked()) return send(res, 423, { error: LOCKED }, cors);
-  const auth = (req.headers.authorization || '').replace(/^Bearer /, '');
-  if (!auth) return send(res, 401, { error: 'Missing token' }, cors);
-  if (!sameSecret(auth, TOKEN) && !shellTokenFits(url.pathname, auth)) {
+  /** A wrong token or a spent code: answered ever more slowly, and counted toward the lock. */
+  const wrong = body => {
     wrongTokens++;
     if (locked()) console.error(`\n  ${LOCKED}\n`);
     const wait = Math.min(100 * 2 ** (wrongTokens - 1), 5000);
-    return setTimeout(() => send(res, 401, { error: 'Bad token' }, cors), wait);
+    return setTimeout(() => send(res, 401, body, cors), wait);
+  };
+  // A link's code, exchanged for a session token: the one request that carries no token.
+  if (req.method === 'POST' && url.pathname === '/api/session') {
+    const token = redeem((await readBody(req).catch(() => ({}))).code);
+    return token ? send(res, 200, { token }, cors) : wrong({ error: 'This link was already used.' });
   }
+  const auth = (req.headers.authorization || '').replace(/^Bearer /, '');
+  if (!auth) return send(res, 401, { error: 'Missing token' }, cors);
+  const own = sameSecret(auth, TOKEN);
+  if (!own && !sessionFits(auth) && !shellTokenFits(url.pathname, auth)) return wrong({ error: 'Bad token' });
+  // A code for a new link: for the command line, which holds the bridge's own token, and no page.
+  if (req.method === 'POST' && url.pathname === '/api/link')
+    return own ? send(res, 200, { code: linkCode() }, cors) : send(res, 403, { error: 'Forbidden' }, cors);
   const route = ROUTES.find(
     ([method, at]) => method === req.method && (typeof at === 'string' ? at === url.pathname : at.test(url.pathname)),
   );
@@ -200,7 +234,7 @@ export function createBridgeServer(port) {
 }
 /** Says where the bridge is, once it listens. */
 export function listening(port) {
-  const local = linkOf({ port: port, token: TOKEN });
+  const local = linkOf({ port, code: linkCode() });
   console.log(`\n  League of Agents bridge\n  repo    ${ROOT}`);
   console.log(
     `  agents  ${Object.entries(AGENTS)
@@ -211,6 +245,6 @@ export function listening(port) {
   if (AGENTS.claude.problem) console.log(`  ${CLAUDE_FIX[AGENTS.claude.problem]}`);
   console.log(`\n  Open    ${local}`);
   if (WEB_URL)
-    console.log(`  or      ${siteLinkOf({ port, token: TOKEN })}   (Chrome or Edge, allow local network access)`);
+    console.log(`  or      ${siteLinkOf({ port, code: linkCode() })}   (Chrome or Edge, allow local network access)`);
   console.log('');
 }

@@ -288,7 +288,10 @@ export type SaveResponse = RunDTO | { unchanged: true };
 /** A bridge connection: base URL and token. */
 export interface Conn {
   base: string;
+  /** The session token this browser holds for the bridge; from a link, the link's one-time code until exchanged. */
   token: string;
+  /** Read from a link: its token is a code, to exchange for a session token (bridges from 0.2.0). */
+  fromLink?: true;
 }
 
 /** What committing a run would hold (GET /api/runs/:id/commit). */

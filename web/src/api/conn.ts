@@ -6,8 +6,8 @@ export function parseConn(str: string, here: string = location.href): Conn | nul
       hp = new URLSearchParams(u.hash.slice(1));
     const t = hp.get('t');
     if (!t) return null;
-    if (hp.get('bridge')) return { base: `http://127.0.0.1:${+(hp.get('bridge') ?? '')}`, token: t };
-    if (/^(127\.0\.0\.1|localhost)$/.test(u.hostname)) return { base: u.origin, token: t };
+    if (hp.get('bridge')) return { base: `http://127.0.0.1:${+(hp.get('bridge') ?? '')}`, token: t, fromLink: true };
+    if (/^(127\.0\.0\.1|localhost)$/.test(u.hostname)) return { base: u.origin, token: t, fromLink: true };
   } catch {
     /* not a URL */
   }
@@ -18,7 +18,7 @@ const KEY = 'loa.conn';
 
 export function saveConn(c: Conn) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(c));
+    localStorage.setItem(KEY, JSON.stringify({ base: c.base, token: c.token }));
   } catch {
     /* storage blocked */
   }

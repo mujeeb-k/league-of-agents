@@ -32,11 +32,16 @@ describe('diffRows', () => {
 describe('parseConn', () => {
   const here = 'https://loa.example.test/';
   it('reads a bridge-served link', () =>
-    expect(parseConn('http://127.0.0.1:43210/#t=abc', here)).toEqual({ base: 'http://127.0.0.1:43210', token: 'abc' }));
+    expect(parseConn('http://127.0.0.1:43210/#t=abc', here)).toEqual({
+      base: 'http://127.0.0.1:43210',
+      token: 'abc',
+      fromLink: true,
+    }));
   it('reads a hosted link', () =>
     expect(parseConn('https://loa.example.test/#bridge=43211&t=xyz', here)).toEqual({
       base: 'http://127.0.0.1:43211',
       token: 'xyz',
+      fromLink: true,
     }));
   it('rejects links without a token or on other hosts', () => {
     expect(parseConn('http://127.0.0.1:43210/', here)).toBeNull();

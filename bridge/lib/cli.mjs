@@ -12,8 +12,20 @@ import { CHECKS_FILE } from './checks.mjs';
 import { CLAUDE_FIX, claudeProblemNow } from './agents/claude.mjs';
 import { hookFiles, shown, removeHooks } from './hooks-install.mjs';
 
-export const linkOf = b => `http://127.0.0.1:${b.port}${APP_PATH}#t=${b.token}`;
-export const siteLinkOf = b => `${WEB_URL}${APP_PATH}#bridge=${b.port}&t=${b.token}`;
+/** A link to the local app, and one to the hosted app, each with a code good for one use (server.mjs linkCode). */
+export const linkOf = ({ port, code }) => `http://127.0.0.1:${port}${APP_PATH}#t=${code}`;
+export const siteLinkOf = ({ port, code }) => `${WEB_URL}${APP_PATH}#bridge=${port}&t=${code}`;
+/** A link to a running bridge's local app, with a fresh code. */
+export const freshLink = async b => linkOf({ port: b.port, code: await codeFrom(b) });
+/** A fresh code from a running bridge, asked with its own token. */
+async function codeFrom(b) {
+  const r = await fetch(`http://127.0.0.1:${b.port}/api/link`, {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + b.token },
+    signal: AbortSignal.timeout(5000),
+  });
+  return /** @type {{ code: string }} */ (await r.json()).code;
+}
 /**
  * The Mac's default browser, as its bundle identifier in lower case, or null when it can't be told. LOA_BROWSER
  * names one instead (tests use it).
@@ -44,7 +56,7 @@ const CHROMIUM =
  * The link to open: leagueofagents.dev, connected, in a Chrome-family default browser, which asks once to let the
  * site reach this computer; the local app otherwise, which every browser can reach with no prompt.
  */
-const openLinkOf = b => (WEB_URL && CHROMIUM.test(defaultBrowser() ?? '') ? siteLinkOf(b) : linkOf(b));
+const opensSite = () => !!WEB_URL && CHROMIUM.test(defaultBrowser() ?? '');
 /**
  * The bridge this repo's .loa/bridge.json describes, if it answers with that token; `locked` if it is locked.
  * Bridges before 0.1.0 wrote no process id; they still count, though `stop` can't stop them.
@@ -77,12 +89,14 @@ function openInBrowser(url) {
  * started it. .loa/bridge.json holds its port, token and process id.
  */
 export async function startInBackground(hooks) {
-  const open = b => {
+  const open = async b => {
     const problem = claudeProblemNow();
-    const link = openLinkOf(b);
+    // Each link has a code of its own: opening one leaves the other good.
+    const local = linkOf({ port: b.port, code: await codeFrom(b) });
+    const link = opensSite() ? siteLinkOf({ port: b.port, code: await codeFrom(b) }) : local;
     console.log(`\n  League of Agents is running for ${path.basename(ROOT)}.\n  Open    ${link}`);
     // The local app as well: it works in every browser, and when the site can't reach this computer.
-    if (link !== linkOf(b)) console.log(`  or      ${linkOf(b)}   (the local app, any browser)`);
+    if (link !== local) console.log(`  or      ${local}   (the local app, any browser)`);
     console.log('');
     if (problem) console.log(`  ${CLAUDE_FIX[problem]}\n`);
     if (!opt('no-open')) openInBrowser(link);
@@ -92,7 +106,7 @@ export async function startInBackground(hooks) {
   // A locked bridge is replaced by a fresh one, with a new token; so is one that lets a different website in
   // (`--local`, `--web`). Bridges before 0.2.0 don't record theirs: they let the site in.
   if (already?.locked || (already && (already.web ?? SITE) !== WEB_URL)) await stopBridge(false);
-  else if (already) open(already);
+  else if (already) await open(already);
   const log = fs.openSync(path.join(LOA, 'bridge.log'), 'w');
   const pass = argv.filter(a => !['start', '--hooks', '--no-hooks', '--no-open'].includes(a));
   const child = spawn(process.execPath, [ENTRY, 'serve', ...pass, hooks ? '--hooks' : '--no-hooks'], {
@@ -106,7 +120,7 @@ export async function startInBackground(hooks) {
   let told = false;
   for (const t0 = Date.now(); Date.now() - t0 < 600000; await new Promise(r => setTimeout(r, 100))) {
     const b = await running();
-    if (b?.pid === child.pid) open(b);
+    if (b?.pid === child.pid) await open(b);
     if (child.exitCode !== null) break;
     if (!told && Date.now() - t0 > 2000) {
       told = true;
@@ -138,7 +152,7 @@ export async function bridgeStatus() {
     b?.locked
       ? `League of Agents is locked for ${path.basename(ROOT)}: too many wrong tokens. Restart it: npx leagueofagents-cli@latest start`
       : b
-        ? `League of Agents is running for ${path.basename(ROOT)}: ${linkOf(b)}`
+        ? `League of Agents is running for ${path.basename(ROOT)}: ${await freshLink(b)}`
         : 'League of Agents is not running for this repo.',
   );
   process.exit(0);

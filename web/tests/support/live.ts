@@ -183,6 +183,17 @@ export async function startBridge(
   return b;
 }
 
+/**
+ * A link's one-time code, asked of the bridge with its own token, as the command line asks. A published bridge
+ * before 0.2.0 has no codes: its links carry its token.
+ */
+export function codeFor(b: Bridge): string {
+  const ask = `fetch('http://127.0.0.1:${b.port}/api/link',{method:'POST',headers:{authorization:'Bearer ${b.token}'}}).then(r=>r.json()).then(j=>process.stdout.write(j.code??''))`;
+  return execFileSync(process.execPath, ['-e', ask], { encoding: 'utf8' }) || b.token;
+}
+/** A fresh link to the bridge's own app, good for one use. */
+export const linkFor = (b: Bridge, app = '/') => `http://127.0.0.1:${b.port}${app}#t=${codeFor(b)}`;
+
 /** Calls the bridge's API as the app does: GET, or POST with a JSON body. */
 export async function call(b: Bridge, route: string, body?: object) {
   const res = await fetch(`http://127.0.0.1:${b.port}${route}`, {

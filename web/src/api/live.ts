@@ -20,10 +20,10 @@ import { loadDemo, selectRun } from '../state/actions';
 import { refreshEditor } from '../state/editing';
 import { bump, renderAll, renderCrumb, renderInspector, renderScene, renderSide, setConnUI } from '../state/render';
 import { toast } from '../ui/toast';
-import { BridgeError, bridge } from './client';
+import { BridgeError, bridge, sessionFor } from './client';
 import { explain } from './errors';
 import { showConflict } from '../components/ConflictDialog';
-import { clearConn, saveConn } from './conn';
+import { clearConn, loadConn, saveConn } from './conn';
 import type { Conn, RunDTO, StateDelta, StateResponse, StepDTO } from './types';
 
 export const live = { pendingSelect: null as number | null };
@@ -555,10 +555,28 @@ async function poll() {
  * Connects to a bridge and loads its state. Returns null when connected, or what went wrong in plain words;
  * unless quiet, the problem is also shown as a toast.
  */
+/**
+ * A link's connection, its one-time code exchanged for this browser's own session token. A link used before (a
+ * reload of it, a bookmark) falls back to the session this browser already holds for that bridge.
+ */
+async function redeemed(c: Conn): Promise<Conn> {
+  try {
+    const session = { base: c.base, token: (await sessionFor(c.base, c.token)) ?? c.token };
+    // Kept at once: the code is spent, and a reload a moment later has only this to connect with.
+    saveConn(session);
+    return session;
+  } catch (e) {
+    const kept = loadConn();
+    if (e instanceof BridgeError && e.status === 401 && kept?.base === c.base) return kept;
+    throw e;
+  }
+}
+
 export async function connect(c: Conn, quiet = false): Promise<string | null> {
   st.busy = 'connect';
   setConnUI();
   try {
+    if (c.fromLink) c = await redeemed(c);
     const s = await bridge.state(c);
     // Leaving the demo: its sessions stop moving.
     stopDemoTimers();

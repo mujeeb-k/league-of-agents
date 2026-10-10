@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import type { StateResponse } from '../../src/api/types';
-import { git, startBridge } from '../support/live';
+import { git, linkFor, startBridge } from '../support/live';
 import { ZOOMS, checkLevel, zoomTo } from '../support/zoom';
 
 const REPO = process.env.LOA_LARGE_REPO ?? '';
@@ -41,7 +41,7 @@ test('a large public repository: every zoom level, then a real run', async ({ pa
     ).json()) as StateResponse;
     const drawn = state.tree.length;
     expect(drawn).toBeGreaterThan(1000);
-    await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+    await page.goto(linkFor(b));
     await expect(page.locator('#conn')).toHaveText('Live');
     await expect(page.locator('.fr')).toHaveCount(drawn, { timeout: 30_000 });
     await shot('first-view');

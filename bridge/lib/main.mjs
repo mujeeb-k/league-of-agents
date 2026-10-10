@@ -5,7 +5,7 @@ import { ROOT, prev, openRepo } from './repo.mjs';
 import { initChecks } from './checks.mjs';
 import { loadAgents } from './agents/registry.mjs';
 import {
-  linkOf,
+  freshLink,
   running,
   startInBackground,
   stopBridge,
@@ -40,7 +40,7 @@ if (command !== 'serve') await startInBackground(hooks);
 {
   const other = await running();
   if (other) {
-    console.log(`League of Agents is already running for ${path.basename(ROOT)}: ${linkOf(other)}`);
+    console.log(`League of Agents is already running for ${path.basename(ROOT)}: ${await freshLink(other)}`);
     process.exit(0);
   }
 }

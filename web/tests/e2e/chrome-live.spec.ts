@@ -5,7 +5,7 @@ import { chromium, expect, test, type BrowserContext } from '@playwright/test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { makeRepo, startBridge, type Bridge } from '../support/live';
+import { codeFor, makeRepo, startBridge, type Bridge } from '../support/live';
 
 const SITE = 'https://leagueofagents.dev';
 const DIST = path.resolve('dist');
@@ -68,11 +68,12 @@ test('before Chrome asks, the site explains, and reaches for nothing until Conti
       page.on('request', r => {
         if (r.url().startsWith('http://127.0.0.1')) reached.push(r.url());
       });
-      await page.goto(`${SITE}/#bridge=${b.port}&t=${b.token}`);
+      const code = codeFor(b);
+      await page.goto(`${SITE}/#bridge=${b.port}&t=${code}`);
       await expect(page.locator('#stageState')).toContainText('Your browser will ask to connect');
       await expect(page.locator('#stageState')).toContainText('Choose Allow.');
       await expect(page.locator('#conn')).toHaveText('Not connected');
-      await expect(page.locator('#askLocal')).toHaveAttribute('href', `http://127.0.0.1:${b.port}/#t=${b.token}`);
+      await expect(page.locator('#askLocal')).toHaveAttribute('href', `http://127.0.0.1:${b.port}/#t=${code}`);
       await page.screenshot({ path: test.info().outputPath('ask.png') });
       expect(reached).toEqual([]);
       // Continue asks the browser; a headless one can't show the question, so the request goes and is refused.
@@ -88,7 +89,7 @@ test('allowed: the site connects straight away, with no explanation', () =>
     const ctx = await chrome('granted');
     try {
       const page = ctx.pages()[0]!;
-      await page.goto(`${SITE}/#bridge=${b.port}&t=${b.token}`);
+      await page.goto(`${SITE}/#bridge=${b.port}&t=${codeFor(b)}`);
       await expect(page.locator('#conn')).toHaveText('Live');
       await expect(page.locator('#repoName')).toHaveText('sample-repo');
       await page.screenshot({ path: test.info().outputPath('allowed.png') });
@@ -102,7 +103,7 @@ test('blocked: "Can\'t reach your bridge" says why, and "Open the local app" con
     const ctx = await chrome('denied');
     try {
       const page = ctx.pages()[0]!;
-      await page.goto(`${SITE}/#bridge=${b.port}&t=${b.token}`);
+      await page.goto(`${SITE}/#bridge=${b.port}&t=${codeFor(b)}`);
       await expect(page.locator('#stageState')).toContainText("Can't reach your bridge");
       await expect(page.locator('#blocked')).toContainText('keep leagueofagents.dev from reaching apps');
       await page.screenshot({ path: test.info().outputPath('blocked.png') });

@@ -30,6 +30,12 @@ function Card({ icon, title, children }: { icon: React.ReactNode; title: string;
   );
 }
 
+/**
+ * The bridge's own app, for when this page can't reach the bridge: with the link's code while it is unused, and
+ * without a token otherwise (this browser's session token never goes in an address).
+ */
+const localLink = (conn: Conn) => (conn.fromLink ? `${conn.base}/#t=${conn.token}` : `${conn.base}/`);
+
 function showDemo() {
   loadDemo();
   setConnUI();
@@ -90,7 +96,7 @@ function Unreachable({ conn, why }: { conn: Conn; why: string }) {
       )}
       {actions(
         <Button asChild size="sm" id="localLink">
-          <a href={`${conn.base}/#t=${conn.token}`} className="no-underline">
+          <a href={localLink(conn)} className="no-underline">
             {t('Open the local app')}
           </a>
         </Button>,
@@ -121,7 +127,7 @@ function AskAccess({ conn }: { conn: Conn }) {
           {t('Continue')}
         </Button>
         <Button asChild variant="ghost" size="sm" id="askLocal" className="text-ink2">
-          <a href={`${conn.base}/#t=${conn.token}`} className="no-underline">
+          <a href={localLink(conn)} className="no-underline">
             {t('Open the local app instead')}
           </a>
         </Button>

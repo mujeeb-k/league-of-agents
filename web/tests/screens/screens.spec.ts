@@ -11,6 +11,7 @@ import {
   SLOW_AGENT,
   approveChecks,
   git,
+  linkFor,
   makeRepo,
   startBridge,
   type Bridge,
@@ -96,7 +97,7 @@ test('live screens', async ({ page }) => {
   const open = async (repo: string, agent?: string, env: Record<string, string> = {}) => {
     const b = await startBridge(repo, agent, env, ['--no-hooks']);
     stop.push(b);
-    await page.goto(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+    await page.goto(linkFor(b));
     await expect(page.locator('#conn')).toHaveText('Live');
     return b;
   };

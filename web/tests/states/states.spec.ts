@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { makeRepo, startBridge } from '../support/live';
+import { linkFor, makeRepo, startBridge } from '../support/live';
 import { APP } from '../support/targets';
 
 const OUT = path.resolve('test-results/states');
@@ -303,7 +303,7 @@ for (const theme of ['light', 'dark'] as const)
       await page.locator('#insp section').first().waitFor();
       let release = hold('**/api/state?*', 'GET');
       await page.locator('#connectBtn').click();
-      await page.locator('#connectInput').fill(`http://127.0.0.1:${b.port}/#t=${b.token}`);
+      await page.locator('#connectInput').fill(linkFor(b));
       await page.locator('#connectInput').press('Enter');
       await expect(page.locator('#conn')).toHaveText('Connecting');
       rows.get('Connect')!.loading = await shot(page, page.locator('#conn'));
