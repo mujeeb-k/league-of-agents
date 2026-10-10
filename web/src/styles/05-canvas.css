@@ -218,12 +218,15 @@
   text-decoration: line-through;
   text-decoration-thickness: 1px;
 }
-#world[data-run] .fr:not(.k-add):not(.k-mod) {
+/* With a run open, files it didn't change recede: their tile and its texture dim; their names keep full contrast. */
+#world[data-run] .fr:not(.k-add):not(.k-mod):not(.read) {
+  background: color-mix(in srgb, var(--surface) 70%, var(--canvas));
+}
+#world[data-run] .fr:not(.k-add):not(.k-mod):not(.read) .tk {
   opacity: 0.7;
 }
 /* With a run open, a file it read and didn't change: not dimmed, and outlined, so where it looked shows at a glance. */
 #world[data-run] .fr.read {
-  opacity: 1;
   outline: calc(1.5px / var(--s)) dashed var(--ink3);
   outline-offset: calc(-1.5px / var(--s));
 }

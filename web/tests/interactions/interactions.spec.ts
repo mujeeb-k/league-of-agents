@@ -90,6 +90,23 @@ test('the first view: the latest run and the three sessions at work around it, e
   }
 });
 
+test("with a run open, files it didn't change recede, but their names keep full contrast", async ({ page }) => {
+  await page.keyboard.press('0');
+  const names = await page.$$eval('#nodes .fr:not(.k-add):not(.k-mod) .n', els =>
+    els.map(el => {
+      let o = 1;
+      for (let n: Element | null = el; n; n = n.parentElement) o *= Number(getComputedStyle(n).opacity);
+      return o;
+    }),
+  );
+  expect(names.length).toBeGreaterThan(5);
+  expect(Math.min(...names)).toBe(1);
+  const untouched = page.locator('#nodes .fr:not(.k-add):not(.k-mod):not(.read)').first();
+  const bg = await untouched.evaluate(el => getComputedStyle(el).backgroundColor);
+  const surface = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--surface'));
+  expect(bg).not.toBe(surface);
+});
+
 test('demo boots with the latest run open', async ({ page }) => {
   await expect(page.locator('#repoName')).toHaveText('relay');
   await expect(page.locator('#runbar b')).toHaveText('Run 14');
