@@ -21,10 +21,10 @@ League of Agents 是你的代码库的地图，你在上面指挥编码代理并
 
 - **一眼看到整个项目。** 它的文件夹和代码文件都在一张地图上。缩小看整体结构，放大阅读代码。
 - **让代理精确到行。** 选择一个文件、一个文件夹或几行代码，然后描述改动。在代理名称旁边，你会看到以下两种提示之一：
-  - **“Stays inside your selection”（不会越出你所选范围）。** 在 macOS 上，Claude Code、Hermes 和 DeepSeek Harness 在系统自带的沙箱中运行：它们以及它们启动的每个程序，只能写入你所选范围之内的内容和仓库忽略的文件（构建产物、已安装的软件包）。沙箱在仓库之外允许什么，[见下方列表](#macos-上的沙箱)。
-  - **“Can change files outside your selection. You'll see each one flagged.”（可以改动你所选范围之外的文件，每一个都会标出给你看）。** Codex 和 Cursor，以及没有沙箱的地方（Linux、Windows）的所有代理。开启 hooks 后，Claude Code 的编辑工具在你所选范围之外仍会被阻止，它的 shell 命令在范围之外改动的内容会被恢复原样。
+  - **“不会越出你所选范围”。** 在 macOS 上，Claude Code、Hermes 和 DeepSeek Harness 在系统自带的沙箱中运行：它们以及它们启动的每个程序，只能写入你所选范围之内的内容和仓库忽略的文件（构建产物、已安装的软件包）。沙箱在仓库之外允许什么，[见下方列表](#macos-上的沙箱)。
+  - **“可以改动你所选范围之外的文件，每一个都会标出给你看。”** Codex 和 Cursor，以及没有沙箱的地方（Linux、Windows）的所有代理。开启 hooks 后，Claude Code 的编辑工具在你所选范围之外仍会被阻止，它的 shell 命令在范围之外改动的内容会被恢复原样。
 
-  当某个会话试图改动你所选范围之外的文件时，这次写入会被阻止，它的卡片会询问：“Wants to change <file>”（想要改动 <file>）。**Allow**（允许）会把这个文件加入它的所选范围，会话从停下的地方继续；**Refuse**（拒绝）则不让它改动这个文件。如果另一个会话正在处理这个文件，卡片会指出是哪一个，Allow 会等到那个会话结束。在你同意之前，hooks 都是关闭的：在终端中第一次运行 `npx leagueofagents-cli@latest` 时会询问一次并记住你的选择；没有终端时，除非你传入 `--hooks`，否则 hooks 保持关闭。要确认，请在 `.loa/bridge.json` 中查找 `"hooks": true`。
+  当某个会话试图改动你所选范围之外的文件时，这次写入会被阻止，它的卡片会询问：“想要改动 <file>”。**允许**会把这个文件加入它的所选范围，会话从停下的地方继续；**拒绝**则不让它改动这个文件。如果另一个会话正在处理这个文件，卡片会指出是哪一个，“允许”会等到那个会话结束。在你同意之前，hooks 都是关闭的：在终端中第一次运行 `npx leagueofagents-cli@latest` 时会询问一次并记住你的选择；没有终端时，除非你传入 `--hooks`，否则 hooks 保持关闭。要确认，请在 `.loa/bridge.json` 中查找 `"hooks": true`。
 - **观看工作过程。** 每个正在工作的会话，都会在它正在读取或编辑的文件上有一个标记，地图和小地图上都有，它的编辑会在发生时画出来。跟随一个会话，地图就会随它移动。一次运行的步骤按顺序列出；点击其中一步，可以看到该步骤完成时文件的样子。
 - **自己编辑文件。** 双击文件的代码即可在编辑器中打开。保存的编辑会被记录下来，并且可以像任何代理运行一样撤销。
 - **更新依赖某个改动的内容。** 重命名一个函数，然后让代理更新所有使用它的文件。你的改动的差异会放进代理的提示词中。地图会显示它改动过的每个文件。
@@ -113,7 +113,7 @@ Claude Code，可以从地图或终端使用。Hermes Agent 和 DeepSeek Harness
 已纳入 git 的 hook 文件永远不会被编辑：hooks 中保存的是这台电脑上的路径。League of Agents 会在启动时提示这一点，并且该代理的终端会话不会被记录。
 - Cursor：主目录中的 `~/.cursor/hooks.json`。Cursor 只从它打开的文件夹读取项目 hooks，而那个文件夹往往在仓库的上层。
 
-这些文件中你自己的 hooks 永远不会被改动。你的浏览器也会在它自己的存储中保存桥接程序的端口和令牌，以及你对面板、主题和语言的选择。
+这些文件中你自己的 hooks 永远不会被改动。你的浏览器也会在它自己的存储中保存桥接程序的端口和它自己的会话令牌（每个链接只能使用一次：页面用链接中的代码换取这个令牌），以及你对面板、主题和语言的选择。
 
 要移除它：
 
@@ -148,24 +148,24 @@ League of Agents 从不把你的代码上传到任何地方。你的代码只会
 
 后续运行会为 Claude Code 和 Cursor 加上 `--resume <session>`，为 Codex 加上 `resume <session>`。各个权限参数允许的操作：
 
-- **Claude Code，`--permission-mode acceptEdits`：** 它会在仓库中创建和编辑文件而不询问，并且**会在仓库中运行 `mkdir`、`touch`、`rm`、`rmdir`、`mv`、`cp` 和 `sed` 而不询问。** 其他 shell 命令和网络请求需要你在 Claude Code 中设置规则；使用 `-p` 时没有人可以询问，所以它们会被拒绝。（[权限模式](https://code.claude.com/docs/en/permission-modes#auto-approve-file-edits-with-acceptedits-mode)，[非交互式运行](https://code.claude.com/docs/en/headless#auto-approve-tools)）在整个仓库上的运行就是这样启动的，没有沙箱的地方的每次运行也是如此。**在 macOS 的沙箱中，在所选范围上的会话改用 `--permission-mode bypassPermissions` 启动：** Claude Code 运行任何命令都不询问，限制由沙箱来施加。它自己的检查曾拒绝无害的命令（管道、循环、它自己的验证），而在沙箱中，对于文件，它不会增加任何沙箱没有强制执行的限制。
+- **Claude Code，`--permission-mode acceptEdits`：** 它会在仓库中创建和编辑文件而不询问，并且**会在仓库中运行 `mkdir`、`touch`、`rm`、`rmdir`、`mv`、`cp` 和 `sed` 而不询问。** 其他 shell 命令和网络请求需要你在 Claude Code 中设置规则；使用 `-p` 时没有人可以询问，所以它们会被拒绝。（[权限模式](https://code.claude.com/docs/en/permission-modes#auto-approve-file-edits-with-acceptedits-mode)，[非交互式运行](https://code.claude.com/docs/en/headless#auto-approve-tools)）没有沙箱的地方，每次运行都是这样启动的。**在 macOS 的沙箱中，会话改用 `--permission-mode bypassPermissions` 启动：** Claude Code 运行任何命令都不询问，限制由沙箱来施加。它自己的检查曾拒绝无害的命令（管道、循环、它自己的验证），而在沙箱中，对于文件，它不会增加任何沙箱没有强制执行的限制。
 - **Cursor，`-p --force`：** **它会运行 shell 命令而不询问。** `-p` 给它所有工具，包括写入和 shell，`--force` 允许运行命令，除非你明确拒绝了它们。（[CLI 参数](https://cursor.com/docs/cli/reference/parameters)）
 - **Codex，`exec --sandbox workspace-write`：** **它会在仓库中运行命令而不询问。** 它在仓库内读取和编辑文件并运行命令。网络访问是关闭的，它也无法越出仓库。（[非交互模式](https://learn.chatgpt.com/docs/non-interactive-mode)，[审批与安全](https://learn.chatgpt.com/docs/agent-approvals-security)）
 
 ### macOS 上的沙箱
 
-由 Claude Code、Hermes 或 DeepSeek Harness 在所选范围上进行的会话，在 macOS 的沙箱（`sandbox-exec`）中运行。沙箱约束代理以及代理启动的每个程序。
+由 Claude Code、Hermes 或 DeepSeek Harness 进行的每个会话都在 macOS 的沙箱（`sandbox-exec`）中运行，无论是在所选范围上还是在整个仓库上。沙箱约束代理以及代理启动的每个程序。
 
-- **仓库内的写入：** 只限你所选范围和仓库忽略的文件。所选范围之外、`npm install` 会改动的 lockfile 同样会被拒绝，所以请选择包含该软件包的文件夹。
-- **仓库外的写入：** 只限临时文件夹、代理自己的文件夹（`~/.claude` 和钥匙串中 Claude Code 的登录信息、`~/.hermes`、`~/.dsh`）和缓存（`~/.cache`、`~/Library/Caches`、`~/.npm`）。
-- **读取：** 你的主目录中，除了仓库、代理自己的文件夹、上述缓存、git 的设置（`~/.gitconfig`、`~/.config/git`）以及它运行的程序（Node、代理自己的安装目录和你的 `PATH` 上的文件夹）之外，什么都读不到。你的 SSH 密钥、浏览器配置文件和主目录中的其他仓库都无法读取。当某个命令被拒绝访问某个路径时，会话的卡片会指出这个路径。对 Claude Code 来说，代理自己的文件夹包括 `~/Library/Keychains`，它把登录信息保存在那里；macOS 对钥匙串中的每一项分别加以保护。
+- **仓库内的写入，在所选范围上：** 只限你所选范围和仓库忽略的文件。所选范围之外、`npm install` 会改动的 lockfile 同样会被拒绝，所以请选择包含该软件包的文件夹。
+- **仓库内的写入，在整个仓库上：** 任何文件，包括 git 自己的文件，这样代理才能提交。但永远不包括 git 的设置（`.git/config`）和 hooks。会话的卡片会显示“可以改动这个仓库中的任何文件。无法触碰你电脑上的其他内容。”
+- **仓库外的写入：** 只限临时文件夹、代理自己的文件夹（`~/.claude`、`~/.hermes`、`~/.dsh`）和缓存（`~/.cache`、`~/Library/Caches`、`~/.npm`）。Claude Code 的会话还可以写入你的登录钥匙串文件（`~/Library/Keychains/login.keychain-db`，连同它的临时文件和锁文件）：Claude Code 把登录信息保存在那里，登录信息更新时必须保存它，而 macOS 没有更窄的方式来保存钥匙串中的某一项。
+- **读取：** 你的主目录中，除了仓库、代理自己的文件夹、上述缓存、git 的设置（`~/.gitconfig`、`~/.config/git`）以及它运行的程序（Node、代理自己的安装目录和你的 `PATH` 上的文件夹）之外，什么都读不到。你的 SSH 密钥、浏览器配置文件和主目录中的其他仓库都无法读取。当某个命令被拒绝访问某个路径时，会话的卡片会指出这个路径。Claude Code 的会话还可以读取 `~/Library/Keychains`，它的登录信息就在那里；macOS 对钥匙串中的每一项分别加以保护。
 - **即使在上述位置之内也永远不会被写入：** 桥接程序的令牌（`.loa/bridge.json` 及其日志，它们也无法读取）、桥接程序自己的代码、你的 git 设置和你仓库的 git hooks、桥接程序已批准的检查（`~/.config/league-of-agents`），以及各代理的设置文件和 hook 文件（Claude Code 的 `settings.json` 和 `settings.local.json`、Codex 的 `config.toml` 和 `hooks.json`、Cursor 的 `hooks.json`、Hermes 的 `config.yaml` 和 `hooks/`）。存放它们的文件夹，以及你仓库的文件夹，都无法被移动或替换。
 - **命令运行时不询问，包括网络访问。** 沙箱限制的是文件，而不是网络：会话可以把它能读到的内容（包括你的仓库）发送到任何地方。请使用你信任的代理和提示词。
 - **仓库忽略的文件仍可写入，** 比如 `node_modules` 中已安装的软件包。之后运行它们的东西，比如你的检查、git hook 或开发服务器，会在沙箱之外运行会话写入的内容。
 - **主目录之外的文件夹**（其他磁盘、`/opt`、`/usr/local`）可以被读取，和你的任何程序一样。
 - **会话启动的程序受约束；已经在运行的则不受约束。** tmux 服务器、Docker，或者按请求写入文件的开发服务器，仍然可以替它写入。
-- **如果沙箱无法启动**（桥接程序自己就运行在一个沙箱中），在所选范围上的会话会被拒绝，而不是在没有沙箱的情况下运行。
-- **在整个仓库上的运行不在沙箱中。** 它拥有你的账户的全部权限，Claude Code 在那里保留它自己的权限检查。
+- **如果沙箱无法启动**（桥接程序自己就运行在一个沙箱中），在所选范围上的会话会被拒绝，而不是在没有沙箱的情况下运行。这时在整个仓库上的运行会在没有沙箱的情况下运行，拥有你的账户的全部权限，Claude Code 保留它自己的权限检查。
 
 ### 没有沙箱的地方
 
@@ -192,7 +192,7 @@ League of Agents 从不把你的代码上传到任何地方。你的代码只会
 - 一张地图最多显示 5,000 个代码文件，每个文件的卡片上显示前 400 行；文件打开后可以完整查看，包括之前、之后和差异。在更大的仓库中，你选择一个文件夹来绘制地图，并且可以随时更改。超过 16 MB 的文件不会出现在地图上。
 - 非代码文件（比如图片）包含在快照和撤销中，但不会出现在地图上。
 - git 忽略的文件，以及通常存放密钥的新文件，永远不会进入快照，也永远不会单独产生运行。代理自身的活动则不同：它读取、输出或编辑的内容会保存在你电脑上的 `.loa/runs/` 中，所以如果代理打开了一个密钥文件，文件的内容可能会在那里。`uninstall` 会移除它。
-- 在会话中，代理运行命令时不询问，包括网络访问，会话可以通过网络把仓库的内容发送出去。在 macOS 上，沙箱限制在所选范围上的会话能读取和写入哪些文件（[列表](#macos-上的沙箱)）；它不限制网络。在整个仓库上的运行，以及 Linux 和 Windows 上的每次运行，都不在沙箱中。
+- 在会话中，代理运行命令时不询问，包括网络访问，会话可以通过网络把仓库的内容发送出去。在 macOS 上，沙箱限制会话能读取和写入哪些文件（[列表](#macos-上的沙箱)）；它不限制网络。Linux 和 Windows 上的运行，以及在任何地方使用 Codex 和 Cursor 的运行，都不在沙箱中。
 - 在所选范围上的会话可以写入仓库忽略的文件，比如 `node_modules` 和构建产物。你的检查、git hooks 和开发服务器之后可能会在沙箱之外运行这些文件。
 - 在互不重叠的分区上的运行会同时工作；在整个仓库上的运行则单独工作。
 - Shell 命令。Hermes 运行命令时不会询问，只有它认为危险的命令会询问，而 League of Agents 会拒绝这些命令。在 macOS 上，在某个分区上运行时，Hermes 和 DeepSeek Harness 都在该分区的沙箱中运行，所以任何命令都无法写入分区之外；这时 DeepSeek Harness 以它的完全访问模式运行，因为它自己的沙箱无法在另一个沙箱中启动。在其他地方，DeepSeek Harness 以只读方式运行命令，所以会写入的命令会被拒绝。在有其他会话工作时，命令在分区内改动的内容会被标出为不是由代理的编辑工具做出的，因为只有编辑工具会指明它们改动的文件。可以用“撤销”撤回。
