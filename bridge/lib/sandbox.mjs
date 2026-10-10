@@ -10,6 +10,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { ROOT, git, gitAsync } from './repo.mjs';
 import { scopeEntry } from './scope.mjs';
+import { BRIDGE_DIR } from './paths.mjs';
 import { realish, refused } from './util.mjs';
 
 const SANDBOX_EXEC = process.env.LOA_SANDBOX_EXEC || '/usr/bin/sandbox-exec';
@@ -65,8 +66,9 @@ const escape = s => s.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&');
  * Regexes for the paths the repo's ignore files ignore, from the patterns simple enough to be sure of: a name or
  * `*.ext`, anchored or not, for a folder or not. A `!` rule in any of them can re-include a path another file's rule
  * covers, so then none is converted; what isn't converted stays unwritable (closed, never open), apart from ignored
- * paths that already exist (sandboxArgs). Exported for its test.
- * @returns {string[]}
+ * paths that already exist (sandboxArgs). A rule for folders only (`out/`) gives what is inside them in `paths`, and
+ * the folders themselves in `folders`, written only as folders. Exported for its test.
+ * @returns {{ paths: string[], folders: string[] }}
  */
 export function ignoredPatterns(root = ROOT) {
   const files = String(
@@ -75,7 +77,11 @@ export function ignoredPatterns(root = ROOT) {
     .split('\0')
     .filter(Boolean);
   const sources = files.map(f => [path.posix.dirname(f), path.join(root, f)]);
-  sources.push(['.', path.join(root, '.git/info/exclude')]);
+  // Git's own path for it: in a linked worktree, .git is a file, and the exclude file is the main repo's.
+  sources.push([
+    '.',
+    path.resolve(root, String(git(['rev-parse', '--git-path', 'info/exclude'], { cwd: root })).trim()),
+  ]);
   /** @type {[string, string[]][]} */
   const read = sources.map(([dir, file]) => {
     try {
@@ -84,19 +90,24 @@ export function ignoredPatterns(root = ROOT) {
       return [dir, []];
     }
   });
-  if (read.some(([, lines]) => lines.some(l => l.trim().startsWith('!')))) return [];
-  const out = [];
+  const out = { paths: [], folders: [] };
+  if (read.some(([, lines]) => lines.some(l => l.trim().startsWith('!')))) return out;
   for (const [dir, lines] of read) {
     for (let l of lines) {
       l = l.trim();
       if (!l || l.startsWith('#')) continue;
-      if (l.endsWith('/')) l = l.slice(0, -1);
+      const folderOnly = l.endsWith('/');
+      if (folderOnly) l = l.slice(0, -1);
       const anchored = l.includes('/');
       l = l.replace(/^\//, '');
       if (!/^[A-Za-z0-9._-]*(\*[A-Za-z0-9._-]*)?$/.test(l) || !l || l === '*' || l.includes('/')) continue;
       const base = escape(dir === '.' ? root : path.join(root, dir));
       const name = l.split('*').map(escape).join('[^/]*');
-      out.push(anchored ? `^${base}/${name}(/|$)` : `^${base}/(.*/)?${name}(/|$)`);
+      const at = anchored ? `^${base}/${name}` : `^${base}/(.*/)?${name}`;
+      if (folderOnly) {
+        out.paths.push(`${at}/`);
+        out.folders.push(`${at}$`);
+      } else out.paths.push(`${at}(/|$)`);
     }
   }
   return out;
@@ -115,18 +126,23 @@ export function sandboxArgs(run) {
 
 /**
  * Outside the repo, files something runs later without the sandbox, so a session must not write them: git's settings
- * (a filter or fsmonitor set there runs at the bridge's next snapshot) and a worktree's git folder, the bridge's own
- * settings (approved checks), and the agents' settings and hooks, which later sessions run.
+ * (a filter or fsmonitor set there runs at the bridge's next snapshot), a worktree's git folder and the repo's hooks
+ * (git runs them at Commit), the bridge's own code and settings (approved checks), and the agents' settings and hooks,
+ * which later sessions run.
  * @returns {[string, string][]} [kind, path]
  */
-function runLater(gitDir, commonDir) {
+function runLater(gitDir, commonDir, hooksDir) {
   const home = os.homedir();
   const hermes = process.env.HERMES_HOME || path.join(home, '.hermes');
-  return [
+  const config = process.env.XDG_CONFIG_HOME || path.join(home, '.config');
+  const pkg = path.dirname(BRIDGE_DIR);
+  /** @type {[string, string][]} */
+  const out = [
     ['subpath', gitDir],
     ['subpath', commonDir],
+    ['subpath', hooksDir],
     ['literal', path.join(home, '.gitconfig')],
-    ['subpath', path.join(home, '.config/git')],
+    ['subpath', path.join(config, 'git')],
     ['subpath', path.join(home, '.config/league-of-agents')],
     ['literal', path.join(home, '.claude/settings.json')],
     ['literal', path.join(home, '.claude/settings.local.json')],
@@ -136,12 +152,29 @@ function runLater(gitDir, commonDir) {
     ['literal', path.join(hermes, 'config.yaml')],
     ['subpath', path.join(hermes, 'hooks')],
   ];
+  if (process.env.GIT_CONFIG_GLOBAL) out.push(['literal', process.env.GIT_CONFIG_GLOBAL]);
+  // The package the bridge runs from, unless it is this repo's own code (working on League of Agents itself).
+  if (pkg !== ROOT && !pkg.startsWith(ROOT + path.sep)) out.push(['subpath', pkg]);
+  return out;
 }
 
 /** What the repo ignored as each run at work started, by run (prepareSandbox). */
 const ignoredAtStart = new Map();
-/** A run ended: what it was held by goes. */
-export const forgetSandbox = run => ignoredAtStart.delete(run.id);
+/** A run ended: what it was held by goes, and a sandbox prepared for a turn it never started. */
+export function forgetSandbox(run) {
+  ignoredAtStart.delete(run.id);
+  prepared.delete(run.id);
+}
+
+/**
+ * Every folder above a path, to the root: denied as folders only (writing inside them stays allowed), so none can be
+ * moved away and replaced by one holding other files.
+ */
+const above = p => {
+  const out = [];
+  for (let d = path.dirname(p); d !== path.dirname(d); d = path.dirname(d)) out.push(d);
+  return [...out, '/'];
+};
 
 /** The agents' settings and hook files a repo may hold. */
 const REPO_SETTINGS = [
@@ -194,28 +227,37 @@ export async function prepareSandbox(run) {
       ignored: gitAsync(['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory'], opts),
     });
   const { patterns, ignored: listed } = ignoredAtStart.get(run.id);
-  for (const rx of patterns) allow.push(add('regex', rx));
-  const [ignored, tracked, gitDir, commonDir] = await Promise.all([
+  for (const rx of patterns.paths) allow.push(add('regex', rx));
+  for (const rx of patterns.folders) allow.push(`(require-all ${add('regex', rx)} (vnode-type DIRECTORY))`);
+  const [ignored, tracked, gitDir, commonDir, hooksDir] = await Promise.all([
     listed,
     gitAsync(['ls-files', '-z'], opts),
     gitAsync(['rev-parse', '--absolute-git-dir'], opts),
     gitAsync(['rev-parse', '--git-common-dir'], opts),
+    gitAsync(['rev-parse', '--git-path', 'hooks'], opts),
   ]);
   for (const p of ignored.split('\0').filter(Boolean))
     allow.push(add(p.endsWith('/') ? 'subpath' : 'literal', path.join(real, p).replace(/\/$/, '')));
   // Tracked files an ignore pattern matches though they are committed. Matched here in one pass; git's own matching
   // takes seconds in llvm.
-  const ignoredRx = patterns.length ? new RegExp(patterns.join('|')) : null;
+  const ignoredRx = patterns.paths.length ? new RegExp(patterns.paths.join('|')) : null;
   for (const p of tracked.split('\0'))
     if (p && !inSection.some(f => f(p)) && ignoredRx?.test(path.join(real, p)))
       deny.push(add('literal', path.join(real, p)));
-  for (const [kind, p] of runLater(gitDir.trim(), path.resolve(real, commonDir.trim())))
-    deny.push(add(kind, realish(p)));
+  const later = runLater(gitDir.trim(), path.resolve(real, commonDir.trim()), path.resolve(real, hooksDir.trim()));
   // In the repo, though git ignores them: the bridge's own folder, and the agents' settings and hooks for this repo,
   // which later sessions run outside the sandbox. Writable only when the section holds them.
-  deny.push(add('subpath', path.join(real, '.loa')));
-  for (const p of REPO_SETTINGS) if (!inSection.some(f => f(p))) deny.push(add('literal', path.join(real, p)));
-  const token = add('literal', path.join(real, '.loa/bridge.json'));
+  later.push(['subpath', path.join(real, '.loa')]);
+  for (const p of REPO_SETTINGS) if (!inSection.some(f => f(p))) later.push(['literal', path.join(real, p)]);
+  const parents = new Set(above(real));
+  for (const [kind, p] of later) {
+    const at = realish(p);
+    deny.push(add(kind, at));
+    for (const d of above(at)) parents.add(d);
+  }
+  for (const d of parents) deny.push(add('literal', d));
+  // The bridge's token, in its settings and in the link its log prints.
+  const token = ['bridge.json', 'bridge.log'].map(f => add('literal', path.join(real, '.loa', f))).join(' ');
   const profile = [
     '(version 1)',
     '(allow default)',

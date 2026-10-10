@@ -24,7 +24,17 @@ const ignored = (dir: string, p: string) =>
 describe('ignored paths the sandbox allows', () => {
   it('none from patterns when any ignore file re-includes a path with !', () => {
     const neg = repo({ '.gitignore': '*.log\n', 'keep/.gitignore': '!keep.log\n' });
-    expect(ignoredPatterns(neg)).toEqual([]);
+    expect(ignoredPatterns(neg)).toEqual({ paths: [], folders: [] });
+  });
+
+  it("reads a linked worktree's exclude file, which lives in the main repo's git folder", () => {
+    const main = repo({ 'a.txt': 'a\n' });
+    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'a'], { cwd: main });
+    fs.writeFileSync(path.join(main, '.git/info/exclude'), 'scratch/\n');
+    const tree = path.join(path.dirname(main), path.basename(main) + '-tree');
+    execFileSync('git', ['worktree', 'add', '-q', tree], { cwd: main });
+    const { paths } = ignoredPatterns(fs.realpathSync(tree)) as { paths: string[] };
+    expect(paths.some(r => new RegExp(r).test(path.join(fs.realpathSync(tree), 'scratch/x')))).toBe(true);
   });
 
   const dir = repo({
@@ -33,7 +43,8 @@ describe('ignored paths the sandbox allows', () => {
     ),
     'pkg/.gitignore': 'out/\n*.tmp\n',
   });
-  const rxs = (ignoredPatterns(dir) as string[]).map(r => new RegExp(r));
+  const { paths: pathRxs, folders: folderRxs } = ignoredPatterns(dir) as { paths: string[]; folders: string[] };
+  const rxs = pathRxs.map(r => new RegExp(r));
   const allowed = (p: string) => rxs.some(r => r.test(path.join(dir, p)));
   const paths = [
     'node_modules/x/index.js',
@@ -50,6 +61,7 @@ describe('ignored paths the sandbox allows', () => {
     'docs/readme.md',
     'a.txt',
     'pkg/out/x',
+    'pkg/out',
     'out/x',
     'pkg/x.tmp',
     'x.tmp',
@@ -57,6 +69,12 @@ describe('ignored paths the sandbox allows', () => {
     'distx/a',
     'node_modules_old/a',
   ];
+
+  it("allows a folder-only rule's folders, as folders, and what is inside them", () => {
+    expect(folderRxs.map(r => new RegExp(r).test(path.join(dir, 'pkg/out')))).toContain(true);
+    expect(allowed('pkg/out')).toBe(false);
+    expect(allowed('pkg/out/x')).toBe(true);
+  });
 
   it('allows only paths git ignores', () => {
     for (const p of paths) if (allowed(p)) expect(ignored(dir, p), p).toBe(true);
