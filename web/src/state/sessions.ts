@@ -69,6 +69,11 @@ export function endedAs(r: Pick<Run, 'status' | 'limited'>): string | null {
 export const ended = new Set<number>();
 /** Every session noted as ended: once its mark is gone, a later state event never brings it back. */
 const noted = new Set<number>();
+/** Another repository, or the demo again: its runs of the same numbers are other runs. */
+export function forgetSessions() {
+  ended.clear();
+  noted.clear();
+}
 /** Marks a session as ended, once. */
 export function markEnded(id: number) {
   if (noted.has(id)) return;

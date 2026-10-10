@@ -337,7 +337,7 @@ function RunView({ run }: { run: Run }) {
           ) : null}
         </Section>
       )}
-      <Timeline run={run} />
+      <Timeline key={run.id} run={run} />
       {run.checks?.length || run.checksRunning ? (
         <Section>
           <Label>{t('Checks')}</Label>
@@ -717,6 +717,7 @@ const keys = (): [string, string][] => [
   [t('Shift drag'), t('Select an area')],
   ['F', t('Zoom to selection')],
   ['0', t('Fit everything')],
+  ['C', t('Color by author')],
   ['/', t('Write a prompt')],
 ];
 

@@ -1,16 +1,16 @@
 // User actions.
-import { BridgeError, bridge } from '../api/client';
+import { bridge } from '../api/client';
 import type { Conn, StartRunBody } from '../api/types';
 import { BY_CODE, explain } from '../api/errors';
 import { showConflict } from '../components/ConflictDialog';
-import { live, liveAction, saveLayoutSoon, stopAll } from '../api/live';
+import { forgetRepo, live, liveAction, saveLayoutSoon, stopAll } from '../api/live';
 import { applyView, flyAll, flyFile, flyRun, openingView } from '../lib/camera';
 import { agentOf } from '../lib/constants';
 import { buildModel, diffRows, existsNow, filesUnder, layout, linesAt, parseSample } from '../lib/model';
 import { area, clashOf, type Clash } from '../lib/sections';
 import type { FileNode, Mode, Run } from '../lib/types';
 import { clamp } from '../lib/util';
-import { forgetAll, setMoment } from '../lib/live';
+import { setMoment } from '../lib/live';
 import { ensureDetails, needsDetails } from '../api/live';
 import { DEMO_AGENTS, DEMO_STAYS, SAMPLE_BRANCH, SAMPLE_REPO, SAMPLE_RUNS, SAMPLE_TREE } from '../demo/sample';
 import { SAMPLE_TEXT } from '../demo/sampleText';
@@ -31,10 +31,15 @@ import {
 } from './render';
 import { locale, t, tn } from '../i18n';
 
+/** The latest run asked for: one whose details arrive after another was picked, or the run closed, doesn't open. */
+let asked = 0;
 export function selectRun(run: Run | null, fly = true) {
+  const mine = ++asked;
   // A run opens once it has its details: each file as it found it, which its diff is drawn from.
   if (run && needsDetails(run)) {
-    void ensureDetails([run.id]).then(() => openRun(S.RUNS.find(r => r.id === run.id) ?? null, fly));
+    void ensureDetails([run.id]).then(() => {
+      if (mine === asked) openRun(S.RUNS.find(r => r.id === run.id) ?? null, fly);
+    });
     return;
   }
   openRun(run, fly);
@@ -330,6 +335,9 @@ export function send(): Promise<void> {
 }
 
 /** Starts a run on the bridge from a prompt taken at Enter. Refused, the prompt is put back, unless another was typed. */
+/** Why selected lines can't be sent, already in the person's words. */
+class Stale extends Error {}
+
 async function startLive(conn: Conn, body: StartRunBody) {
   st.busy = 'send';
   renderComposer();
@@ -337,7 +345,7 @@ async function startLive(conn: Conn, body: StartRunBody) {
     // Selected lines are checked against the file as it is now, and sent with their text.
     if (body.lines) {
       const why = await checkSelection(conn);
-      if (why) throw new Error(why);
+      if (why) throw new Stale(why);
       sending();
     }
     const r = await bridge.startRun(conn, body);
@@ -347,7 +355,8 @@ async function startLive(conn: Conn, body: StartRunBody) {
     toast(t('{agent} started run {id}', { agent: agentOf(body.agent).name, id: r.id }));
   } catch (e) {
     ed.sent = null;
-    toast(e instanceof BridgeError ? explain(e) : e instanceof Error ? e.message : explain(e));
+    // The selection's own reason, in its words; anything else as the bridge's errors read, never a raw one.
+    toast(e instanceof Stale ? e.message : explain(e));
     if (!dom.prompt.value.trim()) {
       dom.prompt.value = body.prompt;
       dom.prompt.dispatchEvent(new Event('input', { bubbles: true }));
@@ -428,8 +437,7 @@ const listOf = (ids: number[]) => new Intl.ListFormat(locale(), { type: 'conjunc
 
 export function loadDemo() {
   st.unreachable = null;
-  forgetAll();
-  S.REVIEWED.clear();
+  forgetRepo();
   S.WORKING = [];
   S.LIVE_AGENTS = null;
   if (!DEMO_AGENTS.includes(st.agent)) st.agent = 'claude';

@@ -356,6 +356,8 @@ export function runInView(): Run | null {
 type RunView = { text: string; diff: InlineDiff };
 /** Each file a run changed, whole, once loaded: its text and marks in each mode. Null while it loads. */
 const runViews = new Map<string, Record<Mode, RunView> | null>();
+/** Another repository, or the demo again: its runs' files are other files. */
+export const forgetRunViews = () => runViews.clear();
 
 /**
  * The file as the run found it, whole (the state keeps only its first 4,000 lines), and as the run left it, in

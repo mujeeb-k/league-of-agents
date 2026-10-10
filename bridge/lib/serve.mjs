@@ -45,10 +45,14 @@ export async function serve(hooks) {
   const server = createBridgeServer(port);
   server.listen(port, '127.0.0.1', () => checkClaude(() => listening(port)));
   for (const [id, a] of Object.entries(ACP))
-    if (a.check && onPath(a.check[0]))
+    if (a.check && onPath(a.check[0])) {
+      // Its check takes seconds: until it answers, the agent is being checked, not missing.
+      AGENTS[id].checking = true;
       execFile(a.check[0], a.check.slice(1), { cwd: ROOT, timeout: 60000 }, e => {
+        delete AGENTS[id].checking;
         AGENTS[id].available = !e;
-        if (!e) emit('state');
+        emit('state');
       });
+    }
   setInterval(() => AGENTS.claude.problem && checkClaude(), CLAUDE_RECHECK_MS).unref();
 }

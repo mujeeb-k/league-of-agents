@@ -34,6 +34,8 @@ export interface Check {
 export interface AgentInfo {
   name: string;
   available: boolean;
+  /** Found, and its check hasn't answered yet (a few seconds after the bridge starts; bridges from 0.2.0). */
+  checking?: boolean;
   /** Why Claude Code can't run: not installed, or not logged in (bridges before 0.1.0 don't send it). */
   problem?: 'missing' | 'loggedOut' | null;
   /**

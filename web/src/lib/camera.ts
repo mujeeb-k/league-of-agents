@@ -67,8 +67,12 @@ export function applyView(settle = false) {
 /** The farthest zoom: 4%, or less on a map too large to fit at that, so the whole of it can always be seen. */
 export const minZoom = () =>
   Math.min(0.04, (dom.stage.clientWidth - 60) / (S.WB.w || 1), (dom.stage.clientHeight - 60) / (S.WB.h || 1));
+/** Told when the person moves the map (not when it follows a session): following stops (state/watch.ts). */
+let moved = () => {};
+export const onCameraMove = (fn: () => void) => void (moved = fn);
 export function zoomAt(px: number, py: number, f: number) {
   endFirstLoad();
+  moved();
   const { x, y, s } = st.v,
     ns = clamp(s * f, minZoom(), 2.5);
   const wx = (px - x) / s,
@@ -97,8 +101,9 @@ export function viewCenter(): [number, number] {
   return [inset + (dom.stage.clientWidth - inset) / 2, dom.stage.clientHeight / 2];
 }
 let anim = 0;
-export function flyTo(t: View) {
+export function flyTo(t: View, following = false) {
   endFirstLoad();
+  if (!following) moved();
   cancelAnimationFrame(anim);
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
     st.v = t;
@@ -138,7 +143,10 @@ export const flyFile = (p: string) => {
 /** A box to the middle of the stage, at the zoom the person chose (following a session, state/watch.ts). */
 export function centreOn(b: Box) {
   const s = st.v.s;
-  flyTo({ s, x: dom.stage.clientWidth / 2 - (b.x + b.w / 2) * s, y: dom.stage.clientHeight / 2 - (b.y + b.h / 2) * s });
+  flyTo(
+    { s, x: dom.stage.clientWidth / 2 - (b.x + b.w / 2) * s, y: dom.stage.clientHeight / 2 - (b.y + b.h / 2) * s },
+    true,
+  );
 }
 export const flyDir = (p: string) => {
   endFirstLoad();

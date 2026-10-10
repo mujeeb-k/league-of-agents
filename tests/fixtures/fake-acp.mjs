@@ -12,7 +12,11 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import readline from 'node:readline';
 
-if (process.argv.includes('--check')) process.exit(0);
+// The check takes $FAKE_ACP_CHECK_MS, as a real harness's takes a few seconds.
+if (process.argv.includes('--check')) {
+  await new Promise(r => setTimeout(r, Number(process.env.FAKE_ACP_CHECK_MS) || 0));
+  process.exit(0);
+}
 const FILE = 'shared/allowlist.ts';
 const send = m => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\n');
 const update = (sessionId, u) => send({ method: 'session/update', params: { sessionId, update: u } });

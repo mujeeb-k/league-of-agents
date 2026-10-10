@@ -3351,6 +3351,11 @@ test.describe('sessions at once, in the app', () => {
       await page.mouse.move(s.x + s.width / 2 + 120, s.y + s.height / 2 + 60, { steps: 4 });
       await page.mouse.up();
       await expect(follow).toHaveAttribute('aria-pressed', 'false');
+      // So does moving it by the keyboard: fitting the whole map.
+      await follow.click();
+      await expect(follow).toHaveAttribute('aria-pressed', 'true');
+      await page.keyboard.press('0');
+      await expect(follow).toHaveAttribute('aria-pressed', 'false');
       go(repo, 'b');
       await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
     }));
@@ -3404,6 +3409,31 @@ test.describe('sessions at once, in the app', () => {
       );
       await expect(page.locator('#sideList .run')).toHaveCount(2);
     }));
+});
+
+test('a harness still being checked at start says "Checking", not "not installed"', async ({ page }) => {
+  const repo = makeRepo();
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP, FAKE_ACP_CHECK_MS: '2500' });
+  try {
+    const agents = async () => ((await call(b, '/api/state')).body as unknown as StateResponse).agents;
+    expect((await agents()).hermes).toMatchObject({ available: false, checking: true });
+    const early = await call(b, '/api/runs', { agent: 'hermes', prompt: 'Edit it', scope: [], resumeFrom: null });
+    expect(early.body).toMatchObject({ code: 'agent-checking', args: { agent: 'hermes' } });
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.locator('#agentBtn').click();
+    await expect(page.locator('#agentMenu [data-checking="hermes"]')).toHaveText('HermesChecking…');
+    await page.keyboard.press('Escape');
+    // Checked: it can be picked, and the note is gone.
+    await expect.poll(async () => (await agents()).hermes, { timeout: 10_000 }).toMatchObject({ available: true });
+    expect((await agents()).hermes!.checking).toBeUndefined();
+    await page.locator('#agentBtn').click();
+    await expect(page.locator('#agentMenu [data-agent="hermes"]')).toBeVisible();
+    await expect(page.locator('#agentMenu [data-checking]')).toHaveCount(0);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
 });
 
 test('harnesses the person adds in their own settings are listed by name and run from the map, with their model', async ({

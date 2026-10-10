@@ -74,6 +74,8 @@ export function noticeEnded(
 
 /** Each write already told, by run and file: told once. */
 const told = new Set<string>();
+/** Another repository, or the demo again: nothing of it was told yet. */
+export const forgetTold = () => told.clear();
 
 /**
  * A session that asks to change a file outside its section, told to a person who isn't looking, as a session that

@@ -161,6 +161,8 @@ function RunRow({ r }: { r: Run }) {
       tabIndex={running ? undefined : 0}
       aria-pressed={running ? undefined : st.run === r}
       onKeyDown={e => {
+        // The row's own keys only: Enter or Space on a button inside it (Stop, Follow, Allow, Refuse) is that button's.
+        if (running || e.target !== e.currentTarget) return;
         if (e.key !== 'Enter' && e.key !== ' ') return;
         e.preventDefault();
         e.stopPropagation();

@@ -119,16 +119,20 @@ function FollowChip({ fu }: { fu: Run | null }) {
             </span>
           </DropdownMenuItem>
         ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          data-follow="new"
-          onSelect={() => {
-            if (fu) st.noFollow = fu.id;
-            renderComposer();
-          }}
-        >
-          {t('Start a new session instead')}
-        </DropdownMenuItem>
+        {fu ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              data-follow="new"
+              onSelect={() => {
+                st.noFollow = fu.id;
+                renderComposer();
+              }}
+            >
+              {t('Start a new session instead')}
+            </DropdownMenuItem>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -140,6 +144,8 @@ function AgentPicker() {
     S.CONN && S.LIVE_AGENTS ? Object.keys(S.LIVE_AGENTS).filter(k => S.LIVE_AGENTS![k]!.available) : DEMO_AGENTS;
   // No agent on this machine: the prompt says so, and there is nothing to pick.
   if (!keys.length) return null;
+  // Found, its check still running (a few seconds after the bridge starts): listed, and not yet to pick.
+  const checking = S.CONN && S.LIVE_AGENTS ? Object.keys(S.LIVE_AGENTS).filter(k => S.LIVE_AGENTS![k]!.checking) : [];
   // Claude Code installed elsewhere but not runnable here: listed, with why.
   const claudeOff = S.CONN ? S.LIVE_AGENTS?.claude?.problem : null;
   return (
@@ -180,6 +186,13 @@ function AgentPicker() {
             );
           })}
         </DropdownMenuRadioGroup>
+        {checking.map(k => (
+          <div key={k} data-checking={k} className="flex items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground">
+            <Dot c={agentOf(k).c} />
+            {agentOf(k).name}
+            <span className="ml-auto text-xs">{t('Checking…')}</span>
+          </div>
+        ))}
         {claudeOff ? (
           <div id="claudeOff" className="flex flex-col gap-1 px-2 py-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-2 text-sm">
@@ -190,7 +203,7 @@ function AgentPicker() {
                 {claudeOff === 'missing' ? t('Not installed') : t('Not logged in')}
               </span>
             </span>
-            <code className="font-mono">{CLAUDE_FIX[claudeOff].command}</code>
+            <code className="font-mono">{claudeFix()[claudeOff].command}</code>
           </div>
         ) : null}
         <DropdownMenuSeparator />
@@ -204,8 +217,8 @@ function AgentPicker() {
   );
 }
 
-/** Why Claude Code can't run here, and the command that fixes it. */
-export const CLAUDE_FIX = {
+/** Why Claude Code can't run here, and the command that fixes it: worded when shown, in the language then set. */
+const claudeFix = () => ({
   missing: {
     title: t("Claude Code isn't installed"),
     body: t('Install it to run it from here. Changes from any editor still show up as runs.'),
@@ -216,11 +229,11 @@ export const CLAUDE_FIX = {
     body: t('Log in from a terminal. This clears on its own once you have.'),
     command: 'claude auth login',
   },
-};
+});
 
 /** Claude Code can't run and no other agent can: what to do about it, instead of a prompt that can't send. */
-function ClaudeProblem({ problem }: { problem: keyof typeof CLAUDE_FIX }) {
-  const fix = CLAUDE_FIX[problem];
+function ClaudeProblem({ problem }: { problem: 'missing' | 'loggedOut' }) {
+  const fix = claudeFix()[problem];
   return (
     <div id="claudeProblem" data-problem={problem} className="px-1 pb-2">
       <p className="text-[13px] font-medium">{fix.title}</p>

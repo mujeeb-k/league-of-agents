@@ -200,7 +200,10 @@ kbd {
 /* Chinese: IBM Plex has no Chinese glyphs, so the system's Chinese fonts come next, before the generic ones. */
 /* Set on what uses the sans stack, not on --font-sans: @theme inline writes that stack into each rule. */
 :lang(zh) body,
-:lang(zh) .font-sans {
+:lang(zh) .font-sans,
+:lang(zh) .selbox b,
+:lang(zh) .zone b,
+:lang(zh) .marker b {
   font-family:
     'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
 }

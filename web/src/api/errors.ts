@@ -13,6 +13,7 @@ export const BLOCKED = 'blocked';
 /** The bridge's errors by their code (bridge/loa.mjs sends one with each error the app shows), in English: the keys. */
 export const BY_CODE: Record<string, string> = {
   'not-installed': "{agent} isn't installed on this computer.",
+  'agent-checking': '{agent} is still being checked. Try again in a moment.',
   'not-logged-in': "{agent} isn't logged in. Run claude auth login, then try again.",
   'lines-changed': 'The lines you selected in {name} changed. Select them again.',
   'run-active': 'Run {id} is still active',

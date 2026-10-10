@@ -5,7 +5,8 @@ import { connect, tickTimes } from '../api/live';
 import { loadConn, parseConn } from '../api/conn';
 import { startAnalytics } from '../lib/analytics';
 import type { Conn } from '../api/types';
-import { applyView, flyAll, flyRun, flySelection, viewCenter, zoomAt } from '../lib/camera';
+import { applyView, flyAll, flyRun, flySelection, onCameraMove, viewCenter, zoomAt } from '../lib/camera';
+import { stopFollowing } from './watch';
 import { readCss } from '../lib/minimap';
 import { openPalette } from '../components/Palette';
 import { retheme } from '../components/TopBar';
@@ -132,6 +133,8 @@ export function boot() {
   watchSystemTheme(retheme);
   readCss();
   applyPanels();
+  // The person moving the map, by keys, the minimap, a file opened or a drag, stops it following a session.
+  onCameraMove(stopFollowing);
   const fromHash = parseConn(location.href);
   if (fromHash) history.replaceState(null, '', location.pathname + location.search);
   startAnalytics();

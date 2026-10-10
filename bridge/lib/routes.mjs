@@ -126,6 +126,15 @@ async function startRun({ body }) {
         args: { agent: b.agent },
       },
     ];
+  if (AGENTS[b.agent]?.checking)
+    return [
+      400,
+      {
+        error: `${AGENTS[b.agent].name} is still being checked. Try again in a moment.`,
+        code: 'agent-checking',
+        args: { agent: b.agent },
+      },
+    ];
   if (!AGENTS[b.agent]?.available)
     return [
       400,

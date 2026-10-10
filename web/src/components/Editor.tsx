@@ -262,9 +262,13 @@ export function Editor() {
   // run, the run's change shows instead.
   const review = path && !inRun && !drafts.has(path) ? reviewRun(path) : null;
   const shownDiff = useRef('');
+  // Each run's details are asked for once: a run whose details can't be had isn't asked again at every render.
+  const detailsAsked = useRef(new Set<number>());
   useEffect(() => {
     // The file as the run found it comes with the run's details: fetched first, then the change shows.
     if (review && needsDetails(review)) {
+      if (detailsAsked.current.has(review.id)) return;
+      detailsAsked.current.add(review.id);
       void ensureDetails([review.id]).then(() => bump('editor'));
       return;
     }

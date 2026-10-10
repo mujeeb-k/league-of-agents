@@ -10,14 +10,14 @@ import type { Run } from '../lib/types';
 import { t, tn } from '../i18n';
 import { fmtDur, relTime } from '../lib/util';
 import { S, st } from '../state/app';
-import { noteEnded, opensOnFinish } from '../state/sessions';
+import { forgetSessions, noteEnded, opensOnFinish } from '../state/sessions';
 import { landed, stepped } from '../state/watch';
 import { addSteps, forgetAll, forgetEnded, setMoment } from '../lib/live';
 import { toLines } from '../lib/anchor';
-import { noticeAsks, noticeEnded } from '../state/notices';
+import { forgetTold, noticeAsks, noticeEnded } from '../state/notices';
 import { stopDemoTimers } from '../demo/sessions';
 import { loadDemo, selectRun } from '../state/actions';
-import { refreshEditor } from '../state/editing';
+import { forgetRunViews, refreshEditor } from '../state/editing';
 import { bump, renderAll, renderCrumb, renderInspector, renderScene, renderSide, setConnUI } from '../state/render';
 import { toast } from '../ui/toast';
 import { BridgeError, bridge, sessionFor } from './client';
@@ -27,8 +27,12 @@ import { clearConn, loadConn, saveConn } from './conn';
 import type { Conn, RunDTO, StateDelta, StateResponse, StepDTO } from './types';
 
 export const live = { pendingSelect: null as number | null };
-let refreshTimer = 0,
-  polling = false;
+let refreshTimer = 0;
+/**
+ * Which connection the page is on: counted up at each connect and disconnect, so a request answered after either is
+ * dropped (a poll of the bridge before, a step's text asked of it).
+ */
+let epoch = 0;
 const justFinished = new Set<number>();
 
 /** The active connection. Throws when there is none. */
@@ -59,7 +63,9 @@ function liveRun(r: RunDTO): Run {
     if (renamed.has(c.path)) continue;
     const from = renames.get(c.path);
     // A renamed file is one change: from its old text to its new one, under its new name.
-    const old = from ? preOf(r.changes.find(x => x.path === from)!) : null;
+    // The file it came from may be one the map doesn't show (the bridge leaves those out of a run's changes).
+    const source = from ? r.changes.find(x => x.path === from) : undefined;
+    const old = source ? preOf(source) : null;
     const block =
       old &&
       changedBlock(
@@ -276,6 +282,8 @@ let last: StateResponse | null = null;
 function withDeltas(s: StateResponse, deltas: StateDelta[], seq: number): StateResponse {
   for (const d of deltas) {
     const tree = s.tree.filter(f => !(f.path in d.files));
+    // A changed file's first lines, fetched for a large map, are no longer its lines.
+    for (const p of Object.keys(d.files)) heads.delete(p);
     // Only files on the map: a run may change files outside the folder it shows.
     for (const f of Object.values(d.files)) if (f && f.path.startsWith(s.root ?? '')) tree.push(f);
     tree.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
@@ -396,7 +404,11 @@ function foundIn(run: Run, path: string) {
       key,
       bridge.runBefore(conn(), run.id, path).then(
         r => toLines(r.text),
-        () => [],
+        () => {
+          // Not kept: asked again next time, so one failed request doesn't draw every later edit as a whole new file.
+          foundAs.delete(key);
+          return [];
+        },
       ),
     );
   return foundAs.get(key)!;
@@ -417,6 +429,7 @@ async function landEdit(run: Run, s: StepDTO) {
  * A step picked in the open run's timeline: the map goes to its file, shown as that step left it when the step kept
  * it (an edit), as the run left it otherwise.
  */
+let stepAsked = 0;
 export async function openStep(run: Run, s: StepDTO) {
   const path = s.file;
   if (!path || !S.FILES.has(path)) return;
@@ -428,9 +441,11 @@ export async function openStep(run: Run, s: StepDTO) {
     renderInspector();
     return;
   }
+  const asked = ++stepAsked;
   try {
     const [before, now] = await Promise.all([foundIn(run, path), bridge.stepText(conn(), run.id, s.i)]);
-    if (st.run?.id !== run.id) return;
+    // Another run opened, or a later step clicked, while this one was fetched: theirs stands.
+    if (st.run?.id !== run.id || asked !== stepAsked) return;
     setMoment(run.id, s.i, path, before, toLines(now.text));
   } catch {
     setMoment(null);
@@ -493,11 +508,12 @@ const queueRefresh = () => {
 };
 
 async function poll() {
-  if (polling) return;
-  polling = true;
-  while (S.LIVE) {
+  const mine = epoch;
+  while (S.LIVE && mine === epoch) {
     try {
       const r = await bridge.events(conn(), S.EVSEQ);
+      // Answered after a disconnect or another connect: not this connection's to apply.
+      if (mine !== epoch) return;
       S.EVSEQ = r.seq;
       let needState = false;
       const deltas: StateDelta[] = [];
@@ -536,6 +552,7 @@ async function poll() {
       if (deltas.length && !last) needState = true;
       if (needState || deltas.length) {
         const s = needState ? await bridge.state(conn(), S.mapRoot) : withDeltas(last!, deltas, r.seq);
+        if (mine !== epoch) return;
         followSessions(S.WORKING, workingOf(s), s);
         noteEnded(S.WORKING, workingOf(s), s.runs);
         noticeEnded(S.WORKING, workingOf(s), s.runs, id => selectRun(S.RUNS.find(r => r.id === id) ?? null));
@@ -544,11 +561,30 @@ async function poll() {
         S.EVSEQ = Math.max(S.EVSEQ, s.seq || 0);
       } else renderSide();
     } catch (e) {
-      onDisconnect(e);
+      if (mine === epoch) onDisconnect(e);
       break;
     }
   }
-  polling = false;
+}
+
+/**
+ * A connection made, or the demo again: what was fetched of runs and files goes. Another repository's runs of the
+ * same numbers are other runs, so what the person marked of them (reviewed files, ended sessions, notices) goes too;
+ * the same repository reconnected keeps those.
+ */
+export function forgetRepo(sameRepo = false) {
+  forgetAll();
+  forgetRunViews();
+  details.clear();
+  heads.clear();
+  justFinished.clear();
+  stepsFetched.clear();
+  foundAs.clear();
+  last = null;
+  if (sameRepo) return;
+  forgetSessions();
+  forgetTold();
+  S.REVIEWED.clear();
 }
 
 /**
@@ -596,9 +632,8 @@ export async function connect(c: Conn, quiet = false): Promise<string | null> {
     // A repository is laid out as it was last time, or afresh; later state events keep this layout. A map of one of
     // its folders is laid out afresh, as the same folder always is.
     S.LAYOUT = s.root ? null : await loadLayout(c, s.repo.root);
-    forgetAll();
-    stepsFetched.clear();
-    foundAs.clear();
+    forgetRepo(!!S.repoRoot && S.repoRoot === s.repo.root);
+    epoch++;
     applyState(s, true);
     toast(t('Connected to {repo}', { repo: s.repo.name }));
     void poll();
@@ -629,6 +664,7 @@ function onDisconnect(_e: unknown) {
 }
 
 export function disconnect() {
+  epoch++;
   S.LIVE = false;
   S.CONN = null;
   clearConn();

@@ -45,7 +45,7 @@ export function Timeline({ run }: { run: Run }) {
       <div
         id="timeline"
         ref={box}
-        role="list"
+        role="group"
         aria-label={t('Steps')}
         className="relative overflow-y-auto rounded-lg border bg-card"
         style={{ height: Math.min(list.length, SHOWN) * ROW + 2 }}
@@ -62,7 +62,6 @@ export function Timeline({ run }: { run: Run }) {
               <button
                 type="button"
                 key={s.i}
-                role="listitem"
                 data-step={s.i}
                 aria-current={picked || undefined}
                 disabled={!s.file}

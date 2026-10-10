@@ -147,6 +147,7 @@ function Crumb() {
           <button
             type="button"
             id="mapRoot"
+            aria-label={`${t('Map another folder')}: ${S.mapRoot}`}
             onClick={() => openMapPicker(true)}
             className="max-w-60 truncate rounded px-1 font-mono text-xs text-foreground hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
           >

@@ -573,5 +573,7 @@ const catalogue: Catalogue = {
   Note: 'Note',
   'Waiting for you': 'Waiting for you',
   'Tried to open {path}. Blocked.': 'Tried to open {path}. Blocked.',
+  'Checking…': 'Checking…',
+  '{agent} is still being checked. Try again in a moment.': '{agent} is still being checked. Try again in a moment.',
 };
 export default catalogue;
