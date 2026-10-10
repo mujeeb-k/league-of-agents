@@ -278,7 +278,6 @@ const catalogue: Catalogue = {
   '{n} more lines': { one: '{n} línea más', other: '{n} líneas más' },
   'Empty file': 'Archivo vacío',
   'Needs you': 'Te necesita',
-  '{agent} is working': '{agent} está trabajando',
   'in {n} files': { one: 'en {n} archivo', other: 'en {n} archivos' },
   'No changes': 'Sin cambios',
   Files: 'Archivos',
@@ -540,7 +539,6 @@ const catalogue: Catalogue = {
   'Run {id} is working on it.': 'Run {id} is working on it.',
   Allow: 'Allow',
   Refuse: 'Refuse',
-  '{agent} is waiting for you': '{agent} is waiting for you',
   'Tried to change {file}. Blocked.': 'Tried to change {file}. Blocked.',
   'Run {id} is working on {path}. Allow it once that run ends.':
     'Run {id} is working on {path}. Allow it once that run ends.',
@@ -573,5 +571,10 @@ const catalogue: Catalogue = {
   'Map another folder': 'Map another folder',
   'Nothing in the selection to change in the demo. Select a folder with files.':
     'Nothing in the selection to change in the demo. Select a folder with files.',
+  Ran: 'Ran',
+  Error: 'Error',
+  Denied: 'Denied',
+  Note: 'Note',
+  'Waiting for you': 'Waiting for you',
 };
 export default catalogue;

@@ -47,3 +47,15 @@ export function toolLabel(name, input = {}) {
   if (input.pattern) return `${name} ${input.pattern}`;
   return name;
 }
+/**
+ * What a tool call did, for the app to word: what it does, the file in the repo it names, the command it runs. `text`
+ * stays for older apps.
+ */
+export function toolSaid(act, file, cmd) {
+  const inRepo = file && file !== '..' && !file.startsWith('../') && !path.isAbsolute(file);
+  return {
+    act,
+    ...(inRepo ? { path: file } : {}),
+    ...(act === 'run' && typeof cmd === 'string' ? { cmd: relPaths(cmd).slice(0, 200) } : {}),
+  };
+}

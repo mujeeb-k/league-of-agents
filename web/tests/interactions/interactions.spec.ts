@@ -1011,7 +1011,12 @@ test('the demo opens on three sessions at work; they finish one by one, the firs
   await showSidebar(page);
   await page.locator('[data-tab="runs"]').click();
   await expect(page.locator('#sideList .run.running')).toHaveCount(3);
-  await expect(page.locator('#sideList [data-run="15"]')).toContainText('Claude Code is working');
+  // Each row leads with what tells it apart: its agent and its section; the prompt is one line under them.
+  const row = page.locator('#sideList [data-run="15"]');
+  await expect(row.locator('.who')).toHaveText('Claude Codepipeline/ server/delivery');
+  await expect(row.locator('.m').first()).toHaveText('Working');
+  const prompt = row.locator('.t');
+  expect(await prompt.evaluate(el => el.scrollHeight <= parseFloat(getComputedStyle(el).lineHeight) + 1)).toBe(true);
   // Claude Code's session ends first: it opens, in Diff, with its reply.
   await page.clock.runFor(8100);
   await expect(page.locator('#runbar b')).toHaveText('Run 15');

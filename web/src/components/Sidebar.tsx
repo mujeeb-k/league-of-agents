@@ -19,7 +19,7 @@ import { stepsOf } from '../lib/live';
 import { money } from '../lib/util';
 import { notifying, toggleNotifying } from '../state/notices';
 import { cn } from '@/lib/utils';
-import { BetaTag, CheckBadge, Dot, Stat } from './bits';
+import { BetaTag, CheckBadge, Dot, FilePath, Stat } from './bits';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { FileIcon } from './FileIcon';
 import { Tip } from './TopBar';
@@ -177,64 +177,71 @@ function RunRow({ r }: { r: Run }) {
     >
       <canvas data-fp={r.id} aria-hidden="true" className="h-11 w-16 rounded-md bg-card ring-1 ring-border" />
       <div className="min-w-0">
-        <div className="flex items-start gap-1">
-          <div className="t min-w-0 flex-1 leading-snug font-medium text-pretty [overflow-wrap:anywhere]">
-            {r.title}
-          </div>
-          {running && stepsOf(r.id).length ? (
-            <Tip
-              label={
-                st.following === r.id
-                  ? t('Stop following run {id}', { id: r.id })
-                  : t('Follow run {id} on the map', { id: r.id })
-              }
-            >
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                data-follow
-                aria-pressed={st.following === r.id}
-                aria-label={t('Follow run {id} on the map', { id: r.id })}
-                className="-mt-0.5 shrink-0 text-ink2 aria-pressed:bg-accent aria-pressed:text-foreground"
-                onClick={() => follow(st.following === r.id ? null : r)}
-              >
-                <Eye className="size-3.5" />
-              </Button>
-            </Tip>
-          ) : null}
-          {running ? (
-            <Tip label={t('Stop run {id}', { id: r.id })}>
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                data-stop
-                aria-label={t('Stop run {id}', { id: r.id })}
-                disabled={isOffline()}
-                className="-mt-0.5 -mr-1 shrink-0 text-ink2"
-                onClick={() => void runAction('cancel', r)}
-              >
-                <Square className="size-3 fill-current" />
-              </Button>
-            </Tip>
-          ) : null}
+        {/* What tells rows apart: the agent and its section. */}
+        {/* A section's name too long to sit beside the agent goes under it, whole. */}
+        <div className="who flex flex-wrap items-baseline gap-x-1.5 leading-snug">
+          <span className="shrink-0 font-medium">{a.name}</span>
+          {r.scope?.length ? (
+            <span className="flex max-w-full grow basis-0 items-baseline gap-1.5 text-xs" title={r.scope.join(', ')}>
+              <FilePath path={r.scope[0]!} />
+              {r.scope.length > 1 ? (
+                <span className="shrink-0 text-muted-foreground tabular-nums">{`+${r.scope.length - 1}`}</span>
+              ) : null}
+            </span>
+          ) : (
+            <span className="min-w-0 truncate text-xs text-muted-foreground">{t('Whole repository')}</span>
+          )}
+        </div>
+        <div className="t mt-0.5 truncate text-ink2" title={r.prompt || r.title}>
+          {r.title}
         </div>
         <div className="m mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
           <Dot c={a.c} className={cn('size-1.5 shrink-0', running && !r.waiting && 'animate-pulse')} />
           {/* The model is in the inspector; here, in the row's tooltip, so the time stays readable. */}
-          {/* At work, what it is doing is the point: it wraps rather than cut off. */}
-          <span
-            className={cn('min-w-0', running ? 'text-pretty' : 'truncate')}
-            title={r.model ? `${a.name} · ${r.model}` : undefined}
-          >
-            {r.waiting
-              ? t('{agent} is waiting for you', { agent: a.name })
-              : running
-                ? t('{agent} is working', { agent: a.name })
-                : `${a.name} · ${r.when}`}
+          <span className="min-w-0 truncate" title={r.model ? `${a.name} · ${r.model}` : undefined}>
+            {r.waiting ? t('Waiting for you') : running ? t('Working') : r.when}
           </span>
           {r.cost != null ? <span className="cost shrink-0 tabular-nums">{money(r.cost)}</span> : null}
           {/* While it works, the stop button takes the room: "Beta" shows once it ends. */}
           {a.beta && !running ? <BetaTag /> : null}
+          {running ? (
+            <span className="ml-auto flex shrink-0 items-center">
+              {stepsOf(r.id).length ? (
+                <Tip
+                  label={
+                    st.following === r.id
+                      ? t('Stop following run {id}', { id: r.id })
+                      : t('Follow run {id} on the map', { id: r.id })
+                  }
+                >
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    data-follow
+                    aria-pressed={st.following === r.id}
+                    aria-label={t('Follow run {id} on the map', { id: r.id })}
+                    className="shrink-0 text-ink2 aria-pressed:bg-accent aria-pressed:text-foreground"
+                    onClick={() => follow(st.following === r.id ? null : r)}
+                  >
+                    <Eye className="size-3.5" />
+                  </Button>
+                </Tip>
+              ) : null}
+              <Tip label={t('Stop run {id}', { id: r.id })}>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  data-stop
+                  aria-label={t('Stop run {id}', { id: r.id })}
+                  disabled={isOffline()}
+                  className="-mr-1 shrink-0 text-ink2"
+                  onClick={() => void runAction('cancel', r)}
+                >
+                  <Square className="size-3 fill-current" />
+                </Button>
+              </Tip>
+            </span>
+          ) : null}
         </div>
         {running && r.scope?.length && r.stays !== undefined ? (
           <p className="reach mt-1 text-xs text-muted-foreground text-pretty">{reachOf(r.stays)}</p>

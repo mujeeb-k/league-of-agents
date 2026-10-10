@@ -3,7 +3,7 @@ import path from 'node:path';
 import { AGENTS } from './registry.mjs';
 import { claudeLoggedOut } from './claude.mjs';
 import { noteWrites } from './lines.mjs';
-import { refusedWrite, relPaths, repoRelative, toolError, toolLabel, toolText } from './labels.mjs';
+import { refusedWrite, relPaths, repoRelative, toolError, toolLabel, toolSaid, toolText } from './labels.mjs';
 import { launch } from './process.mjs';
 import { shellAccess } from '../shell.mjs';
 import { blocked, commandBlocked, push } from '../runs.mjs';
@@ -116,10 +116,12 @@ export function onAgentLine(run, line) {
     for (const c of m.message.content) {
       if (c.type === 'text' && c.text?.trim()) push(run, { t: 'text', text: c.text.trim() });
       if (c.type === 'tool_use') {
-        push(run, { t: 'tool', text: toolLabel(c.name, c.input) });
-        noteWrites(run, c.name, c.input);
         const file = c.input?.file_path || c.input?.notebook_path;
-        called(run, c.id, actOf(c.name), c.name, typeof file === 'string' ? [repoPath(file)] : []);
+        const act = actOf(c.name),
+          at = typeof file === 'string' ? repoPath(file) : null;
+        push(run, { t: 'tool', text: toolLabel(c.name, c.input), ...toolSaid(act, at, c.input?.command) });
+        noteWrites(run, c.name, c.input);
+        called(run, c.id, act, c.name, at ? [at] : []);
       }
     }
   } else if (m.type === 'user' && Array.isArray(m.message?.content)) {

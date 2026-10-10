@@ -27,13 +27,14 @@ import { panels } from '../state/panels';
 import { isOffline, propagate, runAction, selectRun, toggleReviewed, viewFile } from '../state/actions';
 import { bump, renderInspector, renderScene, renderSel, useRegion } from '../state/render';
 import { bridge } from '../api/client';
+import type { StreamEntry } from '../api/types';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { CopyCommand, SETUP_PROMPT, setConnectOpen } from './ConnectDialog';
 import { Kbd, KbdGroup } from './ui/kbd';
 import { Markdown } from './Markdown';
 import { ScopeChip } from './ScopeChip';
-import { BetaTag, Dot, Spinner, Stat } from './bits';
+import { BetaTag, Dot, Spinner, Stat, StepText } from './bits';
 import { IntroSection } from './Intro';
 import { locale, t, tn } from '../i18n';
 import { Timeline } from './Timeline';
@@ -126,12 +127,14 @@ export const Label = ({ children, className }: { children: React.ReactNode; clas
   </h3>
 );
 
-const ACT: Record<string, { label: string; tone: string }> = {
-  tool: { label: 'tool', tone: 'bg-muted text-ink2' },
-  err: { label: 'error', tone: 'bg-del/12 text-del' },
-  warn: { label: 'scope', tone: 'bg-mod/12 text-mod' },
-  deny: { label: 'denied', tone: 'bg-mod/12 text-mod' },
-  text: { label: 'note', tone: 'bg-muted text-ink2' },
+/** A tool call the app can word: a read or edit of a file in the repo, or a command (bridges from 0.2.0). */
+const worded = (e: StreamEntry) => ((e.act === 'read' || e.act === 'edit') && !!e.path) || (e.act === 'run' && !!e.cmd);
+/** Each kind of activity entry's tag; a tool call has none: it says what it did. */
+const ACT: Record<string, { label: () => string; tone: string }> = {
+  err: { label: () => t('Error'), tone: 'bg-del/12 text-del' },
+  warn: { label: () => t('Scope'), tone: 'bg-mod/12 text-mod' },
+  deny: { label: () => t('Denied'), tone: 'bg-mod/12 text-mod' },
+  text: { label: () => t('Note'), tone: 'bg-muted text-ink2' },
 };
 
 const linkClass =
@@ -289,6 +292,18 @@ function RunView({ run }: { run: Run }) {
             <ul className="acts mt-3 flex flex-col gap-1">
               {acts.map((e, i) => {
                 const k = ACT[e.t] ?? ACT.text!;
+                if (e.t === 'tool')
+                  return (
+                    <li key={i} className="tool flex min-w-0 font-mono text-xs leading-[18px] text-ink2">
+                      {worded(e) ? (
+                        <StepText act={e.act} path={e.path} cmd={e.cmd} />
+                      ) : (
+                        <span className="min-w-0 truncate" title={e.text}>
+                          {e.text}
+                        </span>
+                      )}
+                    </li>
+                  );
                 return (
                   <li key={i} className={cn(e.t, 'flex min-w-0 items-start gap-2 font-mono text-xs text-ink2')}>
                     <b
@@ -297,7 +312,7 @@ function RunView({ run }: { run: Run }) {
                         k.tone,
                       )}
                     >
-                      {k.label}
+                      {k.label()}
                     </b>
                     <span className="min-w-0 leading-[18px] [overflow-wrap:anywhere]">
                       {e.file

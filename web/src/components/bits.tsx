@@ -98,3 +98,59 @@ export function Translation({ of, className }: { of: string; className?: string 
     </span>
   );
 }
+
+/**
+ * A file or folder named in a list: its name, never broken, then the folder it is in dimmed, cut short when the row
+ * is narrow.
+ */
+export function FilePath({ path }: { path: string }) {
+  const bare = path.replace(/\/$/, ''),
+    cut = bare.lastIndexOf('/');
+  return (
+    <span className="flex max-w-full min-w-0 items-baseline font-mono" title={path}>
+      {/* The folder gives way first, its space with it; a name longer than the whole row is cut at its end. */}
+      <span className="max-w-full shrink-0 truncate text-foreground">{path.slice(cut + 1)}</span>
+      {cut > 0 ? (
+        <span className="w-0 min-w-0 grow truncate text-muted-foreground">{`\u00a0${bare.slice(0, cut)}`}</span>
+      ) : null}
+    </span>
+  );
+}
+
+/** What a step or tool call did, as words: "Read estimator.py", "Edited prefix.py", "Ran pytest". */
+export function StepText({
+  act,
+  path,
+  cmd,
+  refused,
+}: {
+  act?: string;
+  path?: string;
+  cmd?: string;
+  refused?: boolean;
+}) {
+  const verb = refused
+    ? t('Blocked')
+    : act === 'read'
+      ? t('Read')
+      : act === 'edit'
+        ? t('Edited')
+        : act === 'run'
+          ? path || cmd
+            ? t('Ran')
+            : t('Ran a command')
+          : null;
+  if (!verb) return null;
+  return (
+    <span className="flex min-w-0 items-baseline gap-1.5">
+      <span className={cn('shrink-0 font-sans', refused ? 'text-mod' : 'text-ink2')}>{verb}</span>
+      {path ? (
+        <FilePath path={path} />
+      ) : cmd ? (
+        <span className="min-w-0 truncate font-mono" title={cmd}>
+          {cmd}
+        </span>
+      ) : null}
+    </span>
+  );
+}

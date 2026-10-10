@@ -1,29 +1,18 @@
 // A run's steps, in order (bridge/lib/steps.mjs): when, what its agent did, and the file it named. A click takes the
 // map to that file as the step left it. Only the rows in view are drawn, so a run of thousands of steps scrolls freely.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import type { StepDTO } from '../api/types';
 import { ensureSteps, openStep } from '../api/live';
 import { momentOf, stepsOf, touched } from '../lib/live';
 import type { Run } from '../lib/types';
 import { cn } from '@/lib/utils';
 import { useRegion } from '../state/render';
 import { Label } from './Inspector';
+import { FilePath, StepText } from './bits';
 import { t } from '../i18n';
 
 /** Each row's height, and how many show before the list scrolls. */
 const ROW = 24,
   SHOWN = 12;
-
-const did = (s: StepDTO) =>
-  s.refused
-    ? t('Blocked')
-    : s.act === 'read'
-      ? t('Read')
-      : s.act === 'edit'
-        ? t('Edited')
-        : s.act === 'run'
-          ? t('Ran a command')
-          : s.tool;
 
 /** Time since the run started, as m:ss. */
 const since = (ms: number) => {
@@ -86,14 +75,14 @@ export function Timeline({ run }: { run: Run }) {
                 style={{ top: (from + k) * ROW, height: ROW }}
               >
                 <span className="w-8 shrink-0 text-muted-foreground tabular-nums">{since(s.at - start)}</span>
-                <span className={cn('w-14 shrink-0 truncate', s.refused ? 'text-mod' : 'text-ink2')} title={did(s)}>
-                  {did(s)}
-                </span>
-                {s.file ? (
-                  <span className="min-w-0 truncate font-mono" title={s.file}>
-                    {s.file}
+                {s.refused || s.act !== 'other' ? (
+                  <StepText act={s.act} path={s.file} refused={s.refused} />
+                ) : (
+                  <span className="flex min-w-0 items-baseline gap-1.5">
+                    <span className="shrink-0 text-ink2">{s.tool}</span>
+                    {s.file ? <FilePath path={s.file} /> : null}
                   </span>
-                ) : null}
+                )}
               </button>
             );
           })}

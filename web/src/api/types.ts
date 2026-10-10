@@ -10,6 +10,10 @@ export interface StreamEntry {
   file?: string;
   /** What the entry says, worded by the app (bridges from 0.2.0): 'command-blocked'. */
   say?: string;
+  /** A tool call: what it does, the repo file it names, the command it runs (bridges from 0.2.0). */
+  act?: 'read' | 'edit' | 'run' | 'other';
+  path?: string;
+  cmd?: string;
 }
 
 /**

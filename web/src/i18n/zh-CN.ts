@@ -262,7 +262,6 @@ const catalogue: Catalogue = {
   '{n} more lines': { other: '还有 {n} 行' },
   'Empty file': '空文件',
   'Needs you': '需要你',
-  '{agent} is working': '{agent} 正在工作',
   'in {n} files': { other: '在 {n} 个文件中' },
   'No changes': '没有改动',
   Files: '文件',
@@ -507,7 +506,6 @@ const catalogue: Catalogue = {
   'Run {id} is working on it.': 'Run {id} is working on it.',
   Allow: 'Allow',
   Refuse: 'Refuse',
-  '{agent} is waiting for you': '{agent} is waiting for you',
   'Tried to change {file}. Blocked.': 'Tried to change {file}. Blocked.',
   'Run {id} is working on {path}. Allow it once that run ends.':
     'Run {id} is working on {path}. Allow it once that run ends.',
@@ -540,5 +538,10 @@ const catalogue: Catalogue = {
   'Map another folder': 'Map another folder',
   'Nothing in the selection to change in the demo. Select a folder with files.':
     'Nothing in the selection to change in the demo. Select a folder with files.',
+  Ran: 'Ran',
+  Error: 'Error',
+  Denied: 'Denied',
+  Note: 'Note',
+  'Waiting for you': 'Waiting for you',
 };
 export default catalogue;

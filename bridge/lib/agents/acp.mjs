@@ -8,7 +8,7 @@ import { step, stepDone, stepRefused, stepsOf } from '../steps.mjs';
 import { lockOfRun } from '../sandbox.mjs';
 import { emit } from '../events.mjs';
 import { noteLines } from './lines.mjs';
-import { refusedWrite, relPaths, repoRelative } from './labels.mjs';
+import { refusedWrite, relPaths, repoRelative, toolSaid } from './labels.mjs';
 import { launch } from './process.mjs';
 
 /**
@@ -112,9 +112,10 @@ function startAcp(run, prompt, name, command, env) {
     if (u.sessionUpdate === 'tool_call') {
       flush();
       calls.set(u.toolCallId, u);
-      push(run, { t: 'tool', text: acpToolLabel(u) });
       const files = filesOf(u).filter(insideRepo);
       const act = isEdit(u) ? 'edit' : u.kind === 'read' ? 'read' : u.kind === 'execute' ? 'run' : 'other';
+      const cmd = u.rawInput?.command ?? /^terminal: (.*)$/s.exec(String(u.title))?.[1];
+      push(run, { t: 'tool', text: acpToolLabel(u), ...toolSaid(act, files[0], cmd) });
       const label = relPaths(String(u.title || u.kind)).slice(0, 120);
       steps.set(
         u.toolCallId,

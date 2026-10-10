@@ -120,7 +120,7 @@ test('live run, review and revert', async ({ page }) => {
     // Its cost, as Claude Code reported it at the end.
     await expect(page.locator('#sideList [data-run="1"] .cost')).toHaveText('$0.012');
     await expect(page.locator('.flist li .p')).toHaveText(['allowlist.ts', 'policy-cache.ts']);
-    await expect(page.locator('#insp .acts li')).toHaveText(['toolEdit shared/allowlist.ts']);
+    await expect(page.locator('#insp .acts li')).toHaveText(['Editedallowlist.ts shared']);
 
     // Diff rows on the canvas match git exactly.
     await expect(page.locator('#world')).toHaveClass(/near/);
@@ -727,7 +727,8 @@ test('cancel a running agent', async ({ page }) => {
     await expect(page.locator('#conn')).toHaveText('Live');
     await page.locator('#prompt').fill('Take your time');
     await page.locator('#prompt').press('Enter');
-    await expect(page.locator('#sideList .run.running .m')).toHaveText('Claude Code is working');
+    await expect(page.locator('#sideList .run.running .who')).toContainText('Claude Code');
+    await expect(page.locator('#sideList .run.running .m')).toHaveText('Working');
     // A running run cannot be opened: its card is disabled, and a click does nothing.
     await expect(page.locator('#sideList .run.running')).not.toHaveAttribute('role', 'button');
     await expect(page.locator('#sideList .run.running [data-stop]')).toBeVisible();
@@ -2841,8 +2842,8 @@ test.describe('sessions at once, in the app', () => {
       await page.reload();
       await expect(page.locator('#conn')).toHaveText('Live');
       await expect(running(page)).toHaveCount(2);
-      await expect(page.locator('#sideList [data-run="2"]')).toContainText('Hermes is working');
-      await expect(page.locator('#sideList [data-run="3"]')).toContainText('Hermes is working');
+      await expect(page.locator('#sideList [data-run="2"] .m')).toContainText('Working');
+      await expect(page.locator('#sideList [data-run="3"] .m')).toContainText('Working');
       await expect.poll(look).toEqual(before);
       // Working sessions' cards keep their colour too.
       await expect(page.locator('#sideList [data-run="1"] .tags')).toContainText('Cancelled');
@@ -2994,7 +2995,7 @@ test.describe('sessions at once, in the app', () => {
       const card = page.locator('#sideList [data-run="2"]');
       const ask = card.locator('[data-want="apps/console/main.ts"]');
       await expect(ask).toContainText('Wants to change apps/console/main.ts', { timeout: 15_000 });
-      await expect(card).toContainText('Hermes is waiting for you');
+      await expect(card).toContainText('Waiting for you');
       // Run 1 holds the file: Allow waits for it, and the card says so.
       await expect(ask.locator('.held')).toHaveText('Run 1 is working on it.');
       await expect(ask.locator('[data-allow]')).toBeDisabled();
@@ -3095,8 +3096,8 @@ test.describe('sessions at once, in the app', () => {
       await expect(page.locator('#runbar b')).toHaveText('Run 1');
       const rows = page.locator('#timeline [data-step]');
       await expect(rows).toHaveCount(3);
-      await expect(rows.nth(0)).toHaveText(/^0:0\dReadshared\/allowlist\.ts$/);
-      await expect(rows.nth(1)).toHaveText(/^0:0\dEditedshared\/log\.ts$/);
+      await expect(rows.nth(0)).toHaveText(/^0:0\dReadallowlist\.ts\sshared$/);
+      await expect(rows.nth(1)).toHaveText(/^0:0\dEditedlog\.ts\sshared$/);
       // What it touched, at a glance: in words, and on the map the file it only read stays in view, outlined.
       await expect(page.locator('#touched')).toHaveText('Read 1 file · edited 1 file');
       await expect(page.locator('#nodes .fr.read')).toHaveCount(1);
