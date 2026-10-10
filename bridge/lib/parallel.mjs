@@ -3,7 +3,7 @@
 // the changes in its own section, and, for an agent that reports its edits, only the files those edits named. When
 // the last one ends, whatever changed that no run owns (an edit by hand, an agent outside its section) is recorded as
 // a run of its own, credited to none of them.
-import { refused, serial } from './util.mjs';
+import { line, refused, serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
 import { CONF } from './repo.mjs';
 import { runChecks } from './checks.mjs';
@@ -93,9 +93,17 @@ export async function ownChanges(run, changes) {
     }
   }
   if (notByAgent.length)
-    run.stream.push({ t: 'warn', text: `Changed in this section, not by its agent: ${notByAgent.join(', ')}` });
+    run.stream.push(
+      line('warn', 'not-by-agent', `Changed in this section, not by its agent: ${notByAgent.join(', ')}`, {
+        files: notByAgent.join(', '),
+      }),
+    );
   if (outside.length)
-    run.stream.push({ t: 'warn', text: `Changed outside every section while others worked: ${outside.join(', ')}` });
+    run.stream.push(
+      line('warn', 'outside-sections', `Changed outside every section while others worked: ${outside.join(', ')}`, {
+        files: outside.join(', '),
+      }),
+    );
   return own;
 }
 
@@ -149,10 +157,8 @@ async function closeEpoch(e) {
     const leftover = newRun({ agent: 'detected' });
     leftover.before = await commitWith(now.commit, left, 'before what no session made');
     leftover.after = now.commit;
-    leftover.stream.push({
-      t: 'text',
-      text: `Changed while runs ${e.runs.map(r => r.id).join(', ')} worked, by none of them.`,
-    });
+    const ids = e.runs.map(r => r.id).join(', ');
+    leftover.stream.push(line('text', 'by-none', `Changed while runs ${ids} worked, by none of them.`, { runs: ids }));
     await pin(leftover.id, 'before', leftover.before);
     runs.set(leftover.id, leftover);
     await finishRun(leftover, 'done', { checks: false });

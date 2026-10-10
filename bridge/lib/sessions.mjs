@@ -2,7 +2,7 @@
 // the agent stops. Every agent is handled this way (agents/registry.mjs connectorOf).
 import fs from 'node:fs';
 import path from 'node:path';
-import { logError, refused, serial } from './util.mjs';
+import { line, logError, refused, serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
 import { ROOT, LOA } from './repo.mjs';
 import { finishRun, push, saveRun, working } from './runs.mjs';
@@ -63,7 +63,7 @@ export async function startSession(run, read = {}) {
     // Each run's own: Claude Code's hooks find it by the environment the run starts them with.
     fs.writeFileSync(scopeFileOf(run), JSON.stringify({ scope: run.scope || [], ranges }));
   } catch (e) {
-    push(run, { t: 'err', text: `Couldn't start: ${e.message}` });
+    push(run, line('err', 'not-started', `Couldn't start: ${e.message}`, { why: e.message }));
     return end(run, 'failed');
   }
   await turn(run, scopePreamble(run) + run.prompt);
@@ -78,7 +78,7 @@ async function turn(run, prompt) {
     try {
       await prepareSandbox(run, commandOf(run.agent));
     } catch (e) {
-      push(run, { t: 'err', text: `The sandbox for this section couldn't be set up: ${e.message}` });
+      push(run, line('err', 'no-sandbox-setup', `The sandbox couldn't be set up: ${e.message}`, { why: e.message }));
       await end(run, 'failed');
       return;
     }

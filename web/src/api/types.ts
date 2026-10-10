@@ -16,6 +16,8 @@ export interface StreamEntry {
   cmd?: string;
   /** With say 'path-blocked': the path outside the repo the sandbox refused, ~ for home. */
   outside?: string;
+  /** The values of the sentence `say` names (lib/said.ts). */
+  args?: Record<string, string | number>;
 }
 
 /**
@@ -27,6 +29,9 @@ export interface Check {
   ok: boolean | null;
   couldNotRun?: boolean;
   summary: string;
+  /** A summary the bridge wrote itself, as a code and its values for the app to word (lib/said.ts). */
+  say?: string;
+  args?: Record<string, string | number>;
   ms?: number;
   tail?: string;
 }
@@ -85,6 +90,8 @@ export interface RunDTO {
   id: number;
   agent: string;
   title: string;
+  /** A watch-mode run's title, for the app to word: its first file's name, and how many more (bridges from 0.2.0). */
+  edited?: { file: string; more: number };
   prompt: string;
   scope: string[];
   resumeFrom: number | null;

@@ -124,6 +124,8 @@ export async function runChecks(run) {
         name: c.name,
         ok: null,
         summary: `Skipped: port ${c.requires_free_port} is in use. Stop the running server first.`,
+        say: 'check-port-busy',
+        args: { port: c.requires_free_port },
       });
       continue;
     }
@@ -174,6 +176,7 @@ export async function runChecks(run) {
       name: c.name,
       ok: res.code === 0,
       summary: res.stopped ? `Stopped after ${c.timeout_s || 900} s` : hit ? hit[0].trim() : `exit ${res.code}`,
+      ...(res.stopped ? { say: 'check-stopped', args: { seconds: c.timeout_s || 900 } } : {}),
       ms: Date.now() - t0,
       tail: clean.split('\n').slice(-40).join('\n'),
     });

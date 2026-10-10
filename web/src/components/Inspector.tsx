@@ -22,6 +22,7 @@ import { agentOf, modelOf } from '../lib/constants';
 import { existsNow, fileStat, linesAt, needsYou, runStats, viewOf } from '../lib/model';
 import type { Run } from '../lib/types';
 import { money } from '../lib/util';
+import { said } from '../lib/said';
 import { S, dom, st } from '../state/app';
 import { panels } from '../state/panels';
 import { isOffline, propagate, runAction, selectRun, toggleReviewed, viewFile } from '../state/actions';
@@ -314,7 +315,7 @@ function RunView({ run }: { run: Run }) {
                           ? commandBlockedText(e.say === 'command-blocked')
                           : e.say === 'path-blocked' && e.outside
                             ? t('Tried to open {path}. Blocked.', { path: e.outside })
-                            : e.text}
+                            : said(e)}
                     </span>
                   </li>
                 );
@@ -349,8 +350,8 @@ function RunView({ run }: { run: Run }) {
                     {c.ok === true ? <Check /> : c.ok === false ? <X /> : <Minus />}
                   </span>
                   <span className="nm font-medium">{c.name}</span>
-                  <span className="sm truncate font-mono text-xs text-ink2 tabular-nums" title={c.summary}>
-                    {c.summary}
+                  <span className="sm truncate font-mono text-xs text-ink2 tabular-nums" title={said(c)}>
+                    {said(c)}
                   </span>
                 </div>
               ),

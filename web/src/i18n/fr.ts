@@ -582,5 +582,30 @@ const catalogue: Catalogue = {
     "Can change any file in this repo. Can't touch the rest of your computer.",
   'A command tried to write a protected file or outside this repo. Blocked.':
     'A command tried to write a protected file or outside this repo. Blocked.',
+  'Changed in this section, not by its agent: {files}': 'Changed in this section, not by its agent: {files}',
+  'Changed outside every section while others worked: {files}':
+    'Changed outside every section while others worked: {files}',
+  'Changed while runs {runs} worked, by none of them.': 'Changed while runs {runs} worked, by none of them.',
+  "Changed files the map doesn't show: {files}": "Changed files the map doesn't show: {files}",
+  'Changed outside scope: {files}': 'Changed outside scope: {files}',
+  'Put back what a shell command changed outside the section: {files}':
+    'Put back what a shell command changed outside the section: {files}',
+  "Couldn't start: {why}": "Couldn't start: {why}",
+  "The sandbox couldn't be set up: {why}": "The sandbox couldn't be set up: {why}",
+  'Needs permission: {what}': 'Needs permission: {what}',
+  '{what} failed': '{what} failed',
+  "{agent} can't resume a session: this run starts a new one":
+    "{agent} can't resume a session: this run starts a new one",
+  '{agent} refused the task': '{agent} refused the task',
+  '{agent} stopped at its limit before finishing': '{agent} stopped at its limit before finishing',
+  '{agent} exited with code {code}': '{agent} exited with code {code}',
+  '{agent} exited with code {code}: {why}': '{agent} exited with code {code}: {why}',
+  'Refused: {what}': 'Refused: {what}',
+  'Could not start {command}: {why}': 'Could not start {command}: {why}',
+  'Skipped: port {port} is in use. Stop the running server first.':
+    'Skipped: port {port} is in use. Stop the running server first.',
+  'Stopped after {seconds} s': 'Stopped after {seconds} s',
+  'Edited {file}': 'Edited {file}',
+  'Edited {file} and {n} more': 'Edited {file} and {n} more',
 };
 export default catalogue;

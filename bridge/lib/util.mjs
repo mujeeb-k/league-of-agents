@@ -40,6 +40,11 @@ export function sameSecret(sent, secret) {
     b = Buffer.from(secret);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
+/**
+ * A line the bridge writes into a run's activity, for the app to word in the person's language: `say` names the
+ * sentence and `args` its values (web/src/lib/said.ts). `text` is the same sentence in English, for older apps.
+ */
+export const line = (t, say, text, args = {}) => ({ t, text, say, args });
 /** A request the bridge turns down, as an error the app words by its reason (code 409). */
 export const refused = (reason, message, args = {}) => Object.assign(new Error(message), { code: 409, reason, args });
 export const logError = e => console.error(e.message);

@@ -9,6 +9,7 @@ import { changedBlock } from '../lib/textdiff';
 import type { Run } from '../lib/types';
 import { t, tn } from '../i18n';
 import { fmtDur, relTime } from '../lib/util';
+import { editedTitle } from '../lib/said';
 import { S, st } from '../state/app';
 import { forgetSessions, noteEnded, opensOnFinish } from '../state/sessions';
 import { landed, stepped } from '../state/watch';
@@ -95,6 +96,7 @@ function liveRun(r: RunDTO): Run {
   if (!S.REVIEWED.has(r.id)) S.REVIEWED.set(r.id, new Set());
   return {
     ...r,
+    title: r.edited ? editedTitle(r.edited) : r.title,
     stream: r.stream ?? known?.stream,
     when: relTime(r.startedAt),
     dur: fmtDur(r.startedAt, r.endedAt),

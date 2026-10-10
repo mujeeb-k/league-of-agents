@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readJson, splitLines, serial } from './util.mjs';
+import { line, readJson, splitLines, serial } from './util.mjs';
 import { inScope, rangeKept, scopeEntry } from './scope.mjs';
 import { ROOT, RUNS_DIR, git } from './repo.mjs';
 import { agentLinesOf } from './agents/lines.mjs';
@@ -148,14 +148,22 @@ export async function finishRun(run, status = 'done', { checks = true } = {}) {
   // What the map doesn't show (binary files, the skip list's) is still the run's: said, and undone by a revert.
   run.unseen = own.filter(c => c.unseen).map(({ unseen, ...c }) => c);
   if (run.unseen.length)
-    run.stream.push({
-      t: 'warn',
-      text: `Changed files the map doesn't show: ${run.unseen.map(c => c.path).join(', ')}`,
-    });
+    run.stream.push(
+      line('warn', 'unseen', `Changed files the map doesn't show: ${run.unseen.map(c => c.path).join(', ')}`, {
+        files: run.unseen.map(c => c.path).join(', '),
+      }),
+    );
   run.agentLines = agentLinesOf(run);
-  if ((run.agent === 'detected' || run.agent === 'you') && run.changes.length) run.title = editedTitle(run.changes);
+  if ((run.agent === 'detected' || run.agent === 'you') && run.changes.length) {
+    run.title = editedTitle(run.changes);
+    // The same title for the app to word: the first file's name, and how many more.
+    run.edited = { file: path.posix.basename(run.changes[0].path), more: run.changes.length - 1 };
+  }
   const out = await scopeViolations(run);
-  if (out.length) run.stream.push({ t: 'warn', text: `Changed outside scope: ${out.join(', ')}` });
+  if (out.length)
+    run.stream.push(
+      line('warn', 'outside-scope', `Changed outside scope: ${out.join(', ')}`, { files: out.join(', ') }),
+    );
   run.outOfScope = out;
   run.waiting = null;
   await pinSteps(run);

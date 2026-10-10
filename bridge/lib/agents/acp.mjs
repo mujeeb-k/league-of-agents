@@ -3,6 +3,7 @@ import path from 'node:path';
 import { VERSION } from '../paths.mjs';
 import { inScope } from '../scope.mjs';
 import { ROOT } from '../repo.mjs';
+import { line } from '../util.mjs';
 import { blocked, push, refusedBySandbox } from '../runs.mjs';
 import { step, stepDone, stepRefused, stepsOf } from '../steps.mjs';
 import { lockOfRun } from '../sandbox.mjs';
@@ -141,12 +142,15 @@ function startAcp(run, prompt, name, command, env) {
         const outside = isEdit(tool) ? filesOf(tool).filter(f => run.scope?.length && !inScope(run.scope, f)) : [];
         // DeepSeek Harness's read-only mode denies each write until it asks (dsh-sandbox-policy): expected.
         if (/\[sandbox: file access denied/.test(text))
-          push(run, { t: 'warn', text: `Needs permission: ${acpToolLabel(tool)}` });
+          push(
+            run,
+            line('warn', 'needs-permission', `Needs permission: ${acpToolLabel(tool)}`, { what: acpToolLabel(tool) }),
+          );
         // An edit outside the section the system refused (DeepSeek Harness's full-access mode, in the sandbox).
         else if (outside.length && refusedWrite(text, lockOfRun(run) === 'sandbox')) {
           for (const i of steps.get(u.toolCallId) ?? []) stepRefused(run, i);
           for (const f of outside) blocked(run, f);
-        } else push(run, { t: 'err', text: `${acpToolLabel(tool)} failed` });
+        } else push(run, line('err', 'tool-failed', `${acpToolLabel(tool)} failed`, { what: acpToolLabel(tool) }));
       }
     } else if (u.sessionUpdate === 'config_option_update') {
       run.model = acpModel(u) ?? run.model;
@@ -185,7 +189,11 @@ function startAcp(run, prompt, name, command, env) {
     if (run.sessionId && init.agentCapabilities?.sessionCapabilities?.resume)
       session = await call('session/resume', { sessionId: run.sessionId, ...where });
     else {
-      if (run.sessionId) push(run, { t: 'warn', text: `${name} can't resume a session: this run starts a new one` });
+      if (run.sessionId)
+        push(
+          run,
+          line('warn', 'no-resume', `${name} can't resume a session: this run starts a new one`, { agent: name }),
+        );
       session = await call('session/new', where);
       run.sessionId = session.sessionId;
     }
@@ -195,16 +203,22 @@ function startAcp(run, prompt, name, command, env) {
     const r = await call('session/prompt', { sessionId: run.sessionId, prompt: [{ type: 'text', text: prompt }] });
     flush();
     settle();
-    if (r.stopReason === 'refusal') push(run, { t: 'err', text: `${name} refused the task` });
+    if (r.stopReason === 'refusal') push(run, line('err', 'refused-task', `${name} refused the task`, { agent: name }));
     if (r.stopReason === 'max_tokens' || r.stopReason === 'max_turn_requests')
-      push(run, { t: 'warn', text: `${name} stopped at its limit before finishing` });
+      push(run, line('warn', 'hit-limit', `${name} stopped at its limit before finishing`, { agent: name }));
     outcome = r.stopReason === 'cancelled' ? 'cancelled' : r.stopReason === 'refusal' ? 'failed' : 'done';
   })()
     .catch(e => {
       // The harness exited mid-call: said once, as it closes (done).
       if (e === EXITED) return;
       flush();
-      push(run, { t: 'err', text: `${name}: ${e.message}`.slice(0, 500) });
+      push(
+        run,
+        line('err', 'agent-error', `${name}: ${e.message}`.slice(0, 500), {
+          agent: name,
+          why: e.message.slice(0, 400),
+        }),
+      );
       outcome = 'failed';
     })
     .finally(() => {
@@ -215,7 +229,16 @@ function startAcp(run, prompt, name, command, env) {
     for (const w of waiting.values()) w.reject(EXITED);
     waiting.clear();
     if (!outcome && run.status === 'running')
-      push(run, { t: 'err', text: `${name} exited with code ${code}${lastErr ? `: ${lastErr.slice(0, 300)}` : ''}` });
+      push(
+        run,
+        lastErr
+          ? line('err', 'exited-why', `${name} exited with code ${code}: ${lastErr.slice(0, 300)}`, {
+              agent: name,
+              code: String(code),
+              why: lastErr.slice(0, 300),
+            })
+          : line('err', 'exited', `${name} exited with code ${code}`, { agent: name, code: String(code) }),
+      );
     return outcome || 'failed';
   });
   return {
@@ -245,7 +268,10 @@ function permitAcp(run, tool, options) {
   const option = options.find(o => (ok ? /^allow/ : /^reject/).test(o.kind));
   // An edit outside the section: the person is asked (runs.mjs blocked).
   if (!ok && isEdit(tool) && inRepo && outside.length) for (const f of outside) blocked(run, f);
-  else if (!ok) push(run, { t: 'deny', text: `Refused: ${acpToolLabel({ title: 'a request', ...tool })}` });
+  else if (!ok) {
+    const what = acpToolLabel({ title: 'a request', ...tool });
+    push(run, line('deny', 'refused-request', `Refused: ${what}`, { what }));
+  }
   return option ? { outcome: 'selected', optionId: option.optionId } : { outcome: 'cancelled' };
 }
 /** A path inside the repo: not above it, nor elsewhere on the machine. */

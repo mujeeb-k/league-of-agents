@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { refused, sameSecret, serial } from './util.mjs';
+import { line, refused, sameSecret, serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
 import { ROOT } from './repo.mjs';
 import { blobAt, blobNow, computeChanges, pin, restoreFrom, snapshotNow } from './snapshots.mjs';
@@ -85,7 +85,12 @@ export function shellEnds(run, tool) {
           restored: false,
         });
       saveRun(run);
-      push(run, { t: 'warn', text: `Put back what a shell command changed outside the section: ${undone.join(', ')}` });
+      push(
+        run,
+        line('warn', 'put-back', `Put back what a shell command changed outside the section: ${undone.join(', ')}`, {
+          files: undone.join(', '),
+        }),
+      );
     }
     return undone;
   });

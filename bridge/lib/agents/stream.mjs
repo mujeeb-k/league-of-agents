@@ -6,6 +6,7 @@ import { noteWrites } from './lines.mjs';
 import { refusedWrite, relPaths, repoRelative, toolError, toolLabel, toolSaid, toolText } from './labels.mjs';
 import { launch } from './process.mjs';
 import { shellAccess } from '../shell.mjs';
+import { line } from '../util.mjs';
 import { blocked, push, refusedBySandbox } from '../runs.mjs';
 import { step, stepDone, stepRefused } from '../steps.mjs';
 import { lockOfRun } from '../sandbox.mjs';
@@ -29,7 +30,13 @@ export function streamConnector(bin, argsOf) {
       });
       const done = closed.then(code => {
         if (code && run.status === 'running')
-          push(run, { t: 'err', text: `${AGENTS[run.agent].name} exited with code ${code}` });
+          push(
+            run,
+            line('err', 'exited', `${AGENTS[run.agent].name} exited with code ${code}`, {
+              agent: AGENTS[run.agent].name,
+              code: String(code),
+            }),
+          );
         return code ? 'failed' : 'done';
       });
       return { cancel: () => child.kill('SIGTERM'), done };

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { ROOT, RUNS_DIR } from '../repo.mjs';
+import { line } from '../util.mjs';
 import { push } from '../runs.mjs';
 import { lockOfRun, sandboxArgs } from '../sandbox.mjs';
 
@@ -47,7 +48,9 @@ export function launch(
     rawErr.write(d);
     onStderr(String(d));
   });
-  child.on('error', e => push(run, { t: 'err', text: `Could not start ${cmd}: ${e.message}` }));
+  child.on('error', e =>
+    push(run, line('err', 'not-launched', `Could not start ${cmd}: ${e.message}`, { command: cmd, why: e.message })),
+  );
   /** @type {Promise<number | null>} */
   const closed = new Promise(resolve =>
     child.on('close', code => {
