@@ -129,7 +129,8 @@ export async function runChecks(run) {
     }
     const t0 = Date.now();
     const res = await new Promise(resolve => {
-      const ch = spawn(c.run, { cwd: ROOT, shell: true, env: { ...process.env, CI: '1' } });
+      // In a process group of its own, so its time limit stops everything it started, not just its shell.
+      const ch = spawn(c.run, { cwd: ROOT, shell: true, detached: true, env: { ...process.env, CI: '1' } });
       let out = '';
       const add = d => {
         out += d;
@@ -143,7 +144,9 @@ export async function runChecks(run) {
       const timer = setTimeout(
         () => {
           stopped = true;
-          ch.kill('SIGTERM');
+          try {
+            process.kill(-ch.pid, 'SIGTERM');
+          } catch {}
         },
         (c.timeout_s || 900) * 1000,
       );

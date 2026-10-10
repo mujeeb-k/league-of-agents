@@ -538,7 +538,8 @@ test('a check stopped at its time limit says so', async () => {
   const repo = makeRepo();
   fs.writeFileSync(
     path.join(repo, 'loa.config.json'),
-    JSON.stringify({ checks: [{ name: 'tests', run: 'sleep 30', timeout_s: 1 }] }),
+    // A command its shell runs as a child, not in its own place: the time limit has to stop both.
+    JSON.stringify({ checks: [{ name: 'tests', run: 'sleep 30; echo done', timeout_s: 1 }] }),
   );
   git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qam', 'slow check');
   approveChecks(repo);
