@@ -23,8 +23,8 @@ export async function runHook(kind, agent = 'claude') {
   if (kind === 'post' || (kind === 'pre' && data.tool_name === 'Bash')) await shellBracket(kind, data);
   if (kind === 'pre') {
     const scopeFile = process.env.LOA_SCOPE_FILE;
-    if (!scopeFile || !fs.existsSync(scopeFile)) process.exit(0);
-    const { scope, ranges } = JSON.parse(fs.readFileSync(scopeFile, 'utf8'));
+    if (!scopeFile) process.exit(0);
+    const { scope, ranges } = selectionOf(scopeFile);
     if (!scope.length) process.exit(0);
     const input = data.tool_input || {};
     const f = input.file_path || input.notebook_path;
@@ -109,10 +109,11 @@ export async function runHook(kind, agent = 'claude') {
 async function shellBracket(kind, data) {
   const scopeFile = process.env.LOA_SCOPE_FILE || '';
   const id = /scope-(\d+)\.json$/.exec(scopeFile)?.[1];
-  const scope = id ? (readJson(scopeFile, null)?.scope ?? []) : [];
   // The run's own port and token, from the bridge that started it (lib/shell.mjs shellAccess).
   const { LOA_BRIDGE_PORT: port, LOA_SHELL_TOKEN: token } = process.env;
-  if (!scope.length || !port || !token) process.exit(0);
+  if (!id || !port || !token) process.exit(0);
+  const { scope } = kind === 'pre' ? selectionOf(scopeFile) : { scope: readJson(scopeFile, null)?.scope ?? [] };
+  if (!scope.length) process.exit(0);
   try {
     const res = await fetch(`http://127.0.0.1:${port}/api/runs/${id}/shell`, {
       method: 'POST',
@@ -120,6 +121,7 @@ async function shellBracket(kind, data) {
       body: JSON.stringify({ phase: kind === 'pre' ? 'start' : 'end', tool: data.tool_use_id }),
       signal: AbortSignal.timeout(60000),
     });
+    if (!res.ok) throw new Error(`the bridge answered ${res.status}`);
     const { undone = [] } = /** @type {{ undone?: string[] }} */ (await res.json());
     if (undone.length) {
       process.stderr.write(
@@ -128,8 +130,33 @@ async function shellBracket(kind, data) {
       );
       process.exit(2);
     }
-  } catch {}
+  } catch {
+    // Without its snapshot before, what the command changes outside the section couldn't be put back: it doesn't run.
+    if (kind === 'pre') {
+      process.stderr.write(
+        "League of Agents scope lock: the bridge didn't answer, so this command can't be checked and was not run.",
+      );
+      process.exit(2);
+    }
+  }
   process.exit(0);
+}
+
+/**
+ * A session's selection, from the file its bridge wrote. One that can't be read blocks the tool call: the lock fails
+ * closed.
+ */
+function selectionOf(scopeFile) {
+  try {
+    const { scope, ranges = {} } = JSON.parse(fs.readFileSync(scopeFile, 'utf8'));
+    if (!Array.isArray(scope)) throw new Error('no scope');
+    return { scope, ranges };
+  } catch {
+    process.stderr.write(
+      "League of Agents scope lock: this session's selection can't be read, so nothing may be changed. Stop here.",
+    );
+    process.exit(2);
+  }
 }
 
 /** The git repo a folder is in, or null. */

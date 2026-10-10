@@ -3620,6 +3620,32 @@ test('the editor on a live repo: save is a You run that reverts cleanly; disk ch
   }
 });
 
+// The lock fails closed: a session's hook that can't read its selection, or can't reach its bridge to snapshot a
+// shell command, blocks the tool call rather than let it through unchecked.
+test("scope lock: a selection it can't read, or a bridge that doesn't answer, blocks the tool call", () => {
+  const repo = makeRepo();
+  const dir = path.dirname(repo);
+  const hook = (env: Record<string, string>, data: object) =>
+    spawnSync(process.execPath, [BRIDGE, 'hook', 'pre'], {
+      cwd: repo,
+      input: JSON.stringify({ cwd: repo, ...data }),
+      env: { ...process.env, ...env },
+    }).status;
+  const edit = { tool_name: 'Write', tool_input: { file_path: path.join(repo, 'shared/log.ts'), content: 'x' } };
+  try {
+    expect(hook({ LOA_SCOPE_FILE: path.join(dir, 'scope-1.json') }, edit)).toBe(2);
+    fs.writeFileSync(path.join(dir, 'scope-2.json'), '{"scope": [');
+    expect(hook({ LOA_SCOPE_FILE: path.join(dir, 'scope-2.json') }, edit)).toBe(2);
+    fs.writeFileSync(path.join(dir, 'scope-3.json'), JSON.stringify({ scope: ['shared/'], ranges: {} }));
+    expect(hook({ LOA_SCOPE_FILE: path.join(dir, 'scope-3.json') }, edit)).toBe(0);
+    const shell = { tool_name: 'Bash', tool_use_id: 't1', tool_input: { command: 'ls' } };
+    const unreachable = { LOA_SCOPE_FILE: path.join(dir, 'scope-3.json'), LOA_BRIDGE_PORT: '1', LOA_SHELL_TOKEN: 'x' };
+    expect(hook(unreachable, shell)).toBe(2);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // A run limited to lines of a file. The range is held by its surroundings.
 test('scope lock on a line range: edits inside pass, any change outside is blocked', () => {
   const repo = makeRepo();
