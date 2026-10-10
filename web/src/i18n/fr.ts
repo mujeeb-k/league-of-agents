@@ -578,5 +578,9 @@ const catalogue: Catalogue = {
   'Tried to open {path}. Blocked.': 'Tried to open {path}. Blocked.',
   'Checking…': 'Checking…',
   '{agent} is still being checked. Try again in a moment.': '{agent} is still being checked. Try again in a moment.',
+  "Can change any file in this repo. Can't touch the rest of your computer.":
+    "Can change any file in this repo. Can't touch the rest of your computer.",
+  'A command tried to write a protected file or outside this repo. Blocked.':
+    'A command tried to write a protected file or outside this repo. Blocked.',
 };
 export default catalogue;

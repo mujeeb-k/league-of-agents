@@ -115,8 +115,9 @@ export function beginRun(opts) {
     if (lockOfRun(opts) === 'refuse') throw NO_SANDBOX();
     const before = await startingPoint();
     const run = newRun(opts);
-    // Said on its card: whether the system keeps it inside its section.
+    // Said on its card: whether the system keeps it inside its section, or, on the whole repository, inside the repo.
     if (run.scope.length) run.stays = lockOfRun(run) === 'sandbox';
+    else if (lockOfRun(run) === 'sandbox') run.contained = true;
     // Its colour on the map while it works: the first one free, kept with the run so every window and a reload
     // show the same.
     const taken = new Set([...working.values()].map(r => r.slot));
@@ -207,7 +208,17 @@ export function blocked(run, file) {
 export function commandBlocked(run) {
   if (run.commandBlocked) return;
   run.commandBlocked = true;
-  push(run, { t: 'deny', text: 'A command tried to write outside the selection. Blocked.', say: 'command-blocked' });
+  // On the whole repository there is no selection: what it may not write is a protected file, or outside the repo.
+  push(
+    run,
+    run.scope?.length
+      ? { t: 'deny', text: 'A command tried to write outside the selection. Blocked.', say: 'command-blocked' }
+      : {
+          t: 'deny',
+          text: 'A command tried to write a protected file or outside this repo. Blocked.',
+          say: 'command-blocked-repo',
+        },
+  );
   saveRun(run);
   emitRun(run);
 }

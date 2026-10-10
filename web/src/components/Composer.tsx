@@ -22,7 +22,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { Textarea } from './ui/textarea';
-import { BetaTag, Dot, Spinner } from './bits';
+import { BetaTag, containedText, Dot, Spinner } from './bits';
 import { Tip } from './TopBar';
 import { CopyCommand } from './ConnectDialog';
 import { ScopeChip } from './ScopeChip';
@@ -342,10 +342,14 @@ export function Composer() {
         </div>
         <AgentPicker />
       </div>
-      {/* With a selection: whether the agent picked stays inside it. */}
+      {/* With a selection: whether the agent picked stays inside it. With none: whether it stays inside the repo. */}
       {!blocked && st.sel.size && stays !== undefined ? (
         <p id="reach" className="px-1 pb-2 text-right text-xs text-muted-foreground text-pretty">
           {reachOf(stays)}
+        </p>
+      ) : !blocked && !st.sel.size && S.CONN && S.LIVE_AGENTS?.[st.agent]?.contained ? (
+        <p id="reach" className="px-1 pb-2 text-right text-xs text-muted-foreground text-pretty">
+          {containedText()}
         </p>
       ) : null}
       {claudeProblem ? <ClaudeProblem problem={claudeProblem} /> : null}

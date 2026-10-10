@@ -67,6 +67,9 @@ export function loadAgents() {
   // On a section, whether the system keeps each agent the bridge starts inside it (the app says so before a run).
   for (const id of [...Object.keys(STREAMED), ...Object.keys(ACP)])
     AGENTS[id].stays = lockOfRun({ agent: id, scope: ['/'] }) === 'sandbox';
+  // On the whole repository, whether the system keeps each inside the repo.
+  for (const id of [...Object.keys(STREAMED), ...Object.keys(ACP)])
+    AGENTS[id].contained = lockOfRun({ agent: id, scope: [] }) === 'sandbox';
 }
 /**
  * @typedef {'done' | 'failed' | 'cancelled'} Outcome

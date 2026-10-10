@@ -19,7 +19,7 @@ import { stepsOf } from '../lib/live';
 import { money } from '../lib/util';
 import { notifying, toggleNotifying } from '../state/notices';
 import { cn } from '@/lib/utils';
-import { BetaTag, CheckBadge, Dot, FilePath, Stat } from './bits';
+import { BetaTag, CheckBadge, commandBlockedText, containedText, Dot, FilePath, Stat } from './bits';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { FileIcon } from './FileIcon';
 import { Tip } from './TopBar';
@@ -248,6 +248,9 @@ function RunRow({ r }: { r: Run }) {
         {running && r.scope?.length && r.stays !== undefined ? (
           <p className="reach mt-1 text-xs text-muted-foreground text-pretty">{reachOf(r.stays)}</p>
         ) : null}
+        {running && !r.scope?.length && r.contained ? (
+          <p className="reach mt-1 text-xs text-muted-foreground text-pretty">{containedText()}</p>
+        ) : null}
         {running ? <Asks r={r} /> : null}
         {r.blockedPaths?.map(p => (
           <p key={p} className="blocked mt-1 text-xs text-ink2 [overflow-wrap:anywhere]">
@@ -255,9 +258,7 @@ function RunRow({ r }: { r: Run }) {
           </p>
         ))}
         {r.commandBlocked ? (
-          <p className="blocked mt-1 text-xs text-ink2 text-pretty">
-            {t('A command tried to write outside your selection. Blocked.')}
-          </p>
+          <p className="blocked mt-1 text-xs text-ink2 text-pretty">{commandBlockedText(!!r.scope?.length)}</p>
         ) : null}
         {running ? null : (
           <>

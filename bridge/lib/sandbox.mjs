@@ -46,14 +46,16 @@ function sandboxStarts() {
 }
 
 /**
- * How a run is held to its section by the system: 'sandbox', or 'refuse' when it should be and the sandbox can't
- * start (closed, never open); 'none' for a run on the whole repository, an agent not proved inside the sandbox, or a
- * system without one, where the hooks and the flags after the run are all there is.
+ * How a run is held by the system: 'sandbox' (to its section, or for a run on the whole repository to the repo), or
+ * 'refuse' for a run on a section when the sandbox can't start (closed, never open). 'none' for an agent not proved
+ * inside the sandbox, a system without one, or a run on the whole repository where the sandbox can't start: there
+ * the hooks and the flags after the run are all there is, and Claude Code keeps its own permission check.
  * @returns {'sandbox' | 'refuse' | 'none'}
  */
 export function lockOfRun(run) {
-  if (!run.scope?.length || !Object.hasOwn(TEMP_BESIDE, run.agent) || !HAS_SANDBOX) return 'none';
-  return sandboxStarts() ? 'sandbox' : 'refuse';
+  if (!Object.hasOwn(TEMP_BESIDE, run.agent) || !HAS_SANDBOX) return 'none';
+  if (sandboxStarts()) return 'sandbox';
+  return run.scope?.length ? 'refuse' : 'none';
 }
 
 /** An error the app words: a session on a section that the sandbox can't lock. */
@@ -131,15 +133,13 @@ export function sandboxArgs(run) {
  * which later sessions run.
  * @returns {[string, string][]} [kind, path]
  */
-function runLater(gitDir, commonDir, hooksDir) {
+function runLater(gitDir, commonDir, hooksDir, whole) {
   const home = os.homedir();
   const hermes = process.env.HERMES_HOME || path.join(home, '.hermes');
   const config = process.env.XDG_CONFIG_HOME || path.join(home, '.config');
   const pkg = path.dirname(BRIDGE_DIR);
   /** @type {[string, string][]} */
   const out = [
-    ['subpath', gitDir],
-    ['subpath', commonDir],
     ['subpath', hooksDir],
     ['literal', path.join(home, '.gitconfig')],
     ['subpath', path.join(config, 'git')],
@@ -152,6 +152,11 @@ function runLater(gitDir, commonDir, hooksDir) {
     ['literal', path.join(hermes, 'config.yaml')],
     ['subpath', path.join(hermes, 'hooks')],
   ];
+  // A run on a section never writes git's folder. One on the whole repository does, so its agent can commit: all
+  // but git's settings, which name programs git runs (filters, fsmonitor, the hooks' own folder).
+  for (const dir of [gitDir, commonDir])
+    if (whole) for (const f of ['config', 'config.worktree']) out.push(['literal', path.join(dir, f)]);
+    else out.push(['subpath', dir]);
   if (process.env.GIT_CONFIG_GLOBAL) out.push(['literal', process.env.GIT_CONFIG_GLOBAL]);
   // The package the bridge runs from, unless it is this repo's own code (working on League of Agents itself).
   if (pkg !== ROOT && !pkg.startsWith(ROOT + path.sep)) out.push(['subpath', pkg]);
@@ -280,6 +285,9 @@ export async function prepareSandbox(run, command) {
   };
   const inSection = [],
     folders = [];
+  // A run on the whole repository: all of it, and git's own folder (elsewhere, for a linked worktree).
+  const whole = !run.scope.length;
+  if (whole) allow.push('(subpath (param "ROOT"))');
   for (const e of run.scope.map(s => scopeEntry(s).path)) {
     const abs = path.join(real, e);
     if (e.endsWith('/')) {
@@ -317,15 +325,18 @@ export async function prepareSandbox(run, command) {
   // Tracked files an ignore pattern matches though they are committed. Matched here in one pass; git's own matching
   // takes seconds in llvm.
   const ignoredRx = patterns.paths.length ? new RegExp(patterns.paths.join('|')) : null;
-  for (const p of tracked.split('\0'))
+  for (const p of whole ? [] : tracked.split('\0'))
     if (p && !inSection.some(f => f(p)) && ignoredRx?.test(path.join(real, p)))
       deny.push(add('literal', path.join(real, p)));
-  const later = runLater(gitDir.trim(), path.resolve(real, commonDir.trim()), path.resolve(real, hooksDir.trim()));
+  const git = [gitDir.trim(), path.resolve(real, commonDir.trim())];
+  if (whole) for (const d of git) allow.push(add('subpath', realish(d)));
+  const later = runLater(git[0], git[1], path.resolve(real, hooksDir.trim()), whole);
   // In the repo, though git ignores them: the bridge's own folder, and the agents' settings and hooks for this repo,
   // which later sessions run outside the sandbox. Writable only when the section holds them.
   later.push(['subpath', path.join(real, '.loa')]);
   for (const p of REPO_SETTINGS) if (!inSection.some(f => f(p))) later.push(['literal', path.join(real, p)]);
-  const parents = new Set(above(real));
+  // The repo's own folder, and every folder above it and above each of those: none can be moved away and replaced.
+  const parents = new Set([real, ...above(real)]);
   for (const [kind, p] of later) {
     const at = realish(p);
     deny.push(add(kind, at));

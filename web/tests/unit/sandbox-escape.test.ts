@@ -20,8 +20,11 @@ const PRIVATE = [
   'code/other/.git/config',
 ];
 
-/** Runs each command in the sandbox of a session on src/, in a fresh repo; true where the command succeeded. */
-function attempt(commands: Record<string, string>) {
+/**
+ * Runs each command in the sandbox of a session on src/ (or, with no scope, on the whole repository), in a fresh
+ * repo; true where the command succeeded.
+ */
+function attempt(commands: Record<string, string>, scope = ['src/']) {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'loa-escape-')));
   const home = path.join(base, 'home'),
     repo = path.join(base, 'code', 'repo');
@@ -43,7 +46,7 @@ function attempt(commands: Record<string, string>) {
   const script = `
     const r = await import(${url('repo.mjs')}); r.openRepo();
     const sb = await import(${url('sandbox.mjs')});
-    const run = { id: 1, scope: ['src/'], agent: 'claude' };
+    const run = { id: 1, scope: ${JSON.stringify(scope)}, agent: 'claude' };
     await sb.prepareSandbox(run, '/usr/bin/true');
     process.stdout.write(JSON.stringify(sb.sandboxArgs(run)));`;
   const args = JSON.parse(
@@ -132,5 +135,44 @@ describe.runIf(process.platform === 'darwin')('a session on a section, in its sa
         nowhere: 'echo x > /dev/null',
       }),
     ).toEqual({ notes: false, shell: false, otherRepo: false, agent: true, temp: true, nowhere: true });
+  });
+});
+
+describe.runIf(process.platform === 'darwin')('a session on the whole repository, in its sandbox', () => {
+  const whole = (commands: Record<string, string>) => attempt(commands, []);
+
+  it('writes anywhere in the repo, and commits', () => {
+    expect(
+      whole({
+        file: 'echo x >> other.txt && echo y > new.txt',
+        commit:
+          'git -c user.name=t -c user.email=t@example.test commit -qam "by the agent" && git log --oneline | grep -q agent',
+      }),
+    ).toEqual({ file: true, commit: true });
+  });
+
+  it("never writes git's settings or hooks, the bridge's folder, or agents' settings in the repo", () => {
+    expect(
+      whole({
+        config: 'git config core.fsmonitor "touch /tmp/x"',
+        configFile: 'echo "[core]" >> .git/config',
+        hook: 'mkdir -p .git/hooks && echo "#!/bin/sh" > .git/hooks/pre-commit',
+        bridge: 'echo x > .loa/planted',
+        agent: 'mkdir -p .claude && echo "{}" > .claude/settings.json',
+      }),
+    ).toEqual({ config: false, configFile: false, hook: false, bridge: false, agent: false });
+  });
+
+  it("can't read the home folder, write outside the repo, or move the repo away", () => {
+    expect(
+      whole({
+        key: 'cat "$HOME/.ssh/id_ed25519"',
+        otherRepo: 'cat "$HOME/code/other/.git/config"',
+        notes: 'touch "$HOME/notes"',
+        shell: 'echo x >> "$HOME/.zshrc"',
+        move: 'mv "$BASE/code/repo" "$BASE/code/repo-away"',
+        token: 'cat .loa/bridge.json',
+      }),
+    ).toEqual({ key: false, otherRepo: false, notes: false, shell: false, move: false, token: false });
   });
 });

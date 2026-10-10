@@ -34,7 +34,7 @@ import { CopyCommand, SETUP_PROMPT, setConnectOpen } from './ConnectDialog';
 import { Kbd, KbdGroup } from './ui/kbd';
 import { Markdown } from './Markdown';
 import { ScopeChip } from './ScopeChip';
-import { BetaTag, Dot, Spinner, Stat, StepText } from './bits';
+import { BetaTag, commandBlockedText, Dot, Spinner, Stat, StepText } from './bits';
 import { IntroSection } from './Intro';
 import { locale, t, tn } from '../i18n';
 import { Timeline } from './Timeline';
@@ -317,8 +317,8 @@ function RunView({ run }: { run: Run }) {
                     <span className="min-w-0 leading-[18px] [overflow-wrap:anywhere]">
                       {e.file
                         ? t('Tried to change {file}. Blocked.', { file: e.file })
-                        : e.say === 'command-blocked'
-                          ? t('A command tried to write outside your selection. Blocked.')
+                        : e.say === 'command-blocked' || e.say === 'command-blocked-repo'
+                          ? commandBlockedText(e.say === 'command-blocked')
                           : e.say === 'path-blocked' && e.outside
                             ? t('Tried to open {path}. Blocked.', { path: e.outside })
                             : e.text}

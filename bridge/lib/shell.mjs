@@ -38,7 +38,8 @@ export function shellTokenFits(pathname, token) {
 /** The snapshot before each shell command under way, by run and tool call. */
 const before = new Map();
 /** What a run's snapshots look at: its section in the sandbox, the whole tree without one. */
-const watched = run => (lockOfRun(run) === 'sandbox' ? run.scope.map(s => scopeEntry(s).path) : null);
+const watched = run =>
+  lockOfRun(run) === 'sandbox' && run.scope.length ? run.scope.map(s => scopeEntry(s).path) : null;
 
 export function shellStarts(run, tool) {
   return serial(async () => {

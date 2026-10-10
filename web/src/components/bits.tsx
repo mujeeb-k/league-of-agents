@@ -154,3 +154,12 @@ export function StepText({
     </span>
   );
 }
+
+/** A command's write the sandbox refused, in words: outside the selection, or for a run on the whole repository. */
+export const commandBlockedText = (scoped: boolean) =>
+  scoped
+    ? t('A command tried to write outside your selection. Blocked.')
+    : t('A command tried to write a protected file or outside this repo. Blocked.');
+
+/** Where a session on the whole repository can change files, when the system keeps it inside the repo. */
+export const containedText = () => t("Can change any file in this repo. Can't touch the rest of your computer.");

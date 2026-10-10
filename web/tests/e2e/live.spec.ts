@@ -1681,7 +1681,7 @@ test('an ACP harness (Hermes): asks before editing, reports its model, is refuse
     // Found once `hermes acp --check` passes; the state names it and says nothing of its command.
     await expect
       .poll(async () => ((await api('/api/state')).body as unknown as StateResponse).agents.hermes)
-      .toEqual({ name: 'Hermes', available: true, stays: SANDBOX });
+      .toEqual({ name: 'Hermes', available: true, stays: SANDBOX, contained: SANDBOX });
     const first = await runToEnd(b, {
       agent: 'hermes',
       prompt: 'Record who reviewed it',
@@ -2736,12 +2736,14 @@ test.describe('sessions at once', () => {
     }
   };
   onMac('inside the sandbox, Claude Code runs without its own permission check, and the sandbox holds it', async () => {
+    // On a section, a file outside it can't be written; on the whole repository, any file in the repo can.
     expect(await permissionOf({}, ['shared/'])).toEqual({ mode: 'bypassPermissions', wrote: false });
+    expect(await permissionOf({}, [])).toEqual({ mode: 'bypassPermissions', wrote: true });
   });
   test('where there is no sandbox, Claude Code keeps its own permission check', async () => {
-    // A system without one (Linux, Windows), and a run on the whole repository anywhere.
+    // A system without one (Linux, Windows): on a section, and on the whole repository.
     expect(await permissionOf({ LOA_SANDBOX: 'off' }, ['shared/'])).toEqual({ mode: 'acceptEdits', wrote: true });
-    expect(await permissionOf({}, [])).toEqual({ mode: 'acceptEdits', wrote: true });
+    expect(await permissionOf({ LOA_SANDBOX: 'off' }, [])).toEqual({ mode: 'acceptEdits', wrote: true });
   });
   onMac(
     "a sandbox that can't start starts no session on a section; a whole-repository run keeps the check",
@@ -3167,8 +3169,12 @@ test.describe('sessions at once, in the app', () => {
       async repo => {
         const STAYS = 'Stays inside your selection';
         const FLAGGED = "Can change files outside your selection. You'll see each one flagged.";
-        // With nothing selected there is nothing to stay inside: no line.
-        await expect(page.locator('#reach')).toHaveCount(0);
+        // With nothing selected, the session is on the whole repository: held inside it where there is a sandbox.
+        if (SANDBOX)
+          await expect(page.locator('#reach')).toHaveText(
+            "Can change any file in this repo. Can't touch the rest of your computer.",
+          );
+        else await expect(page.locator('#reach')).toHaveCount(0);
         await folder(page, 'shared').click();
         await expect(page.locator('#reach')).toHaveText(SANDBOX ? STAYS : FLAGGED);
         await page.locator('#agentBtn').click();
@@ -3179,6 +3185,17 @@ test.describe('sessions at once, in the app', () => {
         await run(page, 'Add a header comment. wait:a');
         await expect(running(page).locator('.reach')).toHaveText(SANDBOX ? STAYS : FLAGGED);
         go(repo, 'a');
+        await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+        // A session on the whole repository says on its card that it is held inside the repo, where it is.
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Escape');
+        await run(page, 'Add a header comment. wait:b');
+        if (SANDBOX)
+          await expect(running(page).locator('.reach')).toHaveText(
+            "Can change any file in this repo. Can't touch the rest of your computer.",
+          );
+        else await expect(running(page).locator('.reach')).toHaveCount(0);
+        go(repo, 'b');
         await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
       },
       { LOA_CODEX_BIN: FAKE_CODEX },
@@ -3455,7 +3472,7 @@ test('harnesses the person adds in their own settings are listed by name and run
   const b = await startBridge(repo);
   try {
     const agents = ((await call(b, '/api/state')).body as unknown as StateResponse).agents;
-    expect(agents.goose).toEqual({ name: 'Goose', available: true, stays: false });
+    expect(agents.goose).toEqual({ name: 'Goose', available: true, stays: false, contained: false });
     expect(agents.claude!.name).toBe('Claude Code');
     expect(agents.dsh?.name).not.toBe('Mine too');
     expect(Object.keys(agents)).not.toContain('Not an id');
