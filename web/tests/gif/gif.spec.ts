@@ -1,5 +1,5 @@
 // The README's GIF: the demo's core loop, recorded from the built app and encoded with gifenc.
-// Run alone with `npm run gif`; it writes docs/media/demo.gif.
+// Run alone with `npm run media`; it writes docs/media/demo.gif (and og.png, tests/gif/og.spec.ts).
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
@@ -37,21 +37,22 @@ class Recording {
 // jumps instead of flying: a recording catches a flight between frames, mid-zoom.
 test.use({ viewport: SIZE, deviceScaleFactor: 0.8, colorScheme: 'light' });
 
-test('README GIF: the demo, from the map to a reviewed run', async ({ page }) => {
+test('README GIF: sessions at work, a new one beside them, from the map to a reviewed run', async ({ page }) => {
   test.setTimeout(120_000);
+  const rec = new Recording(page);
   await page.goto(APP);
   await page.locator('#insp section').first().waitFor();
-  await page.keyboard.press('Escape');
-  await page.keyboard.press('0');
-  await page.waitForTimeout(800);
-  const rec = new Recording(page);
   rec.start();
-  await rec.hold(1200);
+  // The demo opens on three sessions at work, their markers on the files they read and edit; they carry on beside
+  // the new session.
+  await rec.hold(2500);
+  await page.keyboard.press('Escape');
+  await rec.hold(900);
   // Point the agent at a folder, and ask.
-  await page.locator('.frame[data-dir="server/delivery"] > .flabel b').click();
+  await page.locator('.frame[data-dir="server/api/routes"] > .flabel b').click();
   await rec.hold(700);
   await page.locator('#prompt').click();
-  await page.keyboard.type('Log why a delivery was dead-lettered', { delay: 45 });
+  await page.keyboard.type('Log every request the API rejects', { delay: 45 });
   await rec.hold(400);
   await page.keyboard.press('Enter');
   // The run finishes; the map flies to it and shows the diff.
@@ -65,7 +66,7 @@ test('README GIF: the demo, from the map to a reviewed run', async ({ page }) =>
   await page.keyboard.press('j');
   await rec.hold(1200);
   await page.keyboard.press('r');
-  await expect(page.locator('#insp')).toContainText('1 of 3');
+  await expect(page.locator('#insp')).toContainText(/1 of \d/);
   await rec.hold(1600);
   await rec.stop();
 

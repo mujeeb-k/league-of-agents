@@ -10,7 +10,7 @@ Coding agents change more code than anyone can review line by line. League of Ag
 
 It runs on your computer, works with the agents you already use, and is open source.
 
-![Selecting a folder on the map, asking Claude Code for a change, then reviewing the run's diff file by file](docs/media/demo.gif)
+![Three sessions at work on the map, a fourth started on a folder beside them, then its diff reviewed file by file](docs/media/demo.gif)
 
 ## What you can do
 
@@ -20,6 +20,7 @@ It runs on your computer, works with the agents you already use, and is open sou
   - **"Can change files outside your selection. You'll see each one flagged."** Codex and Cursor, and every agent where there's no sandbox (Linux, Windows). With the hooks on, Claude Code's edit tools are still blocked outside your selection, and what its shell commands change outside it is put back.
 
   When a session tries to change a file outside your selection, the write is blocked and its card asks: "Wants to change <file>". **Allow** adds the file to its selection and the session carries on where it stopped; **Refuse** keeps the file out. If another session is working on that file, the card says which, and Allow waits until that session ends. The hooks are off until you say yes: the first `npx leagueofagents-cli@latest` in a terminal asks once and remembers, and without a terminal they stay off unless you pass `--hooks`. To check, look for `"hooks": true` in `.loa/bridge.json`.
+- **Watch the work.** Each session at work has a marker on the file it's reading or editing, on the map and the minimap, and its edits are drawn as they land. Follow a session to have the map move with it. A run's steps are listed in order; click one to see its file as that step left it.
 - **Edit files yourself.** Double-click a file's code to open it in the editor. Saved edits are recorded and can be undone like any agent run.
 - **Update what depends on a change.** Rename a function, then ask the agent to update every file that uses it. The diff of your change goes into the agent's prompt. The map shows each file it touched.
 - **Review before you keep.** Switch between Before, After and Diff, step through changed files, then keep the run or undo it in one click. Once kept, commit just that run's files with a message you write; nothing is pushed.
@@ -71,11 +72,11 @@ Save it as `~/.config/league-of-agents/agents.json` and restart League of Agents
 
 ## Using it
 
-**From the map.** Select files, folders or lines, pick an agent, describe the change and press Enter. When the run finishes, review it and keep it or undo it. With a finished run selected, your next prompt continues the same session. Remove the "Follow-up" chip to start fresh.
+**From the map.** Select files, folders or lines, pick an agent, describe the change and press Enter. When the run finishes, review it and keep it or undo it. With a finished run selected, your next prompt continues the same session. To start fresh, choose "Start a new session instead" from the "Follow-up" menu.
 
 Selected lines are held by their text and the lines around them, not by their numbers. If edits, a branch switch or a rebase move the code, the selection follows it. If the code changed, was removed, or can't be told apart from an identical copy, the selection says so and nothing runs until you select again. When an agent edits inside your selection, the selection takes the new lines.
 
-Edits made during an agent's run are counted in that run, including your own. One run happens at a time.
+Sessions on sections that don't overlap run at the same time; a session on the whole repository runs alone. Edits made during a run are counted in that run, including your own.
 
 **From your terminal.** Use Claude Code, Codex or Cursor as usual. With the hooks on, each prompt you send becomes a run on the map, titled by the prompt.
 
@@ -157,7 +158,7 @@ Snapshots stay on your computer unless you send them: `git push`, `git push --al
 
 - macOS. Linux passes the full test suite in CI, but hasn't been tried with a real agent yet; there, it opens the local app. Windows isn't supported yet.
 - Remote machines, SSH and dev containers aren't supported. League of Agents must run on the same computer as your browser.
-- The map shows up to 1,500 code files, and the first 400 lines of each on its card; a file opens in full, before, after and diff. Files over 16 MB aren't on the map.
+- A map shows up to 5,000 code files, and the first 400 lines of each on its card; a file opens in full, before, after and diff. In a larger repository you pick a folder to map, and can change it at any time. Files over 16 MB aren't on the map.
 - Non-code files, such as images, are in snapshots and undo, but not on the map.
 - Files git ignores and new files that usually hold secrets are never recorded.
 - Runs on sections that don't overlap work at the same time; a run on the whole repository works alone.
