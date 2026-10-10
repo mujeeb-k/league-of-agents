@@ -1908,6 +1908,28 @@ test.describe('sessions at once', () => {
       expect((await state(b)).runs.map(r => r.agent)).toEqual(['hermes', 'codex']);
     }));
 
+  test('a file put back twice is restored as the later command left it, once', () =>
+    twoSessions(
+      async (b, repo) => {
+        const h = (await start(b, ['apps/'], 'edit:apps/console/main.ts wait:a')).body as unknown as RunDTO;
+        const prompt = 'Log it. shell:notes.md shell:notes.md';
+        const c = (await call(b, '/api/runs', { agent: 'claude', prompt, scope: ['shared/'] }))
+          .body as unknown as RunDTO;
+        await until(b, c.id, 'done');
+        expect((await runOf(b, c.id)).putBack?.map(k => k.ref)).toEqual([
+          `refs/loa/runs/${c.id}/put-back-0`,
+          `refs/loa/runs/${c.id}/put-back-1`,
+        ]);
+        expect((await call(b, `/api/runs/${c.id}/put-back`, { path: 'notes.md' })).status).toBe(200);
+        expect((await runOf(b, c.id)).putBack?.map(k => k.restored)).toEqual([true, true]);
+        expect((await call(b, `/api/runs/${c.id}/put-back`, { path: 'notes.md' })).status).not.toBe(200);
+        fs.rmSync(path.join(repo, 'notes.md'));
+        go(repo, 'a');
+        await until(b, h.id, 'done');
+      },
+      { LOA_SANDBOX: 'off' },
+    ));
+
   test("without a sandbox, Claude Code's shell commands outside its section are put back, kept, and restored in one click", () =>
     twoSessions(
       async (b, repo) => {

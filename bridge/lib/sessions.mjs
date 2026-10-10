@@ -8,6 +8,7 @@ import { ROOT, LOA } from './repo.mjs';
 import { finishRun, push, saveRun, working } from './runs.mjs';
 import { emitRun } from './events.mjs';
 import { forgetSandbox, lockOfRun, prepareSandbox } from './sandbox.mjs';
+import { forgetShell } from './shell.mjs';
 import { connectorOf, lockOf } from './agents/registry.mjs';
 
 /** Each run's agent at work, and its run finishing once the agent stops. */
@@ -117,6 +118,7 @@ function carryOn(run) {
 async function end(run, status) {
   fs.rmSync(scopeFileOf(run), { force: true });
   forgetSandbox(run);
+  forgetShell(run);
   await finishRun(run, status);
 }
 /**

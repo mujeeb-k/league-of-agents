@@ -26,6 +26,8 @@ export function shellAccess(run) {
   if (!tokens.has(run.id)) tokens.set(run.id, crypto.randomBytes(24).toString('hex'));
   return { LOA_BRIDGE_PORT: String(port), LOA_SHELL_TOKEN: tokens.get(run.id) };
 }
+/** A run ended: its token is good for nothing more. */
+export const forgetShell = run => tokens.delete(run.id);
 /** Whether a request is a run's hooks calling its own shell route with its token. */
 export function shellTokenFits(pathname, token) {
   const id = Number(/^\/api\/runs\/(\d+)\/shell$/.exec(pathname)?.[1]);
@@ -88,11 +90,11 @@ export function shellEnds(run, tool) {
 }
 
 /**
- * Writes back a file as the shell command left it, before it was put back; refused if the file changed since it was
- * put back, so nothing written later is lost.
+ * Writes back a file as the last shell command to change it left it, before it was put back; refused if the file
+ * changed since it was put back, so nothing written later is lost. Earlier put-backs of the file are done with too.
  */
 export function restorePutBack(run, file) {
-  const kept = run.putBack?.find(k => k.path === file && !k.restored);
+  const kept = run.putBack?.findLast(k => k.path === file && !k.restored);
   if (!kept) return Promise.resolve(false);
   return serial(async () => {
     const abs = path.join(ROOT, file);
@@ -101,7 +103,7 @@ export function restorePutBack(run, file) {
       throw refused('changed-since-put-back', `${file} changed since it was put back.`, { name: file });
     if ((await blobAt(kept.ref, file)) === null) fs.rmSync(abs, { force: true });
     else await restoreFrom(kept.ref, [file]);
-    kept.restored = true;
+    for (const k of run.putBack) if (k.path === file) k.restored = true;
     saveRun(run);
     return true;
   });
