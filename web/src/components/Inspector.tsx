@@ -34,7 +34,7 @@ import { CopyCommand, SETUP_PROMPT, setConnectOpen } from './ConnectDialog';
 import { Kbd, KbdGroup } from './ui/kbd';
 import { Markdown } from './Markdown';
 import { ScopeChip } from './ScopeChip';
-import { BetaTag, commandBlockedText, Dot, Spinner, Stat, StepText } from './bits';
+import { BetaTag, commandBlockedText, Dot, Label, Spinner, Stat, StepText } from './bits';
 import { IntroSection } from './Intro';
 import { locale, t, tn } from '../i18n';
 import { Timeline } from './Timeline';
@@ -119,13 +119,6 @@ function Reply({ run, text, open }: { run: Run; text: string; open: boolean }) {
     </>
   );
 }
-
-/** A small, quiet uppercase label (DESIGN.md product rules). */
-export const Label = ({ children, className }: { children: React.ReactNode; className?: string }) => (
-  <h3 className={cn('mb-3 text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase', className)}>
-    {children}
-  </h3>
-);
 
 /** A tool call the app can word: a read or edit of a file in the repo, or a command (bridges from 0.2.0). */
 const worded = (e: StreamEntry) => ((e.act === 'read' || e.act === 'edit') && !!e.path) || (e.act === 'run' && !!e.cmd);

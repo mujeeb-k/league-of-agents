@@ -42,6 +42,9 @@ export function openRepo() {
   EXCLUDED = path.join(LOA, 'excluded.json');
   excludeFromGit(['.loa/', '.claude/settings.local.json']);
 }
+/** Hooks installed this start: Claude Code is told edits outside the scope are blocked only when they are. */
+export let HOOKS = false;
+export const setHooks = on => void (HOOKS = on);
 // A fresh token on every start: a link from an earlier run stops working.
 export const TOKEN = crypto.randomBytes(18).toString('base64url');
 // Git's own path for it: in a linked worktree, the main repo's, which git reads (not the worktree's git folder).

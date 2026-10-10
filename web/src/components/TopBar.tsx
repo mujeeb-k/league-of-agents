@@ -17,8 +17,7 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Kbd } from './ui/kbd';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
-import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
-import { Dot, Spinner } from './bits';
+import { Dot, Spinner, Tip } from './bits';
 import { t } from '../i18n';
 
 export const retheme = () => {
@@ -26,19 +25,6 @@ export const retheme = () => {
   drawMini();
   renderSide();
 };
-
-/** A tooltip naming what a control does and its shortcut. */
-export function Tip({ label, keys, children }: { label: string; keys?: string; children: React.ReactElement }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent className="flex items-center gap-2">
-        {label}
-        {keys ? <Kbd>{keys}</Kbd> : null}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
 
 const MODES: { mode: Mode; label: string; tip: string; key: string }[] = [
   { mode: 'before', label: 'Before', tip: 'Show before', key: 'B' },

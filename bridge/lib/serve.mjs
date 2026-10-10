@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { execFile } from 'node:child_process';
 import { logError, onPath } from './util.mjs';
 import { WEB_URL, ASKED_PORT } from './args.mjs';
-import { ROOT, bridgeFile, TOKEN } from './repo.mjs';
+import { ROOT, bridgeFile, TOKEN, setHooks } from './repo.mjs';
 import { AGENTS, ACP } from './agents/registry.mjs';
 import { CLAUDE_RECHECK_MS, checkClaude } from './agents/claude.mjs';
 import { stopSessions } from './sessions.mjs';
@@ -13,14 +13,12 @@ import { watch } from './watch.mjs';
 import { emit } from './events.mjs';
 import { createBridgeServer, firstFreePort, listening } from './server.mjs';
 
-/** Hooks installed this start: Claude Code is told edits outside the scope are blocked only when they are. */
-export let HOOKS = false;
 /**
  * Runs the bridge here, until it is stopped: `serve`, and what `start` runs in the background. Takes the first
  * baseline before it listens, so the first request finds the repo as it is.
  */
 export async function serve(hooks) {
-  HOOKS = hooks;
+  setHooks(hooks);
   // A port asked for is used as it is (and a busy one says so); otherwise the first free one from 43210, so a
   // second repo's bridge doesn't fail because the first holds the usual port.
   const port = ASKED_PORT ? Number(ASKED_PORT) : await firstFreePort(43210);

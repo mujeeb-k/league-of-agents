@@ -22,8 +22,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { Textarea } from './ui/textarea';
-import { BetaTag, containedText, Dot, Spinner } from './bits';
-import { Tip } from './TopBar';
+import { BetaTag, containedText, Dot, Spinner, Tip } from './bits';
 import { CopyCommand } from './ConnectDialog';
 import { ScopeChip } from './ScopeChip';
 import { t } from '../i18n';

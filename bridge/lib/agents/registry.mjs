@@ -2,7 +2,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { readJson, onPath } from '../util.mjs';
-import { HOOKS } from '../serve.mjs';
+import { HOOKS } from '../repo.mjs';
 import { acpConnector } from './acp.mjs';
 import { lockOfRun } from '../sandbox.mjs';
 import { streamConnector } from './stream.mjs';

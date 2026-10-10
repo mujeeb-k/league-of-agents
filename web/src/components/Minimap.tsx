@@ -6,8 +6,8 @@ import { mapGeometry } from '../lib/minimap';
 import { S, dom, st } from '../state/app';
 import { useRegion } from '../state/render';
 import { cn } from '@/lib/utils';
-import { Tip } from './TopBar';
 import { Button } from './ui/button';
+import { Tip } from './bits';
 import { t } from '../i18n';
 
 function miniJump(e: PointerEvent) {

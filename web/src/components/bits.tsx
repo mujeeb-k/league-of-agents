@@ -5,6 +5,8 @@ import type { Check } from '../api/types';
 import type { Run } from '../lib/types';
 import { cn } from '@/lib/utils';
 import { locale, t, tn } from '../i18n';
+import { Kbd } from './ui/kbd';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 
 /** `+a −d` stat. The space before the deletion count is part of the markup. */
 export const Stat = ({ a, d }: { a: number; d: number }) => (
@@ -163,3 +165,23 @@ export const commandBlockedText = (scoped: boolean) =>
 
 /** Where a session on the whole repository can change files, when the system keeps it inside the repo. */
 export const containedText = () => t("Can change any file in this repo. Can't touch the rest of your computer.");
+
+/** A tooltip naming what a control does and its shortcut. */
+export function Tip({ label, keys, children }: { label: string; keys?: string; children: React.ReactElement }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent className="flex items-center gap-2">
+        {label}
+        {keys ? <Kbd>{keys}</Kbd> : null}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** A small, quiet uppercase label (DESIGN.md product rules). */
+export const Label = ({ children, className }: { children: React.ReactNode; className?: string }) => (
+  <h3 className={cn('mb-3 text-[11px] font-medium tracking-[0.06em] text-muted-foreground uppercase', className)}>
+    {children}
+  </h3>
+);

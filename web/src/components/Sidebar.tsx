@@ -19,10 +19,9 @@ import { stepsOf } from '../lib/live';
 import { money } from '../lib/util';
 import { notifying, toggleNotifying } from '../state/notices';
 import { cn } from '@/lib/utils';
-import { BetaTag, CheckBadge, commandBlockedText, containedText, Dot, FilePath, Stat } from './bits';
+import { BetaTag, CheckBadge, commandBlockedText, containedText, Dot, FilePath, Stat, Tip } from './bits';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { FileIcon } from './FileIcon';
-import { Tip } from './TopBar';
 import { Button } from './ui/button';
 import { t, tn } from '../i18n';
 

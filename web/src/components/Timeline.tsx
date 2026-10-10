@@ -6,8 +6,7 @@ import { momentOf, stepsOf, touched } from '../lib/live';
 import type { Run } from '../lib/types';
 import { cn } from '@/lib/utils';
 import { useRegion } from '../state/render';
-import { Label } from './Inspector';
-import { FilePath, StepText } from './bits';
+import { FilePath, Label, StepText } from './bits';
 import { t } from '../i18n';
 
 /** Each row's height, and how many show before the list scrolls. */
