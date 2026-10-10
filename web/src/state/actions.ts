@@ -143,6 +143,11 @@ export function simulateRun(prompt: string, scope = scopeFromSelection()): Run |
     }
   }
   targets = [...new Set(targets)].filter(existsNow);
+  // A selection with no file in it changes nothing: the demo never changes files outside it.
+  if (scoped && !targets.length) {
+    toast(t('Nothing in the selection to change in the demo. Select a folder with files.'));
+    return null;
+  }
   if (!targets.length)
     targets = [...S.FILES.values()]
       .filter(f => existsNow(f) && f.base.length)

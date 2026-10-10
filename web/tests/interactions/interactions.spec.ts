@@ -676,6 +676,21 @@ test('prompt: slash focuses, Shift+Enter adds a line, Enter runs, Escape blurs',
   );
 });
 
+test('a demo session on a folder with no files starts no run, and says so', async ({ page }) => {
+  await page.keyboard.press('Escape');
+  await page.locator('.frame[data-dir="server/storage"] > .flabel b').click();
+  await page.locator('#prompt').fill('Retry a failed write once');
+  await page.locator('#prompt').press('Enter');
+  await expect(page.locator(TOAST)).toHaveText(
+    'Nothing in the selection to change in the demo. Select a folder with files.',
+  );
+  // Only the demo's three sessions, held at work.
+  await showSidebar(page);
+  await page.locator('[data-tab="runs"]').click();
+  await expect(page.locator('#sideList .run.running')).toHaveCount(3);
+  await expect(page.locator('#sideList .run')).toHaveCount(6);
+});
+
 test('several sections and ⌘↵ start a session on each, drawn in its own colour; overlapping sections start none', async ({
   page,
 }) => {

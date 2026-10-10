@@ -570,5 +570,7 @@ const catalogue: Catalogue = {
   'Find a folder': 'Find a folder',
   'Loading…': 'Loading…',
   'Map another folder': 'Map another folder',
+  'Nothing in the selection to change in the demo. Select a folder with files.':
+    'Nothing in the selection to change in the demo. Select a folder with files.',
 };
 export default catalogue;
