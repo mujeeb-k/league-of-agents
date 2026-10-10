@@ -38,7 +38,7 @@ export const ACP = {
     check: [process.env.LOA_HERMES_BIN || 'hermes', 'acp', '--check'],
   },
   // On a section, in the sandbox (sandbox.mjs), it runs in its full-access mode: its own sandbox can't start inside
-  // ours, and ours holds it to the section. Elsewhere, in its read-only mode, it asks before every write (its
+  // the bridge's, which holds it to the section. Elsewhere, in its read-only mode, it asks before every write (its
   // sandbox denies the write, and it asks to escalate), so its edits outside the scope can be refused.
   dsh: {
     name: 'DeepSeek Harness',
@@ -48,14 +48,16 @@ export const ACP = {
 };
 /** Which agents are on this machine, and the harnesses the person added. */
 export function loadAgents() {
-  AGENTS.claude.available = onPath(BIN.claude);
-  AGENTS.claude.problem = onPath(BIN.claude) ? null : 'missing';
+  const claude = onPath(BIN.claude);
+  AGENTS.claude.available = claude;
+  AGENTS.claude.problem = claude ? null : 'missing';
   AGENTS.cursor.available = onPath(BIN.cursor);
   AGENTS.codex.available = onPath(BIN.codex);
   for (const a of [readJson(AGENTS_FILE, [])].flat())
     if (
       /^[a-z0-9-]+$/.test(a?.id) &&
       !AGENTS[a.id] &&
+      !Object.hasOwn(ACP, a.id) &&
       Array.isArray(a.command) &&
       a.command.length &&
       a.command.every(s => typeof s === 'string' && s)

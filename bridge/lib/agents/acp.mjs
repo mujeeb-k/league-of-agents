@@ -22,6 +22,9 @@ import { launch } from './process.mjs';
 export function acpConnector({ name, command, env }) {
   return { start: (run, prompt) => startAcp(run, prompt, name, command, env) };
 }
+/** What a call still waiting for its answer is rejected with when the harness exits. */
+const EXITED = new Error('exited');
+
 /** @returns {import('./registry.mjs').Session} */
 function startAcp(run, prompt, name, command, env) {
   // Each tool call as told so far: a permission request may name only the call (DeepSeek Harness does).
@@ -46,6 +49,8 @@ function startAcp(run, prompt, name, command, env) {
     },
     onStderr: d => (lastErr = d.trim().split('\n').at(-1) || lastErr),
   });
+  // A write can race the harness's exit (a cancel as it ends): the pipe's error is that exit, said when it closes.
+  child.stdin.on('error', () => {});
   const send = m => child.stdin.writable && child.stdin.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\n');
   const call = (method, params) =>
     new Promise((resolve, reject) => {
@@ -194,6 +199,8 @@ function startAcp(run, prompt, name, command, env) {
     outcome = r.stopReason === 'cancelled' ? 'cancelled' : r.stopReason === 'refusal' ? 'failed' : 'done';
   })()
     .catch(e => {
+      // The harness exited mid-call: said once, as it closes (done).
+      if (e === EXITED) return;
       flush();
       push(run, { t: 'err', text: `${name}: ${e.message}`.slice(0, 500) });
       outcome = 'failed';
@@ -203,6 +210,7 @@ function startAcp(run, prompt, name, command, env) {
       setTimeout(() => child.kill('SIGTERM'), 2000).unref();
     });
   const done = closed.then(code => {
+    for (const w of waiting.values()) w.reject(EXITED);
     waiting.clear();
     if (!outcome && run.status === 'running')
       push(run, { t: 'err', text: `${name} exited with code ${code}${lastErr ? `: ${lastErr.slice(0, 300)}` : ''}` });
@@ -228,7 +236,8 @@ const isEdit = tool => tool.kind === 'edit' || (tool.kind === 'other' && ['edit'
  */
 function permitAcp(run, tool, options) {
   const rel = filesOf(tool);
-  const inRepo = rel.every(r => insideRepo(r) && !/^\.(git|loa)\//.test(r));
+  // Any case: macOS's disk doesn't tell .GIT from .git.
+  const inRepo = rel.every(r => insideRepo(r) && !/^\.(git|loa)(\/|$)/i.test(r));
   const outside = run.scope?.length ? rel.filter(r => !inScope(run.scope, r)) : [];
   const ok = isEdit(tool) && rel.length > 0 && inRepo && !outside.length;
   const option = options.find(o => (ok ? /^allow/ : /^reject/).test(o.kind));

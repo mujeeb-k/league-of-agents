@@ -2381,6 +2381,15 @@ test.describe('sessions at once', () => {
       expect(fs.existsSync(path.join(repo, 'shared/new.bin'))).toBe(false);
     }));
 
+  test("an ACP harness never edits the repo's git folder, whatever case it names it in", () =>
+    twoSessions(async (b, repo) => {
+      const config = fs.readFileSync(path.join(repo, '.git/config'));
+      const h = (await start(b, [], 'edit:.GIT/config')).body as unknown as RunDTO;
+      await until(b, h.id, 'done');
+      expect((await runOf(b, h.id)).stream?.map(e => e.text)).toContain('Refused: Approve edit: .GIT/config');
+      expect(fs.readFileSync(path.join(repo, '.git/config')).equals(config)).toBe(true);
+    }));
+
   test('revert puts back a file that is not UTF-8 byte for byte', () =>
     twoSessions(async (b, repo) => {
       // Latin-1 text: é is the single byte 0xe9, which UTF-8 can't decode.
@@ -3083,8 +3092,9 @@ test('harnesses the person adds in their own settings are listed by name and run
     settings,
     JSON.stringify([
       { id: 'goose', name: 'Goose', command: [process.execPath, FAKE_ACP] },
-      // Not taken: a built-in agent's id, and an id that isn't one.
+      // Not taken: a built-in agent's or harness's id, and an id that isn't one.
       { id: 'claude', name: 'Mine', command: [process.execPath, FAKE_ACP] },
+      { id: 'dsh', name: 'Mine too', command: [process.execPath, FAKE_ACP] },
       { id: 'Not an id', command: [process.execPath, FAKE_ACP] },
     ]),
   );
@@ -3093,6 +3103,7 @@ test('harnesses the person adds in their own settings are listed by name and run
     const agents = ((await call(b, '/api/state')).body as unknown as StateResponse).agents;
     expect(agents.goose).toEqual({ name: 'Goose', available: true, stays: false });
     expect(agents.claude!.name).toBe('Claude Code');
+    expect(agents.dsh?.name).not.toBe('Mine too');
     expect(Object.keys(agents)).not.toContain('Not an id');
     await page.goto(linkFor(b));
     await expect(page.locator('#conn')).toHaveText('Live');
