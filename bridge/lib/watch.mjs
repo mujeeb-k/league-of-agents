@@ -13,7 +13,7 @@ import { writeTree, commitTree, headNow, pin, computeChanges, startIndex } from 
 import { runs, working, newRun, finishRun } from './runs.mjs';
 import { emit } from './events.mjs';
 
-export const QUIET_MS = Number(process.env.LOA_QUIET_MS || 3000);
+const QUIET_MS = Number(process.env.LOA_QUIET_MS || 3000);
 /**
  * A run started by an agent's hooks ends with its Stop. If that never comes (the agent crashed, or its stop went
  * elsewhere), the run would hold watch mode quiet for good: after this long with no file changes it is closed as
@@ -22,9 +22,11 @@ export const QUIET_MS = Number(process.env.LOA_QUIET_MS || 3000);
 const HOOK_IDLE_MS = Number(process.env.LOA_HOOK_IDLE_MS || 30 * 60 * 1000);
 /** @type {NodeJS.Timeout | undefined} */
 let idleTimer;
+/** The run a terminal or editor turn started through the bridge's hooks, if one is under way: it works alone. */
+export const capturedRun = () => [...working.values()].find(r => Object.values(HOOK_AGENT).includes(r.agent));
 export function armIdle() {
   clearTimeout(idleTimer);
-  const run = [...working.values()].find(r => Object.values(HOOK_AGENT).includes(r.agent));
+  const run = capturedRun();
   if (!run) return;
   idleTimer = setTimeout(() => {
     if (working.has(run.id)) finishRun(run, 'interrupted').catch(logError);
@@ -39,14 +41,14 @@ const pending = new Set();
 const sameHead = (a, b) => a.commit === b.commit && a.ref === b.ref;
 /** Takes a new baseline; `fresh` restarts the snapshot index from HEAD, as when HEAD moved. */
 export async function rebase(fresh = false) {
-  // HEAD moved, or the bridge started: the files may be others.
+  // The files may have changed under the list: it is made again.
   forgetFiles();
   const head = await headNow(),
     tree = await writeTree(fresh);
   base = { head, tree, commit: await commitTree(tree, 'baseline', head) };
 }
 /**
- * Brings the baseline up to date, recording any changes since it as a run. Returns the new baseline.
+ * Brings the baseline up to date, recording any changes since it as a run. Returns the baseline's commit.
  * Runs in the serial lane.
  */
 export async function settle() {
@@ -125,7 +127,7 @@ export async function watch() {
   try {
     const watcher = fs.watch(ROOT, { recursive: true }, (type, f) => {
       const p = f ? String(f).split(path.sep).join('/') : '';
-      // Inside .git only a moved HEAD or branch matters; the rest is git's own bookkeeping, ours included.
+      // Inside .git only a moved HEAD or branch matters; the rest is git's own bookkeeping, the bridge's included.
       if (p === '.git' || p.startsWith('.git/')) {
         if (!/^\.git\/(HEAD|packed-refs|refs\/heads\/)/.test(p)) return;
         pending.add('');

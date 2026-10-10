@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readJson, splitLines, serial } from './util.mjs';
 import { inScope, rangeKept, scopeEntry } from './scope.mjs';
-import { ROOT, RUNS_DIR, git, gitAsync } from './repo.mjs';
+import { ROOT, RUNS_DIR, git } from './repo.mjs';
 import { agentLinesOf } from './agents/lines.mjs';
-import { blobAt, pin, restoreFrom, showAt, computeChanges, snapshotNow } from './snapshots.mjs';
+import { blobAt, blobNow, pin, restoreFrom, showAt, computeChanges, snapshotNow } from './snapshots.mjs';
 import {
   checksFor,
   clash,
@@ -16,7 +16,7 @@ import {
   ownChanges,
   startingPoint,
 } from './parallel.mjs';
-import { base, setBase, rebase, settle } from './watch.mjs';
+import { base, setBase, rebase } from './watch.mjs';
 import { NO_SANDBOX, lockOfRun } from './sandbox.mjs';
 import { emit, emitRun } from './events.mjs';
 import { pinSteps } from './steps.mjs';
@@ -112,7 +112,7 @@ export function beginRun(opts) {
     const refused = clash(opts.scope ?? []);
     if (refused) throw refused;
     if (lockOfRun(opts) === 'refuse') throw NO_SANDBOX();
-    const before = await startingPoint(settle);
+    const before = await startingPoint();
     const run = newRun(opts);
     // Said on its card: whether the system keeps it inside its section.
     if (run.scope.length) run.stays = lockOfRun(run) === 'sandbox';
@@ -151,7 +151,7 @@ export async function finishRun(run, status = 'done', { checks = true } = {}) {
       text: `Changed files the map doesn't show: ${run.unseen.map(c => c.path).join(', ')}`,
     });
   run.agentLines = agentLinesOf(run);
-  if (run.agent === 'detected' || run.agent === 'you') run.title = editedTitle(run.changes);
+  if ((run.agent === 'detected' || run.agent === 'you') && run.changes.length) run.title = editedTitle(run.changes);
   const out = await scopeViolations(run);
   if (out.length) run.stream.push({ t: 'warn', text: `Changed outside scope: ${out.join(', ')}` });
   run.outOfScope = out;
@@ -222,8 +222,7 @@ export async function revertRun(run, force) {
   );
   const drift = [];
   for (const c of changes) {
-    const now = fs.existsSync(path.join(ROOT, c.path)) ? (await gitAsync(['hash-object', '--', c.path])).trim() : null;
-    if (now !== (await blobAt(run.after, c.path))) drift.push(c.path);
+    if ((await blobNow(c.path)) !== (await blobAt(run.after, c.path))) drift.push(c.path);
   }
   if (drift.length && !force) return { conflict: drift };
   const back = [];

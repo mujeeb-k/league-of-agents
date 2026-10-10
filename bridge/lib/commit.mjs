@@ -6,16 +6,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { refused, serial } from './util.mjs';
-import { LOA, ROOT, gitAsync } from './repo.mjs';
-import { blobAt, headNow } from './snapshots.mjs';
+import { LOA, gitAsync } from './repo.mjs';
+import { blobAt, blobNow, headNow } from './snapshots.mjs';
 import { emitRun } from './events.mjs';
 import { saveRun } from './runs.mjs';
-
-/** A file's content id as it is on disk now, or null when it is gone. */
-async function blobNow(p) {
-  if (!fs.existsSync(path.join(ROOT, p))) return null;
-  return (await gitAsync(['hash-object', '--', p])).trim();
-}
 
 /**
  * What committing the run would hold. `files`: its own. `yours`: files it changed that the person had changed too
@@ -68,7 +62,7 @@ export function commitRun(run, { message = '', include = [] } = {}) {
     // staged; commit-msg may change the message) and signing is as they set it. A failing hook stops the commit.
     const index = path.join(LOA, 'commit.index');
     const env = { ...process.env, GIT_INDEX_FILE: index };
-    await gitAsync(['read-tree', head.commit], { env });
+    await gitAsync(head.commit ? ['read-tree', head.commit] : ['read-tree', '--empty'], { env });
     await setEntries(env);
     if ((await headNow()).commit !== head.commit) throw refused('head-moved', 'HEAD moved. Try again.');
     try {

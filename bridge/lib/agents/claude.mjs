@@ -5,12 +5,7 @@ import { ROOT } from '../repo.mjs';
 import { emit } from '../events.mjs';
 import { AGENTS, BIN } from './registry.mjs';
 
-/**
- * Whether Claude Code is installed and logged in, asked of `claude auth status` without blocking. Only an
- * explicit "loggedIn": false counts as logged out: an older Claude Code without the command, or an answer that
- * isn't JSON, leaves it runnable. Asked before each Claude Code run, and every 15 s while there is a problem,
- * so installing or logging in clears it without a restart.
- */
+/** How long a Claude Code check holds before it is asked again (checkClaude). */
 export const CLAUDE_RECHECK_MS = Number(process.env.LOA_CLAUDE_RECHECK_MS) || 15000;
 let claudeAsked = 0;
 const loggedOut = out => {
@@ -41,6 +36,12 @@ export function claudeProblemNow() {
   }
   return loggedOut(out) ? 'loggedOut' : null;
 }
+/**
+ * Whether Claude Code is installed and logged in, asked of `claude auth status` without blocking. Only an
+ * explicit "loggedIn": false counts as logged out: an older Claude Code without the command, or an answer that
+ * isn't JSON, leaves it runnable. Asked before each Claude Code run, and every 15 s while there is a problem,
+ * so installing or logging in clears it without a restart.
+ */
 export function checkClaude(then) {
   const done = () => then?.();
   if (Date.now() - claudeAsked < CLAUDE_RECHECK_MS) return done();

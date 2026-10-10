@@ -1,7 +1,7 @@
 // The section lock, enforced by the system. On macOS a session on a section runs inside a Seatbelt sandbox
 // (sandbox-exec, part of macOS): it and every program it starts may write inside its section, to files the repo
-// ignores (build output, installed packages) and anywhere outside the repo (temp, the agent's own settings), and
-// nowhere else in the repo. Nothing outside is written, so nothing needs putting back. Paths reach the profile as
+// ignores (build output, installed packages) and outside the repo (temp, the agent's own state but not its settings
+// or hooks: runLater), and nowhere else in the repo. Nothing outside is written, so nothing needs putting back. Paths reach the profile as
 // parameters, never as text in it. Where there is no sandbox, shell.mjs puts back what a shell command changed
 // outside the section instead.
 import fs from 'node:fs';
@@ -16,7 +16,7 @@ import { realish, refused } from './util.mjs';
 const SANDBOX_EXEC = process.env.LOA_SANDBOX_EXEC || '/usr/bin/sandbox-exec';
 
 /**
- * The agents proved to run inside the sandbox (the others are flagged after the run, as before), each with the
+ * The agents proved to run inside the sandbox (the others are flagged after the run), each with the
  * temporary file its edit tool writes beside a file and renames over it, as a regex of the file's folder and name
  * (both escaped). Only that: no other new file beside a file section.
  */
@@ -187,8 +187,8 @@ const REPO_SETTINGS = [
 
 /**
  * Prepares the sandbox that locks a run to its section: writes inside the repo only to the section, to what the
- * repo ignores, and to the temporary files an editor writes beside a file before renaming it over the file (Claude
- * Code's Edit tool does); no tracked file outside the section, even one that matches an ignore rule; nothing that runs
+ * repo ignores, and to the temporary files an agent's edit tool writes beside a file before renaming it over the
+ * file (TEMP_BESIDE); no tracked file outside the section, even one that matches an ignore rule; nothing that runs
  * later outside the sandbox (runLater, REPO_SETTINGS); and no reading the bridge's own token. Asynchronous: in a repo the size of
  * llvm, git's listings take a second.
  */

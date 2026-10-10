@@ -135,13 +135,13 @@ function startAcp(run, prompt, name, command, env) {
           stepDone(run, i);
         }
       if (u.status === 'failed') {
-        const said = textOf(u);
+        const text = textOf(u);
         const outside = isEdit(tool) ? filesOf(tool).filter(f => run.scope?.length && !inScope(run.scope, f)) : [];
         // DeepSeek Harness's read-only mode denies each write until it asks (dsh-sandbox-policy): expected.
-        if (/\[sandbox: file access denied/.test(said))
+        if (/\[sandbox: file access denied/.test(text))
           push(run, { t: 'warn', text: `Needs permission: ${acpToolLabel(tool)}` });
         // An edit outside the section the system refused (DeepSeek Harness's full-access mode, in the sandbox).
-        else if (outside.length && refusedWrite(said, lockOfRun(run) === 'sandbox')) {
+        else if (outside.length && refusedWrite(text, lockOfRun(run) === 'sandbox')) {
           for (const i of steps.get(u.toolCallId) ?? []) stepRefused(run, i);
           for (const f of outside) blocked(run, f);
         } else push(run, { t: 'err', text: `${acpToolLabel(tool)} failed` });

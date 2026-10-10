@@ -8,13 +8,11 @@ import { WEB_URL, APP_PATH } from './args.mjs';
 import { ROOT, TOKEN } from './repo.mjs';
 import { AGENTS } from './agents/registry.mjs';
 import { CLAUDE_FIX } from './agents/claude.mjs';
-import { linkOf } from './cli.mjs';
+import { linkOf, siteLinkOf } from './cli.mjs';
 import { ROUTES } from './routes.mjs';
 import { setShellPort, shellTokenFits } from './shell.mjs';
 import { sameSecret } from './util.mjs';
 
-// An error the app shows carries a `code`, and the values for its sentence in `args`: the app words it in the
-// person's language by that code (web/src/api/errors.ts). `error` is the same sentence in English, for older apps.
 function send(res, code, body, headers = {}) {
   const isStr = typeof body === 'string';
   res.writeHead(code, {
@@ -39,8 +37,8 @@ function readBody(req) {
       const b = Buffer.concat(parts).toString('utf8');
       try {
         r(b ? JSON.parse(b) : {});
-      } catch (e) {
-        j(e);
+      } catch {
+        j(Object.assign(new Error('The request is not JSON'), { code: 400 }));
       }
     });
   });
@@ -121,7 +119,10 @@ async function handle(req, res) {
     const [status, body] = await handler({ url, params, body: () => readBody(req) });
     return send(res, status, body, cors);
   } catch (e) {
-    return send(res, e.code === 409 ? 409 : 500, { error: e.message, code: e.reason, args: e.args }, cors);
+    // An error the app shows carries a `code`, and the values for its sentence in `args`: the app words it in the
+    // person's language by that code (web/src/api/errors.ts). `error` is the same sentence in English, for older apps.
+    const status = e.code === 400 || e.code === 409 ? e.code : 500;
+    return send(res, status, { error: e.message, code: e.reason, args: e.args }, cors);
   }
 }
 const MIME = {
@@ -210,8 +211,6 @@ export function listening(port) {
   if (AGENTS.claude.problem) console.log(`  ${CLAUDE_FIX[AGENTS.claude.problem]}`);
   console.log(`\n  Open    ${local}`);
   if (WEB_URL)
-    console.log(
-      `  or      ${WEB_URL}${APP_PATH}#bridge=${port}&t=${TOKEN}   (Chrome or Edge, allow local network access)`,
-    );
+    console.log(`  or      ${siteLinkOf({ port, token: TOKEN })}   (Chrome or Edge, allow local network access)`);
   console.log('');
 }

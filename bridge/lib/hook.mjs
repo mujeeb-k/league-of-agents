@@ -29,10 +29,7 @@ export async function runHook(kind, agent = 'claude') {
     const input = data.tool_input || {};
     const f = input.file_path || input.notebook_path;
     if (!f) process.exit(0);
-    let root = cwd;
-    try {
-      root = execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8' }).trim();
-    } catch {}
+    const root = repoOf(cwd) ?? cwd;
     // Real paths on both sides: the repo may sit behind a symlink (macOS's /tmp is /private/tmp).
     const rel = path
       .relative(realish(root), realish(path.resolve(cwd, f)))

@@ -35,16 +35,17 @@ export function openRepo() {
   CONFIG_FILE = path.join(ROOT, 'loa.config.json');
   CONF = readJson(CONFIG_FILE, {});
   bridgeFile = path.join(LOA, 'bridge.json');
-  /** Where the map's folders and files are placed (web/src/lib/layout.ts SavedLayout). */
+  // Where the map's folders and files are placed (web/src/lib/layout.ts SavedLayout).
   LAYOUT_FILE = path.join(LOA, 'layout.json');
   prev = readJson(bridgeFile, {});
-  /** The lines we added to .git/info/exclude, so `uninstall` takes out only those. */
+  // The lines the bridge added to .git/info/exclude, so `uninstall` takes out only those.
   EXCLUDED = path.join(LOA, 'excluded.json');
   excludeFromGit(['.loa/', '.claude/settings.local.json']);
 }
 // A fresh token on every start: a link from an earlier run stops working.
 export const TOKEN = crypto.randomBytes(18).toString('base64url');
-export const excludeFile = () => path.resolve(ROOT, git(['rev-parse', '--git-dir']).trim(), 'info', 'exclude');
+// Git's own path for it: in a linked worktree, the main repo's, which git reads (not the worktree's git folder).
+export const excludeFile = () => path.resolve(ROOT, git(['rev-parse', '--git-path', 'info/exclude']).trim());
 export function excludeFromGit(lines) {
   const ex = excludeFile();
   fs.mkdirSync(path.dirname(ex), { recursive: true });

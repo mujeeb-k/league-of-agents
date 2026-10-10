@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { splitLines } from './util.mjs';
+import { logError, splitLines } from './util.mjs';
 import { CONF, LOA, ROOT, excludeFile, gitAsync } from './repo.mjs';
 import { SKIP } from './files.mjs';
 
@@ -49,9 +49,9 @@ export const secretSpecs = (paths = /** @type {string[] | null} */ (null)) =>
   );
 /**
  * The working tree as a git tree, written through a private index. The index is kept between snapshots, so
- * git hashes only the files that changed since the last one. `fresh` starts it again from HEAD.
+ * git hashes only the files that changed since the last one. `fresh` starts it again from HEAD; `paths` limits the
+ * update to those paths, the rest of the tree as last written.
  */
-/** `paths` limits the update to those paths: the rest of the tree is as last written. */
 export async function writeTree(fresh = false, paths = /** @type {string[] | null} */ (null)) {
   const env = { ...process.env, GIT_INDEX_FILE: snapIndex() };
   if (fresh || !fs.existsSync(snapIndex())) {
@@ -60,27 +60,32 @@ export async function writeTree(fresh = false, paths = /** @type {string[] | nul
     } catch {}
     await gitAsync((await headNow()).commit ? ['read-tree', 'HEAD'] : ['read-tree', '--empty'], { env });
   }
-  // Untracked files that usually hold secrets (not ignored, not committed) never enter a snapshot. Tracked ones,
-  // such as .env.example templates, are already in the repo's history and are snapshotted like any file.
-  const untrackedSecrets = (
-    await gitAsync([
-      'ls-files',
-      '-z',
-      '--others',
-      '--exclude-standard',
-      '--',
-      // Limited to the paths when given: a scan of every untracked path takes seconds in a repo the size of llvm.
-      ...secretSpecs(paths),
-    ])
-  )
-    .split('\0')
-    .filter(Boolean);
+  // Untracked files that usually hold secrets (not ignored, not committed) never enter a snapshot, nor git's objects:
+  // left out of the add itself. Tracked ones, such as .env.example templates, are already in the repo's history and
+  // are snapshotted like any file.
+  const secrets = async limit =>
+    (
+      await gitAsync([
+        'ls-files',
+        '-z',
+        '--others',
+        '--exclude-standard',
+        '--',
+        // Limited to the paths when given: a scan of every untracked path takes seconds in a repo the size of llvm.
+        ...secretSpecs(limit),
+      ])
+    )
+      .split('\0')
+      .filter(Boolean);
+  const leftOut = list => list.map(p => `:(exclude,literal)${p}`);
+  let found = await secrets(paths);
   // A path that doesn't exist yet (a file the section names, not yet created) fails a limited update: then all of it.
-  await gitAsync(['add', '-A', ...(paths ? ['--', ...paths] : [])], { env }).catch(() =>
-    gitAsync(['add', '-A'], { env }),
-  );
-  if (untrackedSecrets.length)
-    await gitAsync(['rm', '--cached', '-q', '--ignore-unmatch', '--', ...untrackedSecrets], { env });
+  await gitAsync(['add', '-A', '--', ...(paths ?? ['.']), ...leftOut(found)], { env }).catch(async () => {
+    found = await secrets(null);
+    await gitAsync(['add', '-A', '--', '.', ...leftOut(found)], { env });
+  });
+  // One the index held from before (a file untracked since) goes too.
+  if (found.length) await gitAsync(['rm', '--cached', '-q', '--ignore-unmatch', '--', ...found], { env });
   return (await gitAsync(['write-tree'], { env })).trim();
 }
 const keyFile = () => path.join(LOA, 'snapshot.key');
@@ -115,7 +120,7 @@ async function indexKey() {
 /**
  * Readies the snapshot index for a start's first snapshot, so git hashes only what changed: the index kept from the
  * last start while its key holds; on the first start, a copy of git's own index, whose tracked files git already
- * hashed. A split or sparse index can't be copied: then it starts from HEAD, as before.
+ * hashed. A split or sparse index can't be copied: then it starts from HEAD.
  */
 export async function startIndex() {
   const key = await indexKey();
@@ -135,26 +140,34 @@ export async function startIndex() {
   }
   fs.writeFileSync(keyFile(), key);
 }
+/** League of Agents' own git identity, for its snapshots, and for notes where the person has none set. */
+export const LOA_IDENT = {
+  GIT_AUTHOR_NAME: 'loa',
+  GIT_AUTHOR_EMAIL: 'loa@localhost',
+  GIT_COMMITTER_NAME: 'loa',
+  GIT_COMMITTER_EMAIL: 'loa@localhost',
+};
 /** A commit of the tree on top of HEAD, reachable only from the refs it is pinned to. */
 export async function commitTree(tree, label, head) {
   const out = await gitAsync(['commit-tree', tree, ...(head.commit ? ['-p', head.commit] : []), '-m', 'loa ' + label], {
-    env: {
-      ...process.env,
-      GIT_AUTHOR_NAME: 'loa',
-      GIT_AUTHOR_EMAIL: 'loa@localhost',
-      GIT_COMMITTER_NAME: 'loa',
-      GIT_COMMITTER_EMAIL: 'loa@localhost',
-    },
+    env: { ...process.env, ...LOA_IDENT },
   });
   return out.trim();
 }
-/** The branch HEAD points at and its commit; both empty before the first commit. */
+/** A file's content id as it is on disk now, or null when it is gone. */
+export async function blobNow(p) {
+  if (!fs.existsSync(path.join(ROOT, p))) return null;
+  return (await gitAsync(['hash-object', '--', p])).trim();
+}
+/** The branch HEAD points at and its commit; before the first commit, the branch and no commit. */
 export async function headNow() {
   try {
     const [commit, ref] = (await gitAsync(['rev-parse', 'HEAD', '--symbolic-full-name', 'HEAD'])).trim().split('\n');
     return { commit, ref };
   } catch {
-    return { commit: '', ref: '' };
+    // A branch with no commits yet: no commit, though HEAD names the branch.
+    const ref = await gitAsync(['symbolic-ref', '-q', 'HEAD']).catch(() => '');
+    return { commit: '', ref: ref.trim() };
   }
 }
 /** The working tree now, as a snapshot commit: the baseline's shape, `{ head, tree, commit }`. */
@@ -188,9 +201,8 @@ export async function commitWith(commit, files, label) {
   return commitTree(tree, label, await headNow());
 }
 export async function pin(id, which, commit) {
-  try {
-    await gitAsync(['update-ref', `refs/loa/runs/${id}/${which}`, commit]);
-  } catch {}
+  // Unpinned, a snapshot could be pruned later: said in the log, though the run goes on.
+  await gitAsync(['update-ref', `refs/loa/runs/${id}/${which}`, commit]).catch(logError);
 }
 /**
  * Puts files in the working tree back as a snapshot holds them, byte for byte, with git's own checkout (its line
@@ -247,14 +259,14 @@ export async function computeChanges(before, after, { unseen = false } = {}) {
   // one created, which is what revert undoes; the created one names the file it came from.
   const moved = new Map();
   if (out.some(c => c.created) && out.some(c => c.deleted)) {
-    const fields = (
+    const renames = (
       await gitAsync(['diff', '-M', '--name-status', '-z', '--no-ext-diff', before, after, '--', '.', ':(exclude).loa'])
     ).split('\0');
-    for (let i = 0; i < fields.length; i++)
-      if (fields[i]?.startsWith('R')) {
-        moved.set(fields[i + 2], fields[i + 1]);
+    for (let i = 0; i < renames.length; i++)
+      if (renames[i]?.startsWith('R')) {
+        moved.set(renames[i + 2], renames[i + 1]);
         i += 2;
-      } else if (/^[ACDMTUX]/.test(fields[i] ?? '')) i += 1;
+      } else if (/^[ACDMTUX]/.test(renames[i] ?? '')) i += 1;
   }
   const hidden = c => c.binary || SKIP.test(c.path);
   const shown = await Promise.all(

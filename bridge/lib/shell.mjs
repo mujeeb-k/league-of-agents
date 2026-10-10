@@ -9,8 +9,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { refused, sameSecret, serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
-import { ROOT, gitAsync } from './repo.mjs';
-import { blobAt, computeChanges, pin, restoreFrom, snapshotNow } from './snapshots.mjs';
+import { ROOT } from './repo.mjs';
+import { blobAt, blobNow, computeChanges, pin, restoreFrom, snapshotNow } from './snapshots.mjs';
 import { noteLines } from './agents/lines.mjs';
 import { push, saveRun, working } from './runs.mjs';
 import { lockOfRun } from './sandbox.mjs';
@@ -53,7 +53,8 @@ export function shellEnds(run, tool) {
   before.delete(key);
   if (!from) return Promise.resolve([]);
   return serial(async () => {
-    const to = (await snapshotNow(`run ${run.id} after a shell command`, watched(run))).commit;
+    const sections = watched(run);
+    const to = (await snapshotNow(`run ${run.id} after a shell command`, sections)).commit;
     const others = [...working.values()].filter(r => r !== run).flatMap(r => (r.scope?.length ? r.scope : ['/']));
     const undone = [];
     for (const c of await computeChanges(from, to, { unseen: true })) {
@@ -64,7 +65,7 @@ export function shellEnds(run, tool) {
             c.path,
             c.hunks.map(h => h.add.join('\n')),
           );
-      } else if (!watched(run) && !inScope(others, c.path)) {
+      } else if (!sections && !inScope(others, c.path)) {
         if ((await blobAt(from, c.path)) === null) fs.rmSync(path.join(ROOT, c.path), { force: true });
         else await restoreFrom(from, [c.path]);
         undone.push(c.path);
@@ -98,8 +99,7 @@ export function restorePutBack(run, file) {
   if (!kept) return Promise.resolve(false);
   return serial(async () => {
     const abs = path.join(ROOT, file);
-    const now = fs.existsSync(abs) ? (await gitAsync(['hash-object', '--', file])).trim() : null;
-    if (now !== kept.put)
+    if ((await blobNow(file)) !== kept.put)
       throw refused('changed-since-put-back', `${file} changed since it was put back.`, { name: file });
     if ((await blobAt(kept.ref, file)) === null) fs.rmSync(abs, { force: true });
     else await restoreFrom(kept.ref, [file]);

@@ -38,7 +38,7 @@ export async function serve(hooks) {
     process.on(sig, async () => {
       const left = [...working.values()];
       for (const run of left) run.status = 'interrupted';
-      // A captured terminal turn has no agent of ours to stop: it ends here.
+      // A captured terminal turn has no agent the bridge started to stop: it ends here.
       if (!(await stopSessions())) for (const run of left) await finishRun(run, 'interrupted').catch(logError);
       process.exit(0);
     });

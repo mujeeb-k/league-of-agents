@@ -12,10 +12,8 @@ import { CHECKS_FILE } from './checks.mjs';
 import { CLAUDE_FIX, claudeProblemNow } from './agents/claude.mjs';
 import { hookFiles, shown, removeHooks } from './hooks-install.mjs';
 
-// The bridge runs in the background, in its own process group, so it outlives the terminal or the agent
-// session that started it. .loa/bridge.json holds its port, token and process id.
 export const linkOf = b => `http://127.0.0.1:${b.port}${APP_PATH}#t=${b.token}`;
-const siteLinkOf = b => `${WEB_URL}${APP_PATH}#bridge=${b.port}&t=${b.token}`;
+export const siteLinkOf = b => `${WEB_URL}${APP_PATH}#bridge=${b.port}&t=${b.token}`;
 /**
  * The Mac's default browser, as its bundle identifier in lower case, or null when it can't be told. LOA_BROWSER
  * names one instead (tests use it).
@@ -74,6 +72,10 @@ function openInBrowser(url) {
         : ['xdg-open', [url]];
   spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
 }
+/**
+ * The bridge runs in the background, in its own process group, so it outlives the terminal or the agent session that
+ * started it. .loa/bridge.json holds its port, token and process id.
+ */
 export async function startInBackground(hooks) {
   const open = b => {
     const problem = claudeProblemNow();
@@ -154,8 +156,8 @@ export async function askForHooks() {
 }
 
 /**
- * Leaves the repo as if the bridge had never run: stops it, then removes our hooks, the snapshot refs, the
- * lines we added to .git/info/exclude, and .loa/. Says what it removed.
+ * Leaves the repo as if the bridge had never run: stops it, then removes its hooks, the snapshot refs, the
+ * lines it added to .git/info/exclude, and .loa/. Says what it removed.
  */
 export async function uninstall() {
   if (await running()) await stopBridge(false);
@@ -163,7 +165,7 @@ export async function uninstall() {
   const refs = git(['for-each-ref', '--format=%(refname)', 'refs/loa/']).split('\n').filter(Boolean);
   for (const ref of refs) git(['update-ref', '-d', ref]);
   if (refs.length) removed.push(`${refs.length} snapshot ${refs.length === 1 ? 'ref' : 'refs'} (refs/loa/)`);
-  // Bridges before 0.1.0 didn't record their lines; of those, only .loa/ is surely ours.
+  // Bridges before 0.1.0 didn't record their lines; of those, only .loa/ is surely the bridge's.
   const ours = fs.existsSync(EXCLUDED) ? readJson(EXCLUDED, []) : ['.loa/'];
   const ex = excludeFile();
   if (fs.existsSync(ex)) {

@@ -11,8 +11,10 @@ import { forgetSandbox, lockOfRun, prepareSandbox } from './sandbox.mjs';
 import { forgetShell } from './shell.mjs';
 import { connectorOf, lockOf } from './agents/registry.mjs';
 
-/** Each run's agent at work, and its run finishing once the agent stops. */
-/** @type {Map<number, { cancel(): void; finished: Promise<void> }>} */
+/**
+ * Each run's agent at work, and its run finishing once the agent stops.
+ * @type {Map<number, { cancel(): void; finished: Promise<void> }>}
+ */
 const sessions = new Map();
 
 /**
@@ -45,19 +47,25 @@ function scopePreamble(run) {
 const scopeFileOf = run => path.join(LOA, `scope-${run.id}.json`);
 /**
  * Starts the run's agent on its prompt, with the scope above it. The scope lock's file holds the scope, and for line
- * ranges each file as the run found it (`read`: as read when its lines were found).
+ * ranges each file as the run found it (`read`: as read when its lines were found). A run that can't start fails,
+ * saying why, and so holds nothing.
  */
 export async function startSession(run, read = {}) {
-  const ranges = {};
-  for (const e of (run.scope || []).map(scopeEntry))
-    if (e.from)
-      ranges[e.path] = {
-        from: e.from,
-        to: e.to,
-        before: read[e.path] ?? fs.readFileSync(path.join(ROOT, e.path), 'utf8'),
-      };
-  // Each run's own: Claude Code's hooks find it by the environment the run starts them with.
-  fs.writeFileSync(scopeFileOf(run), JSON.stringify({ scope: run.scope || [], ranges }));
+  try {
+    const ranges = {};
+    for (const e of (run.scope || []).map(scopeEntry))
+      if (e.from)
+        ranges[e.path] = {
+          from: e.from,
+          to: e.to,
+          before: read[e.path] ?? fs.readFileSync(path.join(ROOT, e.path), 'utf8'),
+        };
+    // Each run's own: Claude Code's hooks find it by the environment the run starts them with.
+    fs.writeFileSync(scopeFileOf(run), JSON.stringify({ scope: run.scope || [], ranges }));
+  } catch (e) {
+    push(run, { t: 'err', text: `Couldn't start: ${e.message}` });
+    return end(run, 'failed');
+  }
   await turn(run, scopePreamble(run) + run.prompt);
 }
 /**
@@ -116,7 +124,7 @@ function carryOn(run) {
   return turn(run, scopePreamble(run) + allowed + left + 'Carry on where you stopped.');
 }
 async function end(run, status) {
-  fs.rmSync(scopeFileOf(run), { force: true });
+  fs.rmSync(scopeFileOf(run), { force: true, recursive: true });
   forgetSandbox(run);
   forgetShell(run);
   await finishRun(run, status);

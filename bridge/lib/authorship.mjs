@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { VERSION } from './paths.mjs';
 import { gitAsync } from './repo.mjs';
 import { repoFile } from './files.mjs';
-import { headNow } from './snapshots.mjs';
+import { LOA_IDENT, headNow } from './snapshots.mjs';
 import { runs } from './runs.mjs';
 
 /**
@@ -87,7 +87,7 @@ export async function recordedAuthors(rel) {
 
 /**
  * Writes who wrote each line, as the app worked it out, to a git note on HEAD: an Agent Trace record (spec 0.1.0,
- * agent-trace.dev; it sets no place to keep records, so this is our choice, refs/notes/agent-trace) or a Git AI
+ * agent-trace.dev; it sets no place to keep records, so League of Agents chose refs/notes/agent-trace) or a Git AI
  * authorship log (refs/notes/ai, agent lines only, never over a log already there). Only files whose working copy
  * is HEAD's, so the line numbers are HEAD's. `files`: path to { start, end, author, run } ranges, 1-based. No
  * prompts go in: notes can be pushed.
@@ -182,15 +182,9 @@ export async function exportAttribution(format, files) {
     () => true,
     () => false,
   );
-  const who = {
-    GIT_AUTHOR_NAME: 'loa',
-    GIT_AUTHOR_EMAIL: 'loa@localhost',
-    GIT_COMMITTER_NAME: 'loa',
-    GIT_COMMITTER_EMAIL: 'loa@localhost',
-  };
   await gitAsync(['notes', `--ref=${ref.slice('refs/notes/'.length)}`, 'add', '-f', '-F', '-', head], {
     input: note,
-    ...(hasIdentity ? {} : { env: { ...process.env, ...who } }),
+    ...(hasIdentity ? {} : { env: { ...process.env, ...LOA_IDENT } }),
   });
   return { ref, commit: head, files: named.length };
 }

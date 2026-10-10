@@ -1,4 +1,4 @@
-// The agents' own hook files: our entries, installed only with consent, and removed leaving each file as it was.
+// The agents' own hook files: the bridge's entries, installed only with consent, and removed leaving each file as it was.
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -8,7 +8,8 @@ import { readJson } from './util.mjs';
 import { ROOT, LOA, excludeFromGit, git } from './repo.mjs';
 
 // Each agent's own hook file gets entries that run a copy of this bridge (.loa/bridge.mjs). Hooks that aren't
-// ours are never changed; removing ours puts each file back exactly as it was, or deletes a file we created.
+// the bridge's are never changed; removing the bridge's puts each file back exactly as it was, or deletes a file it
+// created.
 // Cursor reads project hooks only from the folder opened as its workspace, which is often a parent of the
 // repo, so its hooks go in the user's own Cursor settings; the hook then finds the repo itself (runHook).
 export const hookFiles = () => ({
@@ -24,9 +25,9 @@ const backupFile = () => path.join(LOA, 'hooks-backup.json');
 const readBackup = () =>
   Object.fromEntries(Object.entries(readJson(backupFile(), {})).map(([p, v]) => [path.resolve(ROOT, p), v]));
 /** What the hooks run: a one-line file that loads the bridge's copy in .loa (copyForHooks). */
-export const hookFile = () => path.join(LOA, 'bridge.mjs');
+const hookFile = () => path.join(LOA, 'bridge.mjs');
 /**
- * Hooks, ours and the Claude Code plugin's, run a copy of the bridge inside the repo, so they keep working when the
+ * Hooks, the bridge's and the Claude Code plugin's, run a copy of the bridge inside the repo, so they keep working when the
  * bridge was started from a temporary place (npx's cache) that may later be cleared. Each copy is a folder named by
  * its contents, and .loa/bridge.mjs is switched to it by a rename: a hook starting meanwhile loads the old copy or the
  * new one, never half of one. Copies over a day old go; a hook still running from one has long since loaded it.
@@ -70,7 +71,7 @@ function ourEntries(agent, cmd) {
   return { beforeSubmitPrompt: [{ command: cmd('start cursor') }], stop: [{ command: cmd('stop cursor') }] };
 }
 
-/** A hook file with our entries taken out, and events or files left empty by that removed too. */
+/** A hook file with the bridge's entries taken out, and events or files left empty by that removed too. */
 function withoutOurs(json) {
   const out = { ...json };
   const hooks = {};
@@ -83,7 +84,7 @@ function withoutOurs(json) {
   out.hooks = hooks;
   return out;
 }
-/** Whether a hook file holds anything besides our entries and the keys we add. */
+/** Whether a hook file holds anything besides the bridge's entries and the keys it adds. */
 const hasOwnContent = json =>
   Object.keys(json).some(k => k !== 'hooks' && k !== 'version') || Object.keys(json.hooks || {}).length > 0;
 
@@ -99,7 +100,7 @@ export function installHooks() {
       console.error(`  Left ${shown(p)} as it is: it isn't plain JSON.`);
       continue;
     }
-    // A hook file in git is the team's: ours hold this computer's paths, and would show as a change to commit.
+    // A hook file in git is the team's: the bridge's hold this computer's paths, and would show as a change to commit.
     if (p.startsWith(ROOT + path.sep) && git(['ls-files', '--', path.relative(ROOT, p)]).trim()) {
       console.error(`  Left ${shown(p)} as it is: it's in git, and the hooks hold this computer's paths.`);
       continue;
@@ -111,13 +112,13 @@ export function installHooks() {
       next.hooks[event] = [...(next.hooks[event] || []), ...entries];
     fs.mkdirSync(path.dirname(p), { recursive: true });
     fs.writeFileSync(p, JSON.stringify(next, null, 2) + '\n');
-    // A file we created in the repo holds this machine's paths: keep it out of git.
+    // A file the bridge created in the repo holds this machine's paths: kept out of git.
     if (text === null && p.startsWith(ROOT + path.sep)) excludeFromGit([path.relative(ROOT, p)]);
   }
   fs.writeFileSync(backupFile(), JSON.stringify(backup));
 }
 
-/** Takes our hooks out. A file untouched since is restored byte for byte; returns the files changed. */
+/** Takes the bridge's hooks out. A file untouched since is restored byte for byte; returns the files changed. */
 export function removeHooks() {
   const backup = readBackup();
   const changed = [];

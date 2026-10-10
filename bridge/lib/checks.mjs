@@ -7,26 +7,26 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { readJson } from './util.mjs';
-import { ROOT, CONF, git } from './repo.mjs';
+import { ROOT, CONF, LOA, git } from './repo.mjs';
 import { emit } from './events.mjs';
 
 /** Found checks the person turned off: never offered again (`name\0command`). */
 export let CHECKS_OFF;
-/**
- * The checks this person allowed for this repo, kept outside it, in their home folder, so nothing in a repo can
- * allow its own commands. `private`: found checks they turned on (loa.config.json is written only when they share
- * them with their team). `approved`: the committed loa.config.json list they approved. A cloned repo's
- * loa.config.json is the repo's, not the person's: its checks run only once that exact list is approved, and
- * wait again whenever any of it changes.
- */
+/** Where the checks this person allowed for this repo are kept: in their home folder, outside the repo. */
 export let CHECKS_FILE;
-export let allowed;
+/**
+ * The checks this person allowed for this repo, kept outside it so nothing in a repo can allow its own commands.
+ * `private`: found checks they turned on (loa.config.json is written only when they share them with their team).
+ * `approved`: the committed loa.config.json list they approved. A cloned repo's loa.config.json is the repo's, not the
+ * person's: its checks run only once that exact list is approved, and wait again whenever any of it changes.
+ */
+let allowed;
 export function saveAllowed(change) {
   Object.assign(allowed, change);
   fs.mkdirSync(path.dirname(CHECKS_FILE), { recursive: true });
   fs.writeFileSync(CHECKS_FILE, JSON.stringify({ ...allowed, root: ROOT }, null, 2));
 }
-export const sameChecks = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const sameChecks = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 /** Committed checks waiting for the person's approval: offered, never run. */
 export let repoChecks = [];
 export let checksShared = false;
@@ -34,7 +34,7 @@ export const setRepoChecks = c => (repoChecks = c);
 export const setChecksShared = on => (checksShared = on);
 /** Which checks run: the person's own, or the repo's committed list once they approved that exact list. */
 export function initChecks() {
-  CHECKS_OFF = path.join(ROOT, '.loa', 'checks-off.json');
+  CHECKS_OFF = path.join(LOA, 'checks-off.json');
   CHECKS_FILE = path.join(
     os.homedir(),
     '.config',
@@ -139,14 +139,21 @@ export async function runChecks(run) {
       ch.stderr.setEncoding('utf8');
       ch.stdout.on('data', add);
       ch.stderr.on('data', add);
-      const timer = setTimeout(() => ch.kill('SIGTERM'), (c.timeout_s || 900) * 1000);
+      let stopped = false;
+      const timer = setTimeout(
+        () => {
+          stopped = true;
+          ch.kill('SIGTERM');
+        },
+        (c.timeout_s || 900) * 1000,
+      );
       ch.on('close', code => {
         clearTimeout(timer);
-        resolve({ code, out });
+        resolve({ code, out, stopped });
       });
     });
     const clean = stripVTControlCharacters(res.out);
-    const error = res.code ? setupError(clean, res.code) : null;
+    const error = res.code && !res.stopped ? setupError(clean, res.code) : null;
     if (error) {
       run.checks.push({
         name: c.name,
@@ -163,7 +170,7 @@ export async function runChecks(run) {
     run.checks.push({
       name: c.name,
       ok: res.code === 0,
-      summary: hit ? hit[0].trim() : `exit ${res.code}`,
+      summary: res.stopped ? `Stopped after ${c.timeout_s || 900} s` : hit ? hit[0].trim() : `exit ${res.code}`,
       ms: Date.now() - t0,
       tail: clean.split('\n').slice(-40).join('\n'),
     });

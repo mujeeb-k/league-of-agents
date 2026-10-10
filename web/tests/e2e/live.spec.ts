@@ -534,6 +534,29 @@ test('failed checks make Revert the primary action and Keep the secondary one', 
   }
 });
 
+test('a check stopped at its time limit says so', async () => {
+  const repo = makeRepo();
+  fs.writeFileSync(
+    path.join(repo, 'loa.config.json'),
+    JSON.stringify({ checks: [{ name: 'tests', run: 'sleep 30', timeout_s: 1 }] }),
+  );
+  git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qam', 'slow check');
+  approveChecks(repo);
+  const b = await startBridge(repo);
+  try {
+    const run = (await call(b, '/api/runs', { agent: 'claude', prompt: 'Edit the log', scope: [], resumeFrom: null }))
+      .body as unknown as RunDTO;
+    await expect
+      .poll(async () => ((await call(b, `/api/runs/${run.id}`)).body as unknown as RunDTO).checks[0], {
+        timeout: 15_000,
+      })
+      .toMatchObject({ ok: false, summary: 'Stopped after 1 s' });
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test("a check's terminal codes, colour and cursor alike, stay out of its summary", async () => {
   const repo = makeRepo();
   // How test runners print: the cursor hidden while they run, the counts in colour.
@@ -1640,6 +1663,33 @@ onMac(
   },
 );
 
+test("commits a session as a branch's first commit", async () => {
+  const repo = makeRepo();
+  // A branch with no commits yet: its files are there, staged.
+  git(repo, 'update-ref', '-d', 'HEAD');
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP });
+  try {
+    await expect
+      .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).agents.hermes?.available)
+      .toBe(true);
+    const run = await runToEnd(b, {
+      agent: 'hermes',
+      prompt: 'edit:shared/log.ts',
+      scope: ['shared/'],
+      resumeFrom: null,
+    });
+    expect((await call(b, `/api/runs/${run.id}/commit`)).body).toMatchObject({
+      files: ['shared/log.ts'],
+      branch: 'main',
+    });
+    expect((await call(b, `/api/runs/${run.id}/commit`, { message: 'First' })).status).toBe(200);
+    expect(git(repo, 'show', '--name-only', '--format=%s', 'HEAD').trim()).toBe('First\n\nshared/log.ts');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test.describe('commit a session', () => {
   async function committing(fn: (repo: string, b: Bridge) => Promise<void>) {
     const repo = makeRepo();
@@ -1977,6 +2027,23 @@ test.describe('sessions at once', () => {
       },
       { LOA_SANDBOX: 'off' },
     ));
+
+  onMac("a session on a file not made yet never puts an untracked secret file in git's objects", () =>
+    twoSessions(async (b, repo) => {
+      fs.writeFileSync(path.join(repo, '.env'), 'API_KEY=never-in-git\n');
+      const secret = git(repo, 'hash-object', '.env').trim();
+      const c = (
+        await call(b, '/api/runs', {
+          agent: 'claude',
+          prompt: 'Make it. shell:shared/new.ts',
+          scope: ['shared/new.ts'],
+        })
+      ).body as unknown as RunDTO;
+      await until(b, c.id, 'done');
+      expect(fs.existsSync(path.join(repo, 'shared/new.ts'))).toBe(true);
+      expect(spawnSync('git', ['cat-file', '-e', secret], { cwd: repo }).status).not.toBe(0);
+    }),
+  );
 
   onMac(
     "in the sandbox, Claude Code's shell commands write in its section, credited line for line, and nowhere else",
@@ -2449,6 +2516,20 @@ test.describe('sessions at once', () => {
       expect(fs.existsSync(path.join(repo, 'apps/new.ts'))).toBe(true);
     }));
 
+  test("in a worktree, git ignores the bridge's folder, as in the main repo", async () => {
+    const main = makeRepo(),
+      wt = path.join(path.dirname(main), 'wt');
+    git(main, 'worktree', 'add', '-q', wt);
+    const b = await startBridge(wt);
+    try {
+      expect(fs.existsSync(path.join(wt, '.loa/bridge.json'))).toBe(true);
+      expect(git(wt, 'status', '--porcelain')).not.toContain('.loa');
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(main), { recursive: true, force: true });
+    }
+  });
+
   onMac("in a worktree, a session can't write the repo's git folder outside it", async () => {
     const main = makeRepo(),
       wt = path.join(path.dirname(main), 'wt');
@@ -2540,6 +2621,24 @@ test.describe('sessions at once', () => {
       expect((await runOf(b, a.id)).changes.map(ch => ch.path)).toEqual(['apps/console/main.ts']);
       expect((await runOf(b, c.id)).changes.map(ch => ch.path)).toEqual(['notes.md']);
       expect((await state(b)).runs.map(r => r.agent)).toEqual(['hermes', 'hermes', 'hermes']);
+    }));
+
+  test("a run that can't start, or a save that can't write, ends: it never holds the repo", () =>
+    twoSessions(async (b, repo) => {
+      // Where run 1's scope file goes, a folder: writing it fails.
+      fs.mkdirSync(path.join(repo, '.loa/scope-1.json'));
+      const a = (await start(b, ['shared/'], 'edit:shared/log.ts')).body as unknown as RunDTO;
+      await until(b, a.id, 'failed');
+      // A file it can't write.
+      const file = path.join(repo, 'apps/console/main.ts');
+      fs.chmodSync(file, 0o444);
+      const now = (await call(b, '/api/file?path=apps/console/main.ts')).body as { hash: string };
+      const sv = await call(b, '/api/save', { path: 'apps/console/main.ts', text: 'x\n', base: now.hash });
+      expect(sv.status).toBe(500);
+      fs.chmodSync(file, 0o644);
+      expect((await state(b)).runs.filter(r => r.status === 'running')).toEqual([]);
+      const c = (await start(b, [], 'edit:notes.md')).body as unknown as RunDTO;
+      await until(b, c.id, 'done');
     }));
 
   test('a save from the editor outside every section is its own run while sessions work; inside one, it waits', () =>
@@ -4174,6 +4273,22 @@ test('Cursor hooks find the repo inside the workspace, and only their own conver
 
 // Who may reach the bridge (docs/THREAT-MODEL.md). Only pages it trusts may call it from a browser, only by its own address,
 // and only with the token in the Authorization header; guessing the token locks it until a restart.
+test('a request whose body is not JSON is answered 400, not as a fault of the bridge', async () => {
+  const repo = makeRepo();
+  const b = await startBridge(repo);
+  try {
+    const res = await fetch(`http://127.0.0.1:${b.port}/api/runs`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer ' + b.token, 'content-type': 'application/json' },
+      body: '{"agent":',
+    });
+    expect(res.status).toBe(400);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('bridge security: foreign origins and rebinding hosts get 403 and change nothing', async ({ page }) => {
   const repo = makeRepo(),
     b = await startBridge(repo, undefined, {}, ['--no-hooks']);

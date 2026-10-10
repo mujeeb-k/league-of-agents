@@ -24,7 +24,7 @@ import { codeFiles, folders, inFolder, mapMax, readTree, hashOf, repoFile, treeE
 import { showAt } from './snapshots.mjs';
 import { recordedAuthors, exportAttribution } from './authorship.mjs';
 import { runs, working, saveRun, publicRun, fullRun, beginRun, finishRun, push, revertRun } from './runs.mjs';
-import { armIdle, ownWrite, writeConfig, watchOff } from './watch.mjs';
+import { armIdle, capturedRun, ownWrite, writeConfig, watchOff } from './watch.mjs';
 import { seq, events, waiters, emit, emitRun } from './events.mjs';
 import { answerWant, cancelSession, startSession } from './sessions.mjs';
 import { publicStep, stepText, stepsOf } from './steps.mjs';
@@ -315,7 +315,7 @@ async function stepFile({ params }) {
 async function cancelRun({ params }) {
   const run = runOf(params);
   if (!run) return noRun;
-  // A captured terminal turn has no agent of ours to stop: it ends here.
+  // A captured terminal turn has no agent the bridge started to stop: it ends here.
   if (working.has(run.id) && !cancelSession(run)) {
     run.status = 'cancelled';
     await finishRun(run, 'cancelled');
@@ -381,7 +381,7 @@ async function authors({ url }) {
 /**
  * The map's layout, kept per repo so a reload, another window size or the other app opens it as it was.
  */
-const layout = () => /** @type {Reply} */ ([200, { layout: readJson(LAYOUT_FILE, null) }]);
+const getLayout = () => /** @type {Reply} */ ([200, { layout: readJson(LAYOUT_FILE, null) }]);
 /**
  * @param {Request} request
  * @returns {Promise<Reply>}
@@ -397,7 +397,7 @@ async function saveLayout({ body }) {
  * @param {Request} request
  * @returns {Reply}
  */
-function file({ url }) {
+function getFile({ url }) {
   const abs = repoFile(url.searchParams.get('path'));
   if (!abs) return [404, { error: 'Not a file on the map' }];
   const text = fs.readFileSync(abs, 'utf8');
@@ -418,7 +418,13 @@ async function save({ body }) {
   if (now === b.text) return [200, { unchanged: true }];
   // Its section is the file, so it can be saved while sessions work elsewhere, and waits for one working on it.
   const run = await beginRun({ agent: 'you', scope: [b.path] });
-  fs.writeFileSync(abs, b.text);
+  try {
+    fs.writeFileSync(abs, b.text);
+  } catch (e) {
+    // Not written: the run ends as failed, holding nothing, and the editor says why.
+    await finishRun(run, 'failed');
+    throw e;
+  }
   await finishRun(run);
   return [200, publicRun(run)];
 }
@@ -485,10 +491,8 @@ async function hooksRemove() {
   return [200, { removed: await ownWrite(removeHooks) }];
 }
 
-/** The run a terminal or editor turn started through our hooks, if one is under way: it works alone. */
-const capturedRun = () => [...working.values()].find(r => Object.values(HOOK_AGENT).includes(r.agent));
 /**
- * A prompt sent in a terminal or editor with our hooks, as a run (hook.mjs runHook 'start').
+ * A prompt sent in a terminal or editor with the bridge's hooks, as a run (hook.mjs runHook 'start').
  * @param {Request} request
  * @returns {Promise<Reply>}
  */
@@ -554,9 +558,9 @@ export const ROUTES = [
   ['POST', /^\/api\/runs\/(\d+)\/commit$/, commit],
   ['POST', '/api/attribution/export', exportNote],
   ['GET', '/api/authors', authors],
-  ['GET', '/api/layout', layout],
+  ['GET', '/api/layout', getLayout],
   ['POST', '/api/layout', saveLayout],
-  ['GET', '/api/file', file],
+  ['GET', '/api/file', getFile],
   ['POST', '/api/save', save],
   ['POST', '/api/checks', turnOnChecks],
   ['POST', '/api/checks/off', turnOffCheck],

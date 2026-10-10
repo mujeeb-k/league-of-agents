@@ -19,17 +19,17 @@ const MAPPED = [
 export const CODE_EXT = new RegExp(`\\.(${MAPPED.join('|')})$`, 'i');
 export const SKIP =
   /(^|\/)(node_modules|\.git|\.loa|dist|build|coverage|\.next|\.turbo)(\/|$)|(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$|(^|\/)\.env/;
-export const MAX_LINES = 400,
+const MAX_LINES = 400,
   // Most files a map shows; a larger folder is mapped by one of its folders instead (the app asks which).
   // LOA_MAX_FILES sets another (tests).
   MAX_FILES = Number(process.env.LOA_MAX_FILES) || 10000,
   // A map of more files than this carries no lines in the state: the app asks for files' first lines as it shows
   // them (heads).
-  LINES_UNDER = 1500,
-  // Larger files are left off the map and can't be opened: a guard against reading a giant file into memory.
-  MAX_BYTES = 16 * 1024 * 1024;
+  LINES_UNDER = 1500;
+/** Larger files are left off the map and can't be opened: a guard against reading a giant file into memory. */
+export const MAX_BYTES = 16 * 1024 * 1024;
 /** Text, as git judges it: no NUL byte in the first 8,000 bytes. */
-export const isText = buf => !buf.subarray(0, 8000).includes(0);
+const isText = buf => !buf.subarray(0, 8000).includes(0);
 
 const LIST = ['ls-files', '-z', '--cached', '--others', '--exclude-standard'];
 const listing = (paths = ['.']) => [...LIST, '--', ...paths, ...leftOut()];
@@ -78,7 +78,7 @@ export const codeAmong = paths =>
  * The files a map of a folder ('' for the whole repo, else ending in /) shows: the first `max` in it, at most
  * MAX_FILES (the app asks for as many as it draws well).
  */
-export function listFiles(root = '', max = MAX_FILES) {
+function listFiles(root = '', max = MAX_FILES) {
   return inFolder(root).slice(0, mapMax(max));
 }
 /** The code files in a folder, '' for the whole repo. */

@@ -9,7 +9,7 @@ import { CONF } from './repo.mjs';
 import { runChecks } from './checks.mjs';
 import { blobAt, commitWith, computeChanges, pin, snapshotNow } from './snapshots.mjs';
 import { runs, working, newRun, finishRun, saveRun } from './runs.mjs';
-import { base, setBase } from './watch.mjs';
+import { base, setBase, settle } from './watch.mjs';
 import { emit, emitRun } from './events.mjs';
 import { filesWritten } from './agents/lines.mjs';
 import { reportsEdits } from './agents/registry.mjs';
@@ -46,7 +46,7 @@ export function clash(scope) {
  * count as its agent's, and it begins on the baseline. With others at work, the baseline stays: it begins on a
  * snapshot of now.
  */
-export async function startingPoint(settle) {
+export async function startingPoint() {
   return working.size ? (await snapshotNow('run before')).commit : settle();
 }
 /** A run started: alone, it opens an epoch; with others at work, it joins theirs and every run in it overlaps. */
@@ -64,7 +64,7 @@ export function joinEpoch(run) {
 export const keepsBaseline = run => !!run.overlapped;
 
 /**
- * The run's own changes, from all that changed while it worked. A run that worked alone owns them all, as before,
+ * The run's own changes, from all that changed while it worked. A run that worked alone owns them all,
  * except what a revert during it wrote. A run that overlapped owns those in its own section and, if its agent reports
  * its edits, that those edits named; the rest is said, and left for the epoch's end.
  */
