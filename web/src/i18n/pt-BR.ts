@@ -6,8 +6,8 @@ const catalogue: Catalogue = {
   'Could not reach the bridge. Is it running? In Chrome, allow local network access for this site.':
     'Não foi possível alcançar a ponte. Ela está rodando? No Chrome, permita o acesso à rede local para este site.',
   'The bridge is offline. Reconnect first.': 'A ponte está offline. Reconecte primeiro.',
-  'League of Agents is a map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.':
-    'League of Agents é um mapa do seu repositório para Claude Code, Codex e Cursor. Selecione arquivos ou linhas, dê uma tarefa ao seu agente e revise as mudanças dele.',
+  'League of Agents is a map of your repo for Claude Code, Codex, Cursor, Hermes and DeepSeek Harness. Select files or lines, give your agent a task, then review its changes.':
+    'League of Agents é um mapa do seu repositório para Claude Code, Codex, Cursor, Hermes e DeepSeek Harness. Selecione arquivos ou linhas, dê uma tarefa ao seu agente e revise as mudanças dele.',
   Before: 'Antes',
   After: 'Depois',
   Diff: 'Diff',
@@ -230,8 +230,8 @@ const catalogue: Catalogue = {
   'Or run it yourself in the repo:': 'Ou rode você mesmo no repositório:',
   "macOS, Node 20 or later, and a git repo. Linux is in testing; Windows isn't supported yet.":
     'macOS, Node 20 ou mais recente e um repositório git. O Linux está em testes; o Windows ainda não é suportado.',
-  'Claude Code or Cursor to run from the canvas. Changes made in any editor show up as runs.':
-    'Claude Code ou Cursor para rodar a partir do canvas. Mudanças feitas em qualquer editor aparecem como execuções.',
+  'Claude Code, Codex, Cursor, Hermes or DeepSeek Harness to run from the map. Changes made in any editor show up as runs.':
+    'Claude Code, Codex, Cursor, Hermes ou DeepSeek Harness para rodar a partir do mapa. Mudanças feitas em qualquer editor aparecem como execuções.',
   'I have a link to paste': 'Tenho um link para colar',
   'Get around': 'Navegação',
   'Latest run': 'Última execução',
@@ -440,8 +440,8 @@ const catalogue: Catalogue = {
     'Este commit já tem uma nota do Git AI; o League of Agents nunca a sobrescreve.',
   'No line from a kept run was written by an agent.':
     'Nenhuma linha de uma execução mantida foi escrita por um agente.',
-  'A map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.':
-    'Um mapa do seu repositório para Claude Code, Codex e Cursor. Selecione arquivos ou linhas, dê uma tarefa ao seu agente e revise as mudanças dele.',
+  'A map of your repo for Claude Code, Codex, Cursor, Hermes and DeepSeek Harness. Select files or lines, give your agent a task, then review its changes.':
+    'Um mapa do seu repositório para Claude Code, Codex, Cursor, Hermes e DeepSeek Harness. Selecione arquivos ou linhas, dê uma tarefa ao seu agente e revise as mudanças dele.',
   "A map of a repository with an agent's changes marked.":
     'O mapa de um repositório com as mudanças de um agente marcadas.',
   'What League of Agents collects.': 'O que o League of Agents coleta.',

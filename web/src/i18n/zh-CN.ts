@@ -6,8 +6,8 @@ const catalogue: Catalogue = {
   'Could not reach the bridge. Is it running? In Chrome, allow local network access for this site.':
     '无法连接到桥接程序。它在运行吗？在 Chrome 中，请允许此网站访问本地网络。',
   'The bridge is offline. Reconnect first.': '桥接程序已离线。请先重新连接。',
-  'League of Agents is a map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.':
-    'League of Agents 是你的代码仓库的地图，适用于 Claude Code、Codex 和 Cursor。选择文件或代码行，给代理一个任务，然后审查它的改动。',
+  'League of Agents is a map of your repo for Claude Code, Codex, Cursor, Hermes and DeepSeek Harness. Select files or lines, give your agent a task, then review its changes.':
+    'League of Agents 是你的代码仓库的地图，适用于 Claude Code、Codex、Cursor、Hermes 和 DeepSeek Harness。选择文件或代码行，给代理一个任务，然后审查它的改动。',
   Before: '之前',
   After: '之后',
   Diff: '差异',
@@ -218,8 +218,8 @@ const catalogue: Catalogue = {
   'Or run it yourself in the repo:': '或者自己在仓库中运行：',
   "macOS, Node 20 or later, and a git repo. Linux is in testing; Windows isn't supported yet.":
     'macOS、Node 20 或更高版本，以及一个 git 仓库。Linux 正在测试中；暂不支持 Windows。',
-  'Claude Code or Cursor to run from the canvas. Changes made in any editor show up as runs.':
-    '从画布运行需要 Claude Code 或 Cursor。在任何编辑器中所做的改动都会显示为运行。',
+  'Claude Code, Codex, Cursor, Hermes or DeepSeek Harness to run from the map. Changes made in any editor show up as runs.':
+    '从地图运行需要 Claude Code、Codex、Cursor、Hermes 或 DeepSeek Harness。在任何编辑器中所做的改动都会显示为运行。',
   'I have a link to paste': '我有一个链接要粘贴',
   'Get around': '操作方式',
   'Latest run': '最近的运行',
@@ -413,8 +413,8 @@ const catalogue: Catalogue = {
   'This commit already has a Git AI note; League of Agents never writes over it.':
     '此提交已有 Git AI note；League of Agents 从不覆盖它。',
   'No line from a kept run was written by an agent.': '已保留运行中的行没有一行是代理写的。',
-  'A map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.':
-    '你的代码仓库的地图，适用于 Claude Code、Codex 和 Cursor。选择文件或代码行，给代理一个任务，然后审查它的改动。',
+  'A map of your repo for Claude Code, Codex, Cursor, Hermes and DeepSeek Harness. Select files or lines, give your agent a task, then review its changes.':
+    '你的代码仓库的地图，适用于 Claude Code、Codex、Cursor、Hermes 和 DeepSeek Harness。选择文件或代码行，给代理一个任务，然后审查它的改动。',
   "A map of a repository with an agent's changes marked.": '一个代码仓库的地图，标出了代理的改动。',
   'What League of Agents collects.': 'League of Agents 收集哪些信息。',
   'Edit file': 'Edit file',

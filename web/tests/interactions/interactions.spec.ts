@@ -51,7 +51,7 @@ test("the demo introduces itself: the tagline as the page's only heading, at the
   await expect(page.locator('h1')).toHaveCount(1);
   await expect(page.locator('#insp #intro h1')).toHaveText('See every change your agents make.');
   await expect(page.locator('#intro p')).toHaveText(
-    'League of Agents is a map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.',
+    'League of Agents is a map of your repo for Claude Code, Codex, Cursor, Hermes and DeepSeek Harness. Select files or lines, give your agent a task, then review its changes.',
   );
   await expect(page.locator('#introCommand')).toHaveText('npx leagueofagents-cli@latest');
   await expect(page.locator('#introStatic')).toHaveCount(0);
@@ -1353,7 +1353,7 @@ test.describe('editor', () => {
 
 test.describe('a page per language', () => {
   const ABOUT_FR =
-    'League of Agents est une carte de votre dépôt pour Claude Code, Codex et Cursor. Sélectionnez des fichiers ou des lignes, confiez une tâche à votre agent, puis relisez ses changements.';
+    'League of Agents est une carte de votre dépôt pour Claude Code, Codex, Cursor, Hermes et DeepSeek Harness. Sélectionnez des fichiers ou des lignes, confiez une tâche à votre agent, puis relisez ses changements.';
 
   test('/fr/ opens in French, its introduction in the HTML before the app starts', async ({ page, browser }) => {
     // Before any script: the page's own HTML.

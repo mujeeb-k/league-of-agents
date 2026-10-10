@@ -871,7 +871,11 @@ function RepoView() {
           <CopyCommand ids={['tryCommand', 'tryCopy']} compact />
           <ul className="mt-3 flex list-disc flex-col gap-1 pl-4 text-xs text-muted-foreground">
             <li>{t("macOS, Node 20 or later, and a git repo. Linux is in testing; Windows isn't supported yet.")}</li>
-            <li>{t('Claude Code or Cursor to run from the canvas. Changes made in any editor show up as runs.')}</li>
+            <li>
+              {t(
+                'Claude Code, Codex, Cursor, Hermes or DeepSeek Harness to run from the map. Changes made in any editor show up as runs.',
+              )}
+            </li>
           </ul>
           <Button variant="outline" size="sm" className="mt-3" id="tryConnect" onClick={() => setConnectOpen(true)}>
             {t('I have a link to paste')}

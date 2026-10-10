@@ -1,6 +1,6 @@
 # League of Agents
 
-> See every change your agents make. A map of your repo for Claude Code, Codex and Cursor. Select files or lines, give your agent a task, then review its changes.
+> See every change your agents make. A map of your repo for Claude Code, Codex, Cursor, Hermes and DeepSeek Harness. Select files or lines, give your agent a task, then review its changes.
 
 ## What it does
 
