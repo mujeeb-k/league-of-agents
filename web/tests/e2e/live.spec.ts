@@ -28,6 +28,7 @@ import {
   startBridge,
   type Bridge,
 } from '../support/live';
+import { landings } from '../support/outcome';
 import { APP, TOAST } from '../support/targets';
 import { ZOOMS, checkLevel, zoomTo } from '../support/zoom';
 
@@ -1245,6 +1246,139 @@ test("a map of over 1,500 files: a card shows its lines once it's in view", asyn
     await page.keyboard.press('Enter');
     await page.keyboard.press('Escape');
     await expect(page.locator('#nodes .card[data-path="big/f0007.ts"] .ln')).toContainText(['export const v7 = 7;']);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// Outcome tests: a marker in files that usually hold secrets, the product used every way that snapshots, and then a
+// search of everywhere the marker could land (support/outcome.ts).
+const MARKER = 'loa-marker-7f3a9c51e2';
+const SECRET_NAMES = [
+  '.env',
+  'shared/.env.local',
+  'deploy/server.pem',
+  'deploy/tls.key',
+  'certs/app.p12',
+  'certs/app.pfx',
+  'android/release.jks',
+  'android/debug.keystore',
+  'vault.kdbx',
+  'id_rsa',
+  'keys/id_ed25519',
+  '.npmrc',
+  '.pypirc',
+  '.netrc',
+  '.git-credentials',
+  '.htpasswd',
+  'credentials.json',
+  'config/secrets.json',
+  'config/secrets.yaml',
+  'config/secrets.yml',
+  'service-account-prod.json',
+  'infra/prod.tfvars',
+];
+function plantSecrets(repo: string) {
+  for (const f of SECRET_NAMES) {
+    fs.mkdirSync(path.dirname(path.join(repo, f)), { recursive: true });
+    fs.writeFileSync(path.join(repo, f), `KEY=${MARKER}\n`);
+  }
+}
+/** A temp folder of the bridge's own, to search afterwards. */
+const tmpOf = (repo: string) => {
+  const dir = path.join(path.dirname(repo), 'tmp');
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+};
+
+test("untracked secret files' contents land nowhere: not in git's objects, .loa, the log, home or temp", async () => {
+  const repo = makeRepo();
+  plantSecrets(repo);
+  const tmp = tmpOf(repo);
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP, TMPDIR: tmp, LOA_QUIET_MS: '300' });
+  try {
+    await expect
+      .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).agents.hermes?.available)
+      .toBe(true);
+    // Every way a snapshot is taken: a run on the whole repository, one on a section whose file isn't made yet and
+    // that runs a shell command, a harness's run, a save from the editor, a change made outside (watch mode).
+    const whole = await runToEnd(b, { agent: 'claude', prompt: 'Edit the allowlist', scope: [], resumeFrom: null });
+    await runToEnd(b, {
+      agent: 'claude',
+      prompt: 'Make it. shell:shared/new.ts',
+      scope: ['shared/new.ts'],
+      resumeFrom: null,
+    });
+    const harness = await runToEnd(b, {
+      agent: 'hermes',
+      prompt: 'edit:shared/log.ts',
+      scope: ['shared/'],
+      resumeFrom: null,
+    });
+    const file = (await call(b, '/api/file?path=apps/console/main.ts')).body as { hash: string };
+    expect(
+      (await call(b, '/api/save', { path: 'apps/console/main.ts', text: 'export {};\n', base: file.hash })).status,
+    ).toBe(200);
+    fs.writeFileSync(path.join(repo, 'notes.md'), 'by hand\n');
+    await expect
+      .poll(
+        async () =>
+          ((await call(b, '/api/state')).body as unknown as StateResponse).runs.some(r => r.agent === 'detected'),
+        {
+          timeout: 15_000,
+        },
+      )
+      .toBe(true);
+    // And every way one is used: revert, commit.
+    expect((await call(b, `/api/runs/${harness.id}/revert`, {})).status).toBe(200);
+    expect((await call(b, `/api/runs/${whole.id}/commit`, { message: 'Keep it' })).status).toBe(200);
+    b.stop();
+    await new Promise(r => setTimeout(r, 300));
+    expect(landings(MARKER, repo, [homeOf(repo), tmp])).toEqual([]);
+    expect(b.output()).not.toContain(MARKER);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// What the README's limits say, held as it is: an agent's own activity is kept in .loa/runs, so a secret file an
+// agent prints is there, and nowhere else. If this changes, the README's limit changes with it.
+test('a secret file an agent prints is in its activity under .loa/runs, and nowhere else', async () => {
+  const repo = makeRepo();
+  plantSecrets(repo);
+  const tmp = tmpOf(repo);
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP, TMPDIR: tmp });
+  try {
+    await expect
+      .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).agents.hermes?.available)
+      .toBe(true);
+    await runToEnd(b, { agent: 'hermes', prompt: 'exec: cat .env', scope: [], resumeFrom: null });
+    await runToEnd(b, { agent: 'hermes', prompt: 'edit:.env', scope: [], resumeFrom: null });
+    b.stop();
+    await new Promise(r => setTimeout(r, 300));
+    const hits = landings(MARKER, repo, [homeOf(repo), tmp]);
+    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.filter(h => !h.startsWith('.loa/runs/'))).toEqual([]);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// The same search on the published 0.1.3, whose README said the same and whose snapshots wrote these files into
+// .git/objects: the search has to find that, or it proves nothing.
+test('the search for secret files finds what 0.1.3 left in .git/objects', async () => {
+  test.setTimeout(120_000);
+  const repo = makeRepo();
+  plantSecrets(repo);
+  const b = await startBridge(repo, FAKE_CLAUDE, {}, [], publishedBridge('0.1.3'));
+  try {
+    await runToEnd(b, { agent: 'claude', prompt: 'Edit the allowlist', scope: [], resumeFrom: null });
+    b.stop();
+    await new Promise(r => setTimeout(r, 300));
+    expect(landings(MARKER, repo, [homeOf(repo)]).filter(h => h.startsWith('git object')).length).toBeGreaterThan(0);
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });

@@ -80,7 +80,7 @@ Sessions on sections that don't overlap run at the same time; a session on the w
 
 **From your terminal.** Use Claude Code, Codex or Cursor as usual. With the hooks on, each prompt you send becomes a run on the map, titled by the prompt.
 
-**From any editor.** Just work. When files you changed go quiet for a few seconds, League of Agents records them as one run, such as "Edited main.py". Files git ignores and new files that usually hold secrets ([listed below](#privacy-and-security)) are never recorded, and branch switches and pulls never make a run.
+**From any editor.** Just work. When files you changed go quiet for a few seconds, League of Agents records them as one run, such as "Edited main.py". Files git ignores and new files that usually hold secrets ([listed below](#privacy-and-security)) never make a run and are never in a snapshot, and branch switches and pulls never make a run.
 
 A renamed file keeps its place on the map and shows as renamed, with what changed in it. A folder renamed as a whole keeps its place too.
 
@@ -160,7 +160,7 @@ Snapshots stay on your computer unless you send them: `git push`, `git push --al
 - Remote machines, SSH and dev containers aren't supported. League of Agents must run on the same computer as your browser.
 - A map shows up to 5,000 code files, and the first 400 lines of each on its card; a file opens in full, before, after and diff. In a larger repository you pick a folder to map, and can change it at any time. Files over 16 MB aren't on the map.
 - Non-code files, such as images, are in snapshots and undo, but not on the map.
-- Files git ignores and new files that usually hold secrets are never recorded.
+- Files git ignores and new files that usually hold secrets are never in a snapshot and never make a run on their own. An agent's own activity is different: what it reads, prints or edits is kept in `.loa/runs/` on your computer, so if an agent opens a secret file, its content can be there. `uninstall` removes it.
 - A session on a section can write files the repo ignores, such as `node_modules` and build output. Your checks, git hooks and dev server may run those files later, outside the sandbox.
 - Runs on sections that don't overlap work at the same time; a run on the whole repository works alone.
 - Shell commands. Hermes runs them without asking, except ones it judges dangerous, which League of Agents refuses. On macOS, on a section, both Hermes and DeepSeek Harness run inside the section's sandbox, so no command can write outside it; DeepSeek Harness then runs in its full-access mode, since its own sandbox can't start inside another. Elsewhere DeepSeek Harness runs them read-only, so a command that writes is refused. What a command changes inside the section is flagged as not made by the agent's edit tools while other sessions work, since only edit tools name the files they change. Revert undoes it.
