@@ -242,6 +242,48 @@ test('a run that opens as its checks end shows them ended, not still running', a
   }
 });
 
+test('a state answered after Disconnect is dropped: the demo stays the demo', async ({ page }) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo, undefined, {}, ['--no-hooks']);
+  try {
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    const run = (await call(b, '/api/runs', { agent: 'claude', prompt: 'Edit it', scope: [], resumeFrom: null }))
+      .body as unknown as RunDTO;
+    await page.locator(`#sideList [data-run="${run.id}"]`).click();
+    await expect(page.locator('[data-act="keep"]')).toBeEnabled({ timeout: 15_000 });
+    // Keep makes the page ask for the state again; that answer is held until after Disconnect.
+    let release = () => {};
+    const held = new Promise<void>(r => (release = r));
+    await page.route('**/api/state*', async route => {
+      await held;
+      await route.continue();
+    });
+    let asked = 0;
+    page.on('request', r => {
+      if (r.url().includes('/api/state')) asked++;
+    });
+    await page.locator('[data-act="keep"]').click();
+    // Two requests: one for the bridge's event, one the page makes itself a moment after Keep.
+    await expect.poll(() => asked).toBe(2);
+    await page.locator('#connectBtn').click();
+    await expect(page.locator('#conn')).toHaveText('Demo');
+    let answered = 0;
+    page.on('response', r => {
+      if (r.url().includes('/api/state')) answered++;
+    });
+    release();
+    await expect.poll(() => answered).toBe(2);
+    // Time for the page to have applied an answer, had it kept one.
+    await page.evaluate(() => new Promise(r => setTimeout(r, 200)));
+    await expect(page.locator('#repoName')).toHaveText('relay');
+    await expect(page.locator('#world .frame[data-dir="shared"]')).toHaveCount(0);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('loading states: connecting, starting a run, and keep show progress and block repeats', async ({ page }) => {
   const repo = makeRepo(),
     b = await startBridge(repo);

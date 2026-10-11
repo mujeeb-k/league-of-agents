@@ -498,10 +498,12 @@ function openFinished(run: Run, was: Run | null) {
 }
 
 async function refresh() {
+  const mine = epoch;
   try {
-    applyState(await bridge.state(conn(), S.mapRoot), false);
+    const s = await bridge.state(conn(), S.mapRoot);
+    if (mine === epoch) applyState(s, false);
   } catch (e) {
-    onDisconnect(e);
+    if (mine === epoch) onDisconnect(e);
   }
 }
 const queueRefresh = () => {
@@ -667,6 +669,7 @@ function onDisconnect(_e: unknown) {
 
 export function disconnect() {
   epoch++;
+  clearTimeout(refreshTimer);
   S.LIVE = false;
   S.CONN = null;
   clearConn();
