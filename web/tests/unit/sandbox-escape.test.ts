@@ -45,6 +45,20 @@ function attempt(commands: Record<string, string>, scope = ['src/']) {
   fs.writeFileSync(path.join(repo, '.gitignore'), 'out/\n');
   execFileSync('git', ['init', '-q'], { cwd: repo });
   execFileSync('git', ['add', '-A'], { cwd: repo });
+  // A snapshot, as the bridge pins one before a run.
+  const tree = execFileSync('git', ['write-tree'], { cwd: repo, encoding: 'utf8' }).trim();
+  const snapshot = execFileSync('git', ['commit-tree', tree, '-m', 'before'], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: 't',
+      GIT_AUTHOR_EMAIL: 't@example.test',
+      GIT_COMMITTER_NAME: 't',
+      GIT_COMMITTER_EMAIL: 't@example.test',
+    },
+  }).trim();
+  execFileSync('git', ['update-ref', 'refs/loa/runs/1/before', snapshot], { cwd: repo });
   const url = (f: string) => JSON.stringify(pathToFileURL(path.join(LIB, f)).href);
   const script = `
     const r = await import(${url('repo.mjs')}); r.openRepo();
@@ -201,6 +215,31 @@ describe.runIf(process.platform === 'darwin')('a session on the whole repository
         agent: 'mkdir -p .claude && echo "{}" > .claude/settings.json',
       }),
     ).toEqual({ config: false, configFile: false, hook: false, bridge: false, agent: false });
+  });
+
+  it("can't change, delete, add or move away the snapshots' refs", () => {
+    expect(
+      whole({
+        update: 'git update-ref refs/loa/runs/1/before "$(git write-tree | xargs git commit-tree -m x)"',
+        remove: 'git update-ref -d refs/loa/runs/1/before',
+        file: 'echo 0000000000000000000000000000000000000000 > .git/refs/loa/runs/1/before',
+        unlink: 'rm .git/refs/loa/runs/1/before',
+        add: 'git update-ref refs/loa/runs/9/before "$(git rev-parse refs/loa/runs/1/before)"',
+        move: 'mv .git/refs/loa .git/refs/gone',
+        branch: 'git update-ref refs/heads/other "$(git rev-parse refs/loa/runs/1/before)"',
+      }),
+    ).toEqual({ update: false, remove: false, file: false, unlink: false, add: false, move: false, branch: true });
+  });
+
+  // It writes git's folder so its agent can commit, and git keeps snapshots' contents there with everything else.
+  it("can still rewrite history, and delete git's objects, the snapshots' among them", () => {
+    const sole = (cmd: string) => whole({ done: cmd }).done;
+    expect({
+      history: sole(
+        'git -c user.name=t -c user.email=t@example.test commit -qm one && git update-ref -d HEAD && ! git log -1',
+      ),
+      objects: sole('rm -rf .git/objects/?? && ! git cat-file -e refs/loa/runs/1/before'),
+    }).toEqual({ history: true, objects: true });
   });
 
   it("can't read the home folder, write outside the repo, or move the repo away", () => {

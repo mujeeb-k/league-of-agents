@@ -153,10 +153,13 @@ function runLater(gitDir, commonDir, hooksDir, whole) {
     ['subpath', path.join(hermes, 'hooks')],
   ];
   // A run on a section never writes git's folder. One on the whole repository does, so its agent can commit: all
-  // but git's settings, which name programs git runs (filters, fsmonitor, the hooks' own folder).
+  // but git's settings, which name programs git runs (filters, fsmonitor, the hooks' own folder), and the refs that
+  // pin the bridge's snapshots, which Revert reads.
   for (const dir of [gitDir, commonDir])
-    if (whole) for (const f of ['config', 'config.worktree']) out.push(['literal', path.join(dir, f)]);
-    else out.push(['subpath', dir]);
+    if (whole) {
+      for (const f of ['config', 'config.worktree']) out.push(['literal', path.join(dir, f)]);
+      out.push(['subpath', path.join(dir, 'refs/loa')]);
+    } else out.push(['subpath', dir]);
   if (process.env.GIT_CONFIG_GLOBAL) out.push(['literal', process.env.GIT_CONFIG_GLOBAL]);
   // The package the bridge runs from, unless it is this repo's own code (working on League of Agents itself).
   if (pkg !== ROOT && !pkg.startsWith(ROOT + path.sep)) out.push(['subpath', pkg]);
