@@ -1346,6 +1346,38 @@ test("untracked secret files' contents land nowhere: not in git's objects, .loa,
 
 // What the README's limits say, held as it is: an agent's own activity is kept in .loa/runs, so a secret file an
 // agent prints is there, and nowhere else. If this changes, the README's limit changes with it.
+test("git push never sends the bridge's snapshots: a remote gets the branch, and no ref under refs/loa", async () => {
+  const repo = makeRepo(),
+    remote = path.join(path.dirname(repo), 'remote.git'),
+    b = await startBridge(repo);
+  try {
+    const run = (await call(b, '/api/runs', { agent: 'claude', prompt: 'Edit it', scope: [], resumeFrom: null }))
+      .body as unknown as RunDTO;
+    await expect
+      .poll(async () => ((await call(b, `/api/runs/${run.id}`)).body as unknown as RunDTO).status, { timeout: 15_000 })
+      .toBe('done');
+    const refs = (dir: string) => git(dir, 'for-each-ref', '--format=%(refname)').trim().split('\n');
+    expect(refs(repo).filter(r => r.startsWith('refs/loa/')).length).toBeGreaterThan(1);
+    const snapshot = git(repo, 'rev-parse', `refs/loa/runs/${run.id}/after`).trim();
+    git(path.dirname(repo), 'init', '-q', '--bare', remote);
+    git(repo, 'remote', 'add', 'origin', remote);
+    // The pushes people make: the branch, every branch, and the tags.
+    git(repo, 'push', '-q', '-u', 'origin', 'main');
+    git(repo, 'push', '-q', '--all', 'origin');
+    git(repo, 'push', '-q', '--tags', 'origin');
+    git(repo, 'push', '-q');
+    expect(refs(remote)).toEqual(['refs/heads/main']);
+    // Nor the snapshot itself: the remote has no such commit.
+    expect(() => execFileSync('git', ['cat-file', '-e', snapshot], { cwd: remote, stdio: 'ignore' })).toThrow();
+    // The one push that does, as the README says: a mirror.
+    git(repo, 'push', '-q', '--mirror', 'origin');
+    expect(refs(remote)).toContain(`refs/loa/runs/${run.id}/after`);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('a secret file an agent prints is in its activity under .loa/runs, and nowhere else', async () => {
   const repo = makeRepo();
   plantSecrets(repo);
