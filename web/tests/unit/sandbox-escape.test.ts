@@ -217,7 +217,9 @@ describe.runIf(process.platform === 'darwin')('a session on the whole repository
     ).toEqual({ config: false, configFile: false, hook: false, bridge: false, agent: false });
   });
 
-  it("can't change, delete, add or move away the snapshots' refs", () => {
+  // Only where git keeps each ref as a file of its own. packed-refs, where git gc moves them, stays writable (a
+  // session deletes a packed branch through it), so refs packed there are not held; nor are git's objects (below).
+  it("can't change, delete, add or move away the snapshots' refs kept as files", () => {
     expect(
       whole({
         update: 'git update-ref refs/loa/runs/1/before "$(git write-tree | xargs git commit-tree -m x)"',
@@ -239,7 +241,8 @@ describe.runIf(process.platform === 'darwin')('a session on the whole repository
         'git -c user.name=t -c user.email=t@example.test commit -qm one && git update-ref -d HEAD && ! git log -1',
       ),
       objects: sole('rm -rf .git/objects/?? && ! git cat-file -e refs/loa/runs/1/before'),
-    }).toEqual({ history: true, objects: true });
+      packed: sole('echo "# changed" >> .git/packed-refs'),
+    }).toEqual({ history: true, objects: true, packed: true });
   });
 
   it("can't read the home folder, write outside the repo, or move the repo away", () => {

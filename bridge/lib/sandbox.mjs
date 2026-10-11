@@ -154,7 +154,7 @@ function runLater(gitDir, commonDir, hooksDir, whole) {
   ];
   // A run on a section never writes git's folder. One on the whole repository does, so its agent can commit: all
   // but git's settings, which name programs git runs (filters, fsmonitor, the hooks' own folder), and the refs that
-  // pin the bridge's snapshots, which Revert reads.
+  // pin the bridge's snapshots against git's pruning, where git keeps them as files (not once packed).
   for (const dir of [gitDir, commonDir])
     if (whole) {
       for (const f of ['config', 'config.worktree']) out.push(['literal', path.join(dir, f)]);

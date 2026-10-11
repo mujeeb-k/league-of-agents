@@ -157,7 +157,7 @@ League of Agents 从不把你的代码上传到任何地方。你的代码只会
 由 Claude Code、Hermes 或 DeepSeek Harness 进行的每个会话都在 macOS 的沙箱（`sandbox-exec`）中运行，无论是在所选范围上还是在整个仓库上。沙箱约束代理以及代理启动的每个程序。
 
 - **仓库内的写入，在所选范围上：** 只限你所选范围和仓库忽略的文件。所选范围之外、`npm install` 会改动的 lockfile 同样会被拒绝，所以请选择包含该软件包的文件夹。
-- **仓库内的写入，在整个仓库上：** 任何文件，包括 git 自己的文件，这样代理才能提交。但永远不包括 git 的设置（`.git/config`）、hooks，以及保存快照的引用（`refs/loa/`）。这样的会话可以改写 git 历史：移动或删除分支、标签和提交。它还可以删除 git 存储的对象，包括快照的对象，之后这次运行就无法撤销了。会话的卡片会显示“可以改动这个仓库中的任何文件。无法触碰你电脑上的其他内容。”
+- **仓库内的写入，在整个仓库上：** 任何文件，包括 git 自己的文件，这样代理才能提交。但永远不包括 git 的设置（`.git/config`）和 hooks。这样的会话可以改写 git 历史：移动或删除分支、标签和提交。它还可以删除 git 存储的对象，包括快照的对象，之后这次运行就无法撤销了。会话的卡片会显示“可以改动这个仓库中的任何文件。无法触碰你电脑上的其他内容。”
 - **仓库外的写入：** 只限临时文件夹、代理自己的文件夹（`~/.claude`、`~/.hermes`、`~/.dsh`）和缓存（`~/.cache`、`~/Library/Caches`、`~/.npm`）。Claude Code 的会话还可以写入你的登录钥匙串文件（`~/Library/Keychains/login.keychain-db`，连同它的临时文件和锁文件）：Claude Code 把登录信息保存在那里，登录信息更新时必须保存它，而 macOS 没有更窄的方式来保存钥匙串中的某一项。
 - **读取：** 你的主目录中，除了仓库、代理自己的文件夹、上述缓存、git 的设置（`~/.gitconfig`、`~/.config/git`）以及它运行的程序（Node、代理自己的安装目录和你的 `PATH` 上的文件夹）之外，什么都读不到。你的 SSH 密钥、浏览器配置文件和主目录中的其他仓库都无法读取。当某个命令被拒绝访问某个路径时，会话的卡片会指出这个路径。Claude Code 的会话还可以读取 `~/Library/Keychains`，它的登录信息就在那里；macOS 对钥匙串中的每一项分别加以保护。
 - **即使在上述位置之内也永远不会被写入：** 桥接程序的令牌（`.loa/bridge.json` 及其日志，它们也无法读取）、桥接程序自己的代码、你的 git 设置和你仓库的 git hooks、桥接程序已批准的检查（`~/.config/league-of-agents`），以及各代理的设置文件和 hook 文件（Claude Code 的 `settings.json` 和 `settings.local.json`、Codex 的 `config.toml` 和 `hooks.json`、Cursor 的 `hooks.json`、Hermes 的 `config.yaml` 和 `hooks/`）。存放它们的文件夹，以及你仓库的文件夹，都无法被移动或替换。
