@@ -44,17 +44,20 @@ if (/\babuse\b/.test(prompt)) {
   process.exit(0);
 }
 /**
- * Runs the hooks for a tool, as Claude Code does: those the repo's .claude/settings.local.json holds, and those its
- * --settings argument holds. Returns what one refused with. A hook may hand back the tool's input rewritten
+ * Runs the hooks for a tool, as Claude Code does: those the repo's .claude/settings.local.json holds, unless it was
+ * told to leave the repo's settings out, and those its --settings argument holds. Returns what one refused with. A hook may hand back the tool's input rewritten
  * (`updatedInput`), which replaces it in `payload`. A hook that can't run refuses the call when it is marked
  * `onFailure: "block"`, from 2.1.295 on; FAKE_CLAUDE_BREAK_HOOK makes every such hook one that can't.
  */
 const given = args.includes('--settings') ? JSON.parse(args[args.indexOf('--settings') + 1]).hooks || {} : {};
 const blocksOnFailure = Number((process.env.FAKE_CLAUDE_VERSION || '2.1.295').split('.')[2]) >= 295;
 const runHooks = (event, payload) => {
-  const hooks = fs.existsSync('.claude/settings.local.json')
-    ? JSON.parse(fs.readFileSync('.claude/settings.local.json', 'utf8')).hooks || {}
-    : {};
+  // The repo's own settings are read unless told to read the person's only (--setting-sources user).
+  const own = args[args.indexOf('--setting-sources') + 1] !== 'user' || !args.includes('--setting-sources');
+  const hooks =
+    own && fs.existsSync('.claude/settings.local.json')
+      ? JSON.parse(fs.readFileSync('.claude/settings.local.json', 'utf8')).hooks || {}
+      : {};
   for (const entry of [...(hooks[event] || []), ...(given[event] || [])])
     if (new RegExp(`^(${entry.matcher || '.*'})$`).test(payload.tool_name))
       for (const h of entry.hooks) {

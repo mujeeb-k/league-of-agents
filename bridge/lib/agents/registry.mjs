@@ -2,9 +2,9 @@
 import os from 'node:os';
 import path from 'node:path';
 import { readJson, onPath } from '../util.mjs';
-import { LOA } from '../repo.mjs';
+import { HOOKS, LOA } from '../repo.mjs';
 import { acpConnector } from './acp.mjs';
-import { lockOfRun, setClaudeHeld } from '../sandbox.mjs';
+import { saidHeld, setClaudeHeld } from '../sandbox.mjs';
 import { streamConnector } from './stream.mjs';
 
 export const BIN = {
@@ -72,8 +72,8 @@ export function loadAgents() {
  */
 function markHeld() {
   for (const id of [...Object.keys(STREAMED), ...Object.keys(ACP)]) {
-    AGENTS[id].stays = lockOfRun({ agent: id, scope: ['/'] }) === 'sandbox';
-    AGENTS[id].contained = lockOfRun({ agent: id, scope: [] }) === 'sandbox';
+    AGENTS[id].stays = saidHeld({ agent: id, scope: ['/'] });
+    AGENTS[id].contained = saidHeld({ agent: id, scope: [] });
   }
 }
 /**
@@ -87,34 +87,49 @@ export function claudeVersion(out) {
   markHeld();
 }
 /**
- * Claude Code's settings for one run, with a hook of the bridge's before its tool calls (those `matcher` names, or
- * all): passed on its command line, so nothing is written to the repo or to the person's settings. A call the hook
- * can't check is refused (`onFailure`, which Claude Code honours from 2.1.295).
+ * One of the bridge's hooks for a Claude Code run, before or after its tool calls (those `matcher` names, or all):
+ * passed on its command line, so nothing is written to the repo or to the person's settings. A call the hook can't
+ * check is refused (`onFailure`, which Claude Code honours from 2.1.295).
  */
-const hooked = (matcher, kind) => ({
-  disableAllHooks: false,
-  hooks: {
-    PreToolUse: [
-      {
-        ...(matcher ? { matcher } : {}),
-        hooks: [
-          {
-            type: 'command',
-            command: `"${process.execPath}" "${path.join(LOA, 'bridge.mjs')}" hook ${kind}`,
-            timeout: 60,
-            onFailure: 'block',
-          },
-        ],
-      },
-    ],
-  },
+const hookFor = (matcher, kind) => ({
+  ...(matcher ? { matcher } : {}),
+  hooks: [
+    {
+      type: 'command',
+      command: `"${process.execPath}" "${path.join(LOA, 'bridge.mjs')}" hook ${kind}`,
+      timeout: 60,
+      onFailure: 'block',
+    },
+  ],
 });
 /**
  * For a run the sandbox holds: before every tool call, the hook that runs its commands inside the sandbox and holds
  * its file tools (hook.mjs hold). Its own sandbox stays off: its commands already start inside one, and one sandbox
  * can't start another.
  */
-const held = () => ({ sandbox: { enabled: false }, ...hooked(null, 'hold') });
+const held = () => ({
+  sandbox: { enabled: false },
+  disableAllHooks: false,
+  hooks: { PreToolUse: [hookFor(null, 'hold'), ...bracket().pre], ...bracket().post },
+});
+/** With the hooks on, each shell command is bracketed (shell.mjs): what it changed is told apart, line for line. */
+const bracket = () =>
+  HOOKS ? { pre: [hookFor('Bash', 'pre')], post: { PostToolUse: [hookFor('Bash', 'post')] } } : { pre: [], post: {} };
+/**
+ * For a run nothing holds, on a selection: its edit tools are refused outside it (hook.mjs pre) and, with the hooks
+ * on, each shell command is bracketed so what it changed outside is put back (shell.mjs). The repo's own hook files
+ * aren't read by a session, so these come with the run.
+ */
+const unheld = run =>
+  run.scope?.length
+    ? {
+        disableAllHooks: false,
+        hooks: {
+          PreToolUse: [hookFor('Edit|Write|MultiEdit|NotebookEdit', 'pre'), ...bracket().pre],
+          ...bracket().post,
+        },
+      }
+    : {};
 /**
  * @typedef {'done' | 'failed' | 'cancelled'} Outcome
  * @typedef {{ cancel(): void; done: Promise<Outcome> }} Session  An agent at work on one run.
@@ -130,16 +145,15 @@ const STREAMED = {
       '--output-format',
       'stream-json',
       '--verbose',
-      // Held by the sandbox, the sandbox is the limit: Claude Code runs commands without its own permission check,
-      // which refused harmless ones (pipes, loops, its own verification). Anywhere else, it keeps that check.
+      // Never its own repo's settings or hooks: a session doesn't run what a cloned repo names.
+      '--setting-sources',
+      'user',
+      // Held by the sandbox: it does only what the bridge's hook allows (hook.mjs hold), and a call the hook never
+      // saw is left to its own permission check. Anywhere else it keeps that check, with edits in the repo allowed.
       '--permission-mode',
-      sandboxed ? 'bypassPermissions' : 'acceptEdits',
-      // Not held, on a selection: its edit tools are still refused outside it (hook.mjs pre).
-      ...(sandboxed
-        ? ['--settings', JSON.stringify(held())]
-        : run.scope?.length
-          ? ['--settings', JSON.stringify(hooked('Edit|Write|MultiEdit|NotebookEdit', 'pre'))]
-          : []),
+      sandboxed ? 'dontAsk' : 'acceptEdits',
+      '--settings',
+      JSON.stringify(sandboxed ? held() : unheld(run)),
       ...(run.sessionId ? ['--resume', run.sessionId] : []),
     ],
   ),
@@ -181,5 +195,3 @@ export function lockOf(id) {
   if (id === 'claude') return 'hooks';
   return id === 'hermes' || id === 'dsh' ? 'asks' : 'none';
 }
-/** Agents that report each edit they make (edit tools, or diffs when they ask), so their files can be told apart. */
-export const reportsEdits = id => id === 'claude' || id === 'hermes' || id === 'dsh';

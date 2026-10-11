@@ -2818,16 +2818,19 @@ test.describe('sessions at once', () => {
         held:
           !!hook && !hook.matcher && /hook hold$/.test(hook.hooks[0]!.command) && hook.hooks[0]!.onFailure === 'block',
         says: scope.length ? !!run.stays : !!run.contained,
+        // Never the repo's own Claude Code settings or hooks.
+        sources: args[args.indexOf('--setting-sources') + 1],
       };
     } finally {
       b.stop();
       fs.rmSync(path.dirname(repo), { recursive: true, force: true });
     }
   };
-  const HELD = { mode: 'bypassPermissions', outside: true, held: true, says: true },
-    FLAGGED = { mode: 'acceptEdits', outside: true, held: false, says: false };
+  // Held, it does only what the hook allows; its card says so only once that design has been reviewed.
+  const HELD = { mode: 'dontAsk', outside: true, held: true, says: false, sources: 'user' },
+    FLAGGED = { mode: 'acceptEdits', outside: true, held: false, says: false, sources: 'user' };
   onMac(
-    'held by the sandbox, Claude Code runs outside it, with the hook and without its own permission check',
+    'held by the sandbox, Claude Code runs outside it, with the hook, and does only what the hook allows',
     async () => {
       expect(await permissionOf({}, ['shared/'])).toEqual(HELD);
       expect(await permissionOf({}, [])).toEqual(HELD);
@@ -2936,28 +2939,62 @@ test.describe('sessions at once', () => {
       await until(b, whole.id, 'done');
     }));
 
-  test('while sessions overlap, a change no session made is recorded on its own, credited to none', () =>
+  test("while sessions overlap, what changes in a session's section is its own; what changes outside every section is credited to none", () =>
     twoSessions(async (b, repo) => {
       const a = (await start(b, ['shared/'], 'edit:shared/log.ts wait:a')).body as unknown as RunDTO;
       const c = (await start(b, ['apps/'], 'edit:apps/console/main.ts wait:c')).body as unknown as RunDTO;
-      // Outside every section, and inside one but not by its agent.
+      // Outside every section, and inside one but not through its agent's edit tools (as a command of its would).
       fs.writeFileSync(path.join(repo, 'notes.md'), '# notes\n');
-      fs.appendFileSync(path.join(repo, 'shared/allowlist.ts'), '// by hand\n');
+      fs.appendFileSync(path.join(repo, 'shared/allowlist.ts'), '// by a command\n');
       go(repo, 'a');
       go(repo, 'c');
       await until(b, a.id, 'done');
       await until(b, c.id, 'done');
-      expect((await runOf(b, a.id)).changes.map(ch => ch.path)).toEqual(['shared/log.ts']);
+      expect((await runOf(b, a.id)).changes.map(ch => ch.path)).toEqual(['shared/allowlist.ts', 'shared/log.ts']);
       expect((await runOf(b, c.id)).changes.map(ch => ch.path)).toEqual(['apps/console/main.ts']);
       await expect
         .poll(async () => (await state(b)).runs.find(r => r.agent === 'detected')?.changes.map(ch => ch.path))
-        .toEqual(['notes.md', 'shared/allowlist.ts']);
+        .toEqual(['notes.md']);
       // Reverting it puts back only what no session made.
       const leftover = (await state(b)).runs.find(r => r.agent === 'detected')!;
       expect((await call(b, `/api/runs/${leftover.id}/revert`, {})).status).toBe(200);
       expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
-      expect(fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8')).toBe(SEED['shared/allowlist.ts']);
       expect(fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8')).toContain('// edited in');
+      // Reverting the session puts back all that changed in its section while it worked.
+      expect((await call(b, `/api/runs/${a.id}/revert`, {})).status).toBe(200);
+      expect(fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8')).toBe(SEED['shared/allowlist.ts']);
+      expect(fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8')).toBe(SEED['shared/log.ts']);
+      expect(fs.readFileSync(path.join(repo, 'apps/console/main.ts'), 'utf8')).toContain('// edited in');
+    }));
+
+  test('three Claude Code sessions side by side, each changing files by commands: each records its own, and reverts alone', () =>
+    twoSessions(async (b, repo) => {
+      const sections = ['shared/', 'apps/', 'docs/'];
+      const files = ['shared/by-command.ts', 'apps/by-command.ts', 'docs/by-command.md'];
+      fs.mkdirSync(path.join(repo, 'docs'), { recursive: true });
+      const started = [];
+      for (const [i, scope] of sections.entries())
+        started.push(
+          (
+            await call(b, '/api/runs', {
+              agent: 'claude',
+              prompt: `shell:${files[i]}`,
+              scope: [scope],
+              resumeFrom: null,
+            })
+          ).body as unknown as RunDTO,
+        );
+      for (const r of started) await until(b, r.id, 'done');
+      for (const [i, r] of started.entries()) {
+        const run = (await runOf(b, r.id)) as RunDTO & { overlapped?: boolean };
+        expect(run.overlapped, `run ${r.id} worked beside the others`).toBe(true);
+        expect(
+          run.changes.map(ch => ch.path),
+          `run ${r.id}`,
+        ).toEqual([files[i]]);
+      }
+      expect((await call(b, `/api/runs/${started[1]!.id}/revert`, {})).status).toBe(200);
+      expect(files.map(f => fs.existsSync(path.join(repo, f)))).toEqual([true, false, true]);
     }));
 
   test("an earlier run reverted while sessions work is the revert's, not left over when they end", () =>

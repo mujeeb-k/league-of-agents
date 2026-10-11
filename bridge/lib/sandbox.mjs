@@ -67,6 +67,11 @@ export function lockOfRun(run) {
   return run.scope?.length ? 'refuse' : 'none';
 }
 
+/**
+ * Whether a run's card says the system holds it. Not yet for Claude Code, though the sandbox holds its commands and
+ * a hook its file tools: its card keeps the flagged wording until that design has passed its security review.
+ */
+export const saidHeld = run => run.agent !== 'claude' && lockOfRun(run) === 'sandbox';
 /** An error the app words: a session on a section that the sandbox can't lock. */
 export const NO_SANDBOX = () =>
   refused('no-sandbox', "A session on a section needs macOS's sandbox, and it can't start here.");

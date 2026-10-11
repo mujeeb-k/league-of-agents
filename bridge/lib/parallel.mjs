@@ -11,8 +11,6 @@ import { blobAt, commitWith, computeChanges, pin, snapshotNow } from './snapshot
 import { runs, working, newRun, finishRun, saveRun } from './runs.mjs';
 import { base, setBase, settle } from './watch.mjs';
 import { emit, emitRun } from './events.mjs';
-import { filesWritten } from './agents/lines.mjs';
-import { reportsEdits } from './agents/registry.mjs';
 
 /**
  * The epoch under way: its baseline, whether runs overlapped in it, its runs, what each file should hold at its end
@@ -65,8 +63,9 @@ export const keepsBaseline = run => !!run.overlapped;
 
 /**
  * The run's own changes, from all that changed while it worked. A run that worked alone owns them all,
- * except what a revert during it wrote. A run that overlapped owns those in its own section and, if its agent reports
- * its edits, that those edits named; the rest is said, and left for the epoch's end.
+ * except what a revert during it wrote. A run that overlapped owns whatever changed in its own section while it
+ * worked, by its edit tools or its commands; what changed outside every section is said, and left for the epoch's
+ * end.
  */
 export async function ownChanges(run, changes) {
   if (!epoch) return changes;
@@ -78,26 +77,17 @@ export async function ownChanges(run, changes) {
     for (const c of changes) if (!(await reverted(c))) own.push(c);
     return own;
   }
-  const named = reportsEdits(run.agent) ? filesWritten(run) : null;
   const sections = epoch.runs.flatMap(r => r.scope ?? []);
   const own = [],
-    notByAgent = [],
     outside = [];
   for (const c of changes) {
     if (!inScope(run.scope, c.path)) {
       if (!inScope(sections, c.path)) outside.push(c.path);
-    } else if (named && !named.has(c.path)) notByAgent.push(c.path);
-    else if (!(await reverted(c))) {
+    } else if (!(await reverted(c))) {
       own.push(c);
       epoch.expected.set(c.path, run.after);
     }
   }
-  if (notByAgent.length)
-    run.stream.push(
-      line('warn', 'not-by-agent', `Changed in this section, not by its agent: ${notByAgent.join(', ')}`, {
-        files: notByAgent.join(', '),
-      }),
-    );
   if (outside.length)
     run.stream.push(
       line('warn', 'outside-sections', `Changed outside every section while others worked: ${outside.join(', ')}`, {

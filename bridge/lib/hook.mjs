@@ -124,6 +124,20 @@ const quoted = s => `'${String(s).replace(/'/g, "'\\''")}'`;
  * here, the call is refused.
  */
 function hold(data, cwd) {
+  // Said in so many words: the session runs in the mode where Claude Code does only what is allowed (registry.mjs),
+  // so a call this hook never saw is left to Claude Code's own check, not run.
+  const allow = updatedInput => {
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'allow',
+          ...(updatedInput ? { updatedInput } : {}),
+        },
+      }),
+    );
+    process.exit(0);
+  };
   try {
     const dir = process.env.LOA_HOLD_DIR;
     const h = JSON.parse(fs.readFileSync(path.join(dir, 'hold.json'), 'utf8'));
@@ -135,18 +149,9 @@ function hold(data, cwd) {
       const file = path.join(dir, 'commands', `${id}.sh`);
       fs.writeFileSync(file, input.command);
       const command = [...h.args, '/bin/bash', file].map(quoted).join(' ');
-      process.stdout.write(
-        JSON.stringify({
-          hookSpecificOutput: {
-            hookEventName: 'PreToolUse',
-            permissionDecision: 'allow',
-            updatedInput: { ...input, command },
-          },
-        }),
-      );
-      process.exit(0);
+      allow({ ...input, command });
     }
-    if (FREE.test(tool)) process.exit(0);
+    if (FREE.test(tool)) allow();
     if (!EDITS.test(tool) && !READS.test(tool)) block(`${tool} can't be used in a session started from the map.`);
     const under = (p, d) => p === d || p.startsWith(d + path.sep);
     // What the call names: a file, a folder to search, and for Glob the part of its pattern before any wildcard.
@@ -171,7 +176,7 @@ function hold(data, cwd) {
     }
     const why = EDITS.test(tool) ? editRefused(data, cwd) : null;
     if (why) block(why);
-    process.exit(0);
+    allow();
   } catch (e) {
     block(`this tool call couldn't be checked (${e.message}), so it was not run.`);
   }

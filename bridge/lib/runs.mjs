@@ -18,7 +18,7 @@ import {
   startingPoint,
 } from './parallel.mjs';
 import { base, setBase, rebase } from './watch.mjs';
-import { NO_SANDBOX, lockOfRun } from './sandbox.mjs';
+import { NO_SANDBOX, lockOfRun, saidHeld } from './sandbox.mjs';
 import { emit, emitRun } from './events.mjs';
 import { pinSteps } from './steps.mjs';
 
@@ -116,8 +116,8 @@ export function beginRun(opts) {
     const before = await startingPoint();
     const run = newRun(opts);
     // Said on its card: whether the system keeps it inside its section, or, on the whole repository, inside the repo.
-    if (run.scope.length) run.stays = lockOfRun(run) === 'sandbox';
-    else if (lockOfRun(run) === 'sandbox') run.contained = true;
+    if (run.scope.length) run.stays = saidHeld(run);
+    else if (saidHeld(run)) run.contained = true;
     // Its colour on the map while it works: the first one free, kept with the run so every window and a reload
     // show the same.
     const taken = new Set([...working.values()].map(r => r.slot));

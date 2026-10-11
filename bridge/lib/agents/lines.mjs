@@ -63,4 +63,3 @@ export function agentLinesOf(run) {
   return out;
 }
 /** The files the run's agent named in its own edits so far. */
-export const filesWritten = run => new Set(writes.get(run.id)?.keys() ?? []);

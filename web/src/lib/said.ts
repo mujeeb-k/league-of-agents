@@ -7,7 +7,6 @@ type Args = Record<string, string | number>;
 
 /** Each code's sentence. A code not here (a newer bridge's) shows the bridge's English. */
 const SAID: Record<string, (a: Args) => string> = {
-  'not-by-agent': a => t('Changed in this section, not by its agent: {files}', a),
   'outside-sections': a => t('Changed outside every section while others worked: {files}', a),
   'by-none': a => t('Changed while runs {runs} worked, by none of them.', a),
   unseen: a => t("Changed files the map doesn't show: {files}", a),

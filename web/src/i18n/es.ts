@@ -586,7 +586,6 @@ const catalogue: Catalogue = {
     'Puede cambiar cualquier archivo de este repositorio. No puede tocar el resto de tu computadora.',
   'A command tried to write a protected file or outside this repo. Blocked.':
     'Un comando intentó escribir en un archivo protegido o fuera de este repositorio. Bloqueado.',
-  'Changed in this section, not by its agent: {files}': 'Cambiado en esta sección, no por su agente: {files}',
   'Changed outside every section while others worked: {files}':
     'Cambiado fuera de toda sección mientras otras trabajaban: {files}',
   'Changed while runs {runs} worked, by none of them.':

@@ -547,7 +547,6 @@ const catalogue: Catalogue = {
     '可以改动这个仓库中的任何文件。无法触碰你电脑上的其他内容。',
   'A command tried to write a protected file or outside this repo. Blocked.':
     '有命令试图写入受保护的文件或这个仓库之外。已阻止。',
-  'Changed in this section, not by its agent: {files}': '在这个分区中改动，但不是它的代理所为：{files}',
   'Changed outside every section while others worked: {files}': '其他会话工作期间，在所有分区之外改动：{files}',
   'Changed while runs {runs} worked, by none of them.': '在运行 {runs} 工作期间改动，但不是其中任何一个所为。',
   "Changed files the map doesn't show: {files}": '改动了地图未显示的文件：{files}',
