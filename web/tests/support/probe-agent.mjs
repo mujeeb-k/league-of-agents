@@ -5,6 +5,11 @@
 // adds a line after line n of that file, as an agent working inside a selection would. With $PROBE_DELETE as
 // "file:from-to", it deletes those lines, as an agent removing the selected code would.
 import fs from 'node:fs';
+// Its version, as `claude --version` prints it: one whose sessions the bridge holds, unless $PROBE_VERSION names another.
+if (process.argv[2] === '--version') {
+  console.log(`${process.env.PROBE_VERSION || '2.1.295'} (Claude Code)`);
+  process.exit(0);
+}
 if (process.argv[2] === 'auth') {
   console.log(JSON.stringify({ loggedIn: true }));
   process.exit(0);

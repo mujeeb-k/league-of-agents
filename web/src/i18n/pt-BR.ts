@@ -608,5 +608,7 @@ const catalogue: Catalogue = {
   'Stopped after {seconds} s': 'Parada depois de {seconds} s',
   'Edited {file}': '{file} editado',
   'Edited {file} and {n} more': '{file} e mais {n} editados',
+  "The hook that holds this session couldn't run, so the session was stopped.":
+    'O hook que contém esta sessão não pôde rodar, então a sessão foi parada.',
 };
 export default catalogue;

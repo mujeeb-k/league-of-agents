@@ -570,5 +570,7 @@ const catalogue: Catalogue = {
   'Stopped after {seconds} s': '{seconds} s 后已停止',
   'Edited {file}': '编辑了 {file}',
   'Edited {file} and {n} more': '编辑了 {file} 和另外 {n} 个文件',
+  "The hook that holds this session couldn't run, so the session was stopped.":
+    '约束此会话的钩子无法运行，因此会话已停止。',
 };
 export default catalogue;

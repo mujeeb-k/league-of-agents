@@ -15,6 +15,7 @@ const SAID: Record<string, (a: Args) => string> = {
   'put-back': a => t('Put back what a shell command changed outside the section: {files}', a),
   'not-started': a => t("Couldn't start: {why}", a),
   'no-sandbox-setup': a => t("The sandbox couldn't be set up: {why}", a),
+  'hook-failed': () => t("The hook that holds this session couldn't run, so the session was stopped."),
   'needs-permission': a => t('Needs permission: {what}', a),
   'tool-failed': a => t('{what} failed', a),
   'no-resume': a => t("{agent} can't resume a session: this run starts a new one", a),

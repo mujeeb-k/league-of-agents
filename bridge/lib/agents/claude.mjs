@@ -3,7 +3,7 @@ import { execFile, execFileSync } from 'node:child_process';
 import { onPath } from '../util.mjs';
 import { ROOT } from '../repo.mjs';
 import { emit } from '../events.mjs';
-import { AGENTS, BIN } from './registry.mjs';
+import { AGENTS, BIN, claudeVersion } from './registry.mjs';
 
 /** How long a Claude Code check holds before it is asked again (checkClaude). */
 export const CLAUDE_RECHECK_MS = Number(process.env.LOA_CLAUDE_RECHECK_MS) || 15000;
@@ -56,9 +56,14 @@ export function checkClaude(then) {
     setProblem('missing');
     return done();
   }
-  execFile(BIN.claude, ['auth', 'status', '--json'], { cwd: ROOT, timeout: 10000 }, (_, out) => {
-    setProblem(loggedOut(out) ? 'loggedOut' : null);
-    done();
+  // Its version with its login: an update to Claude Code is seen without a restart.
+  execFile(BIN.claude, ['--version'], { cwd: ROOT, timeout: 10000 }, (_, version) => {
+    claudeVersion(version);
+    execFile(BIN.claude, ['auth', 'status', '--json'], { cwd: ROOT, timeout: 10000 }, (_, out) => {
+      setProblem(loggedOut(out) ? 'loggedOut' : null);
+      emit('state');
+      done();
+    });
   });
 }
 /** Claude Code answered as logged out mid-session: said at once, and asked again after the usual wait. */

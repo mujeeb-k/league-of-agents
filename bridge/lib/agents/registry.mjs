@@ -2,9 +2,9 @@
 import os from 'node:os';
 import path from 'node:path';
 import { readJson, onPath } from '../util.mjs';
-import { HOOKS } from '../repo.mjs';
+import { LOA } from '../repo.mjs';
 import { acpConnector } from './acp.mjs';
-import { lockOfRun } from '../sandbox.mjs';
+import { lockOfRun, setClaudeHeld } from '../sandbox.mjs';
 import { streamConnector } from './stream.mjs';
 
 export const BIN = {
@@ -64,13 +64,57 @@ export function loadAgents() {
     )
       ACP[a.id] = { name: typeof a.name === 'string' && a.name ? a.name : a.id, command: a.command };
   for (const [id, a] of Object.entries(ACP)) AGENTS[id] = { name: a.name, available: !a.check && onPath(a.command[0]) };
-  // On a section, whether the system keeps each agent the bridge starts inside it (the app says so before a run).
-  for (const id of [...Object.keys(STREAMED), ...Object.keys(ACP)])
-    AGENTS[id].stays = lockOfRun({ agent: id, scope: ['/'] }) === 'sandbox';
-  // On the whole repository, whether the system keeps each inside the repo.
-  for (const id of [...Object.keys(STREAMED), ...Object.keys(ACP)])
-    AGENTS[id].contained = lockOfRun({ agent: id, scope: [] }) === 'sandbox';
+  markHeld();
 }
+/**
+ * What the app says before a run: on a section, whether the system keeps each agent the bridge starts inside it;
+ * on the whole repository, whether it keeps each inside the repo.
+ */
+function markHeld() {
+  for (const id of [...Object.keys(STREAMED), ...Object.keys(ACP)]) {
+    AGENTS[id].stays = lockOfRun({ agent: id, scope: ['/'] }) === 'sandbox';
+    AGENTS[id].contained = lockOfRun({ agent: id, scope: [] }) === 'sandbox';
+  }
+}
+/**
+ * Claude Code's version, as `claude --version` printed it. From 2.1.295 it refuses a tool call when a hook marked so
+ * can't run (`onFailure`); before that it lets the call through, and a session that lost its hook would be held by
+ * nothing. So only from then are its sessions held (sandbox.mjs); older ones are flagged after the run.
+ */
+export function claudeVersion(out) {
+  const [major, minor, patch] = /^(\d+)\.(\d+)\.(\d+)/.exec(String(out).trim())?.slice(1).map(Number) ?? [0, 0, 0];
+  setClaudeHeld(major > 2 || (major === 2 && (minor > 1 || (minor === 1 && patch >= 295))));
+  markHeld();
+}
+/**
+ * Claude Code's settings for one run, with a hook of the bridge's before its tool calls (those `matcher` names, or
+ * all): passed on its command line, so nothing is written to the repo or to the person's settings. A call the hook
+ * can't check is refused (`onFailure`, which Claude Code honours from 2.1.295).
+ */
+const hooked = (matcher, kind) => ({
+  disableAllHooks: false,
+  hooks: {
+    PreToolUse: [
+      {
+        ...(matcher ? { matcher } : {}),
+        hooks: [
+          {
+            type: 'command',
+            command: `"${process.execPath}" "${path.join(LOA, 'bridge.mjs')}" hook ${kind}`,
+            timeout: 60,
+            onFailure: 'block',
+          },
+        ],
+      },
+    ],
+  },
+});
+/**
+ * For a run the sandbox holds: before every tool call, the hook that runs its commands inside the sandbox and holds
+ * its file tools (hook.mjs hold). Its own sandbox stays off: its commands already start inside one, and one sandbox
+ * can't start another.
+ */
+const held = () => ({ sandbox: { enabled: false }, ...hooked(null, 'hold') });
 /**
  * @typedef {'done' | 'failed' | 'cancelled'} Outcome
  * @typedef {{ cancel(): void; done: Promise<Outcome> }} Session  An agent at work on one run.
@@ -86,12 +130,16 @@ const STREAMED = {
       '--output-format',
       'stream-json',
       '--verbose',
-      // Inside the sandbox, the sandbox is the limit: Claude Code runs commands without its own permission check,
+      // Held by the sandbox, the sandbox is the limit: Claude Code runs commands without its own permission check,
       // which refused harmless ones (pipes, loops, its own verification). Anywhere else, it keeps that check.
       '--permission-mode',
       sandboxed ? 'bypassPermissions' : 'acceptEdits',
-      // Inside the section's sandbox, Claude Code's own can't start (one sandbox can't start another).
-      ...(sandboxed ? ['--settings', '{"sandbox":{"enabled":false}}'] : []),
+      // Not held, on a selection: its edit tools are still refused outside it (hook.mjs pre).
+      ...(sandboxed
+        ? ['--settings', JSON.stringify(held())]
+        : run.scope?.length
+          ? ['--settings', JSON.stringify(hooked('Edit|Write|MultiEdit|NotebookEdit', 'pre'))]
+          : []),
       ...(run.sessionId ? ['--resume', run.sessionId] : []),
     ],
   ),
@@ -123,13 +171,14 @@ export const commandOf = id => BIN[id] ?? ACP[id]?.command[0];
 /** What starts an agent's run, or undefined for one the bridge doesn't start (watch mode, a captured terminal). */
 export const connectorOf = id => STREAMED[id] ?? (ACP[id] ? acpConnector(ACP[id]) : undefined);
 /**
- * How an agent is kept to its scope while it works: 'hooks', Claude Code's edit tools blocked by the scope lock
- * (only with the hooks on); 'asks', a harness that asks before editing and is refused outside the scope (Hermes,
- * DeepSeek Harness in its read-only mode); or 'none', its edits outside flagged after the run.
+ * How an agent is kept to its scope while it works, where the sandbox doesn't hold it: 'hooks', Claude Code's edit
+ * tools refused outside it by the hook each run is started with; 'asks', a harness that asks before editing and is
+ * refused outside the scope (Hermes, DeepSeek Harness in its read-only mode); or 'none', its edits outside flagged
+ * after the run.
  * @returns {'hooks' | 'asks' | 'none'}
  */
 export function lockOf(id) {
-  if (id === 'claude') return HOOKS ? 'hooks' : 'none';
+  if (id === 'claude') return 'hooks';
   return id === 'hermes' || id === 'dsh' ? 'asks' : 'none';
 }
 /** Agents that report each edit they make (edit tools, or diffs when they ask), so their files can be told apart. */

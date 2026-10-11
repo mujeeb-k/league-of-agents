@@ -5,11 +5,13 @@ import { spawn } from 'node:child_process';
 import { ROOT, RUNS_DIR } from '../repo.mjs';
 import { line } from '../util.mjs';
 import { push } from '../runs.mjs';
-import { lockOfRun, sandboxArgs } from '../sandbox.mjs';
+import { holdOf, holdsAgent, lockOfRun, sandboxArgs } from '../sandbox.mjs';
 
 /**
- * Starts an agent for a run. `argv` and `env` are told whether it starts inside the sandbox, here and nowhere else:
- * what an agent is allowed only there (running without its own permission check) can't reach one started outside it.
+ * Starts an agent for a run. `argv` and `env` are told whether the sandbox holds the run, here and nowhere else:
+ * what an agent is allowed only then (running without its own permission check) can't reach one that isn't held.
+ * Hermes and DeepSeek Harness start inside the sandbox. Claude Code starts outside it, with the folder its hook
+ * reads to run each of its commands inside (sandbox.mjs holdOf).
  * Its stdout is kept as-is in .loa/runs/<id>.stream.jsonl (fixtures, debugging) and
  * handed to `onLine` a line at a time; its stderr is kept in <id>.stderr.log and handed to `onStderr`. `closed`
  * resolves with its exit code, once its logs are written.
@@ -19,12 +21,17 @@ export function launch(
   argv,
   { env = /** @type {(sandboxed: boolean) => Record<string, string>} */ (() => ({})), stdin = false, onLine, onStderr },
 ) {
-  // A session on a section runs inside the sandbox that holds it there (sandbox.mjs).
-  const sandboxed = lockOfRun(run) === 'sandbox';
-  const [cmd, ...args] = sandboxed ? [...sandboxArgs(run), ...argv(true)] : argv(false);
+  const sandboxed = lockOfRun(run) === 'sandbox',
+    inside = sandboxed && holdsAgent(run);
+  const [cmd, ...args] = inside ? [...sandboxArgs(run), ...argv(true)] : argv(sandboxed);
   const child = spawn(cmd, args, {
     cwd: ROOT,
-    env: { ...process.env, LOA_MANAGED: '1', ...env(sandboxed) },
+    env: {
+      ...process.env,
+      LOA_MANAGED: '1',
+      ...env(sandboxed),
+      ...(sandboxed && !inside ? { LOA_HOLD_DIR: holdOf(run) } : {}),
+    },
     stdio: [stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
   });
   // A run's later turns (it carried on once allowed a file) add to its logs.

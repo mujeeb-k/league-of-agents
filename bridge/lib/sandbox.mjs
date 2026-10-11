@@ -1,14 +1,16 @@
-// The section lock, enforced by the system. On macOS a session on a section runs inside a Seatbelt sandbox
-// (sandbox-exec, part of macOS): it and every program it starts may write inside its section, to files the repo
-// ignores (build output, installed packages) and outside the repo (temp, the agent's own state but not its settings
-// or hooks: runLater), and nowhere else in the repo. Nothing outside is written, so nothing needs putting back. Paths reach the profile as
-// parameters, never as text in it. Where there is no sandbox, shell.mjs puts back what a shell command changed
-// outside the section instead.
+// The section lock, enforced by the system. On macOS a session on a section is held by a Seatbelt sandbox
+// (sandbox-exec, part of macOS). Hermes and DeepSeek Harness run inside it whole: the agent and every program it
+// starts. Claude Code runs outside it, as it does in a terminal, so its login is never touched; each of its shell
+// commands runs inside it, and its file tools are held by a hook (hook.mjs, kind `hold`). Inside the sandbox, writes
+// go to the section, to files the repo ignores (build output, installed packages) and outside the repo to temp and,
+// for an agent held whole, its own state but not its settings or hooks (runLater); nowhere else. Paths reach the
+// profile as parameters, never as text in it. Where there is no sandbox, shell.mjs puts back what a shell command
+// changed outside the section instead.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile, execFileSync } from 'node:child_process';
-import { ROOT, git, gitAsync } from './repo.mjs';
+import { LOA, ROOT, git, gitAsync } from './repo.mjs';
 import { scopeEntry } from './scope.mjs';
 import { BRIDGE_DIR } from './paths.mjs';
 import { realish, refused } from './util.mjs';
@@ -16,18 +18,24 @@ import { realish, refused } from './util.mjs';
 const SANDBOX_EXEC = process.env.LOA_SANDBOX_EXEC || '/usr/bin/sandbox-exec';
 
 /**
- * The agents proved to run inside the sandbox (the others are flagged after the run), each with the
+ * The agents proved to run whole inside the sandbox (the others are flagged after the run), each with the
  * temporary file its edit tool writes beside a file and renames over it, as a regex of the file's folder and name
  * (both escaped). Only that: no other new file beside a file section.
  */
 const TEMP_BESIDE = {
-  // Claude Code's Edit: <file>.tmp.<pid>.<hex>.
-  claude: (dir, name) => `^${dir}/${name}\\.tmp\\.[0-9]+\\.[0-9a-f]+$`,
   // Hermes's write and patch: .hermes-tmp.XXXXXX (mktemp) in the file's folder.
   hermes: dir => `^${dir}/\\.hermes-tmp\\.[A-Za-z0-9.]+$`,
   // DeepSeek Harness's edit and write: a folder .<file>.<pid>.<uuid>.tmpdir holding <file>.tmp.
   dsh: (dir, name) => `^${dir}/\\.${name}\\.[0-9]+\\.[0-9a-f-]+\\.tmpdir(/|$)`,
 };
+/** Whether an agent runs whole inside the sandbox; Claude Code's commands alone do (holdOf). */
+export const holdsAgent = run => Object.hasOwn(TEMP_BESIDE, run.agent);
+/**
+ * Whether this machine's Claude Code stops a tool call when the hook that holds it can't run (registry.mjs
+ * loadAgents). Where it doesn't, its sessions are not held: their edits outside are flagged after the run.
+ */
+let claudeHeld = false;
+export const setClaudeHeld = on => void (claudeHeld = on);
 
 /** macOS has the sandbox; LOA_SANDBOX=off makes the bridge behave as on a system without one. */
 const HAS_SANDBOX = process.platform === 'darwin' && process.env.LOA_SANDBOX !== 'off';
@@ -47,13 +55,14 @@ function sandboxStarts() {
 
 /**
  * How a run is held by the system: 'sandbox' (to its section, or for a run on the whole repository to the repo), or
- * 'refuse' for a run on a section when the sandbox can't start (closed, never open). 'none' for an agent not proved
- * inside the sandbox, a system without one, or a run on the whole repository where the sandbox can't start: there
- * the hooks and the flags after the run are all there is, and Claude Code keeps its own permission check.
+ * 'refuse' for a run on a section when the sandbox can't start (closed, never open). 'none' for an agent the sandbox
+ * doesn't hold (Codex, Cursor, a Claude Code too old: setClaudeHeld), a system without one, or a run on the whole
+ * repository where the sandbox can't start: there the hooks and the flags after the run are all there is, and Claude
+ * Code keeps its own permission check.
  * @returns {'sandbox' | 'refuse' | 'none'}
  */
 export function lockOfRun(run) {
-  if (!Object.hasOwn(TEMP_BESIDE, run.agent) || !HAS_SANDBOX) return 'none';
+  if (!(holdsAgent(run) || (run.agent === 'claude' && claudeHeld)) || !HAS_SANDBOX) return 'none';
   if (sandboxStarts()) return 'sandbox';
   return run.scope?.length ? 'refuse' : 'none';
 }
@@ -115,7 +124,10 @@ export function ignoredPatterns(root = ROOT) {
   return out;
 }
 
-/** Each run's sandbox-exec arguments, prepared before it starts (prepareSandbox) and taken as it starts (sandboxArgs). */
+/**
+ * Each run's sandbox-exec arguments, prepared before it starts (prepareSandbox) and taken as it starts (sandboxArgs).
+ * For a Claude Code run they go to a file its hook reads instead (holdOf).
+ */
 const prepared = new Map();
 
 /** The sandbox-exec arguments prepared for a run, used once as its agent starts. */
@@ -167,15 +179,12 @@ function runLater(gitDir, commonDir, hooksDir, whole) {
 }
 
 /**
- * Where each agent keeps its own state, read and written by its sessions and by no other agent's: [kind, path].
- * Claude Code also writes ~/.claude.json through files beside it (.lock, .tmp, .backup). No session reads or writes
- * the keychains' folder or any other credential store.
+ * Where each agent held whole keeps its own state, read and written by its sessions and by no other agent's:
+ * [kind, path]. No session reads or writes the keychains' folder.
  */
 const AGENT_STATE = {
-  claude: home => [
-    ['subpath', path.join(home, '.claude')],
-    ['regex', `^${escape(path.join(home, '.claude.json'))}(\\..*)?$`],
-  ],
+  // Claude Code's commands need none of its folders, which hold its settings and, on some machines, its login.
+  claude: () => [],
   hermes: home => [['subpath', process.env.HERMES_HOME || path.join(home, '.hermes')]],
   dsh: home => [['subpath', process.env.DSH_HOME || path.join(home, '.dsh')]],
 };
@@ -235,7 +244,14 @@ const ignoredAtStart = new Map();
 export function forgetSandbox(run) {
   ignoredAtStart.delete(run.id);
   prepared.delete(run.id);
+  fs.rmSync(holdOf(run), { recursive: true, force: true });
 }
+
+/**
+ * A Claude Code run's folder for its hook: hold.json (the sandbox its commands run in, and what its file tools are
+ * held to) and each command as the session gave it, in a file of its own, never part of a command line.
+ */
+export const holdOf = run => path.join(LOA, `hold-${run.id}`);
 
 /**
  * Every folder above a path, to the root: denied as folders only (writing inside them stays allowed), so none can be
@@ -288,7 +304,8 @@ export async function prepareSandbox(run, command) {
       inSection.push(p => p.startsWith(e));
     } else {
       allow.push(add('literal', abs));
-      allow.push(add('regex', TEMP_BESIDE[run.agent](escape(path.dirname(abs)), escape(path.basename(abs)))));
+      const temp = TEMP_BESIDE[run.agent]?.(escape(path.dirname(abs)), escape(path.basename(abs)));
+      if (temp) allow.push(add('regex', temp));
       inSection.push(p => p === e);
       // A new file the person allowed, in folders not made yet: those folders may be made, as folders only.
       for (let dir = path.dirname(abs); dir !== real && !fs.existsSync(dir); dir = path.dirname(dir))
@@ -390,5 +407,16 @@ export async function prepareSandbox(run, command) {
       e ? reject(new Error('the sandbox did not start')) : resolve(null),
     ),
   );
-  prepared.set(run.id, args);
+  if (holdsAgent(run)) return void prepared.set(run.id, args);
+  // What its file tools may not write though the section holds it, and may not read: for the hook.
+  const hold = {
+    args,
+    root: real,
+    home,
+    git: git.map(d => realish(d)),
+    never: [...later.map(([kind, p]) => [kind, realish(p)]), ...[...parents].map(d => ['literal', d])],
+  };
+  fs.mkdirSync(path.join(holdOf(run), 'commands'), { recursive: true });
+  fs.writeFileSync(`${holdOf(run)}.tmp`, JSON.stringify(hold));
+  fs.renameSync(`${holdOf(run)}.tmp`, path.join(holdOf(run), 'hold.json'));
 }

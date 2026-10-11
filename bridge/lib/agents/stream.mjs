@@ -22,7 +22,11 @@ export function streamConnector(bin, argsOf) {
     start(run, prompt, scopeFile) {
       const { child, closed } = launch(run, sandboxed => [bin(), ...argsOf(prompt, run, sandboxed)], {
         env: () => ({ LOA_SCOPE_FILE: scopeFile, ...shellAccess(run) }),
-        onLine: line => onAgentLine(run, line),
+        onLine: line => {
+          onAgentLine(run, line);
+          // Nothing holds a session whose hook can't run: it stops there.
+          if (run.unheld) child.kill('SIGTERM');
+        },
         onStderr: d => {
           const t = d.trim();
           if (t) push(run, { t: 'err', text: t.slice(0, 500) });
@@ -37,7 +41,7 @@ export function streamConnector(bin, argsOf) {
               code: String(code),
             }),
           );
-        return code ? 'failed' : 'done';
+        return code || run.unheld ? 'failed' : 'done';
       });
       return { cancel: () => child.kill('SIGTERM'), done };
     },
@@ -100,6 +104,12 @@ function cursorStep(run, m) {
   else if (m.subtype === 'completed' && act === 'edit')
     for (const c of callsOf(run).get(m.call_id) ?? []) stepDone(run, c.i);
 }
+/** Said on a run whose hook couldn't run (registry.mjs held): nothing holds it, so it is stopped. */
+const HOOK_FAILED = line(
+  'err',
+  'hook-failed',
+  "The hook that holds this session couldn't run, so the session was stopped.",
+);
 /** One line of a Claude Code, Cursor or Codex stream (or a captured terminal turn's), read into the run. */
 export function onAgentLine(run, line) {
   let m;
@@ -141,6 +151,12 @@ export function onAgentLine(run, line) {
       if (call?.act !== 'edit' && sandboxed && refusedWrite(text, true)) refusedBySandbox(run, text);
       if (call?.act === 'edit' && !c.is_error) stepDone(run, call.i);
       if (!c.is_error) continue;
+      // Claude Code refused the call because the hook that holds the session couldn't run (registry.mjs held).
+      if (sandboxed && /blocking because onFailure is "block"/.test(text) && !run.unheld) {
+        run.unheld = true;
+        push(run, { ...HOOK_FAILED });
+        continue;
+      }
       // An edit refused outside the section: the person is asked (runs.mjs blocked).
       if (call?.act === 'edit' && call.file && refusedWrite(text, sandboxed)) {
         stepRefused(run, call.i);

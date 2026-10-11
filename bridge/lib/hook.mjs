@@ -21,42 +21,10 @@ export async function runHook(kind, agent = 'claude') {
   if (data.cursor_version) agent = 'cursor';
   const cwd = data.cwd || data.workspace_roots?.[0] || process.cwd();
   if (kind === 'post' || (kind === 'pre' && data.tool_name === 'Bash')) await shellBracket(kind, data);
+  if (kind === 'hold') hold(data, cwd);
   if (kind === 'pre') {
-    const scopeFile = process.env.LOA_SCOPE_FILE;
-    if (!scopeFile) process.exit(0);
-    const { scope, ranges } = selectionOf(scopeFile);
-    if (!scope.length) process.exit(0);
-    const input = data.tool_input || {};
-    const f = input.file_path || input.notebook_path;
-    if (!f) process.exit(0);
-    const root = repoOf(cwd) ?? cwd;
-    // Real paths on both sides: the repo may sit behind a symlink (macOS's /tmp is /private/tmp).
-    const rel = path
-      .relative(realish(root), realish(path.resolve(cwd, f)))
-      .split(path.sep)
-      .join('/');
-    const block = why => {
-      process.stderr.write(`League of Agents scope lock: ${why}`);
-      process.exit(2);
-    };
-    // The person is asked whether it may (runs.mjs blocked), and the session told to carry on if they allow it.
-    const asked = " The user is asked whether you may; you'll be told if they allow it. Carry on inside the scope.";
-    if (!inScope(scope, rel)) block(`${rel} is outside the selected scope. Only edit: ${scope.join(', ')}.${asked}`);
-    const range = ranges[rel];
-    if (range) {
-      // The file as this edit would leave it, held against the file as the run found it.
-      let text = fs.existsSync(path.resolve(cwd, f)) ? fs.readFileSync(path.resolve(cwd, f), 'utf8') : '';
-      const edits = input.edits || (input.old_string !== undefined ? [input] : []);
-      if (input.content !== undefined) text = input.content;
-      for (const e of edits)
-        text = e.replace_all
-          ? text.split(e.old_string).join(e.new_string)
-          : text.replace(e.old_string, () => e.new_string);
-      if (!rangeKept(splitLines(range.before), splitLines(text), range))
-        block(
-          `this edit changes ${rel} outside lines ${range.from}–${range.to}. Only edit those lines; keep every other line as it is.${asked}`,
-        );
-    }
+    const why = editRefused(data, cwd);
+    if (why) block(why);
     process.exit(0);
   }
   // Cursor reads an answer from every hook; its run goes on either way.
@@ -96,6 +64,117 @@ export async function runHook(kind, agent = 'claude') {
     }),
   );
   done();
+}
+
+/** Refuses a tool call, in words Claude Code hands to the session. */
+function block(why) {
+  process.stderr.write(`League of Agents scope lock: ${why}`);
+  process.exit(2);
+}
+
+/** A path as the repo names it: real on both sides, since the repo may sit behind a symlink (/tmp is /private/tmp). */
+const relTo = (root, cwd, f) =>
+  path
+    .relative(realish(root), realish(path.resolve(cwd, f)))
+    .split(path.sep)
+    .join('/');
+
+/**
+ * Why an edit tool's call is outside its session's selection, or null: the file is outside it, or the edit changes
+ * lines outside the ones selected. A session on the whole repository has no selection to be outside of.
+ */
+function editRefused(data, cwd) {
+  const scopeFile = process.env.LOA_SCOPE_FILE;
+  if (!scopeFile) return null;
+  const { scope, ranges } = selectionOf(scopeFile);
+  const input = data.tool_input || {};
+  const f = input.file_path || input.notebook_path;
+  if (!scope.length || !f) return null;
+  const rel = relTo(repoOf(cwd) ?? cwd, cwd, f);
+  // The person is asked whether it may (runs.mjs blocked), and the session told to carry on if they allow it.
+  const asked = " The user is asked whether you may; you'll be told if they allow it. Carry on inside the scope.";
+  if (!inScope(scope, rel)) return `${rel} is outside the selected scope. Only edit: ${scope.join(', ')}.${asked}`;
+  const range = ranges[rel];
+  if (!range) return null;
+  // The file as this edit would leave it, held against the file as the run found it.
+  let text = fs.existsSync(path.resolve(cwd, f)) ? fs.readFileSync(path.resolve(cwd, f), 'utf8') : '';
+  const edits = input.edits || (input.old_string !== undefined ? [input] : []);
+  if (input.content !== undefined) text = input.content;
+  for (const e of edits)
+    text = e.replace_all ? text.split(e.old_string).join(e.new_string) : text.replace(e.old_string, () => e.new_string);
+  return rangeKept(splitLines(range.before), splitLines(text), range)
+    ? null
+    : `this edit changes ${rel} outside lines ${range.from}–${range.to}. Only edit those lines; keep every other line as it is.${asked}`;
+}
+
+/** Claude Code's tools that write the file they name, and those that read files or list them. */
+const EDITS = /^(Edit|Write|MultiEdit|NotebookEdit)$/,
+  READS = /^(Read|Glob|Grep|LS)$/;
+/** Its tools that touch no file and run no program on this machine. */
+const FREE =
+  /^(Agent|Task|TaskCreate|TaskGet|TaskList|TaskOutput|TaskStop|TaskUpdate|TodoWrite|WebFetch|WebSearch|BashOutput|KillBash|KillShell|Skill|ToolSearch|ExitPlanMode|AskUserQuestion)$/;
+const quoted = s => `'${String(s).replace(/'/g, "'\\''")}'`;
+
+/**
+ * A tool call of a Claude Code session the bridge holds (sandbox.mjs). Claude Code itself runs outside the sandbox;
+ * this is what keeps what it does inside. A shell command is rewritten to run inside the run's sandbox: its text goes
+ * to a file, untouched, and the command line names only that file, so nothing in the text is read by a shell outside
+ * the sandbox. A file tool is held to the repo for reads, and for writes to the selection, never to what runs later
+ * outside the sandbox. Any other tool that could reach a file or start a program is refused. Whatever goes wrong
+ * here, the call is refused.
+ */
+function hold(data, cwd) {
+  try {
+    const dir = process.env.LOA_HOLD_DIR;
+    const h = JSON.parse(fs.readFileSync(path.join(dir, 'hold.json'), 'utf8'));
+    const tool = String(data.tool_name),
+      input = data.tool_input || {};
+    if (tool === 'Bash') {
+      if (typeof input.command !== 'string') throw new Error('no command');
+      const id = String(data.tool_use_id ?? '').replace(/[^A-Za-z0-9_-]/g, '') || `${Date.now()}-${process.pid}`;
+      const file = path.join(dir, 'commands', `${id}.sh`);
+      fs.writeFileSync(file, input.command);
+      const command = [...h.args, '/bin/bash', file].map(quoted).join(' ');
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            permissionDecision: 'allow',
+            updatedInput: { ...input, command },
+          },
+        }),
+      );
+      process.exit(0);
+    }
+    if (FREE.test(tool)) process.exit(0);
+    if (!EDITS.test(tool) && !READS.test(tool)) block(`${tool} can't be used in a session started from the map.`);
+    const under = (p, d) => p === d || p.startsWith(d + path.sep);
+    // What the call names: a file, a folder to search, and for Glob the part of its pattern before any wildcard.
+    const named = [
+      input.file_path,
+      input.notebook_path,
+      input.path ?? (READS.test(tool) && tool !== 'Read' ? cwd : null),
+    ];
+    if (tool === 'Glob' && typeof input.pattern === 'string')
+      named.push(path.resolve(input.path ?? cwd, input.pattern.split(/[*?[{]/)[0]));
+    const paths = named.filter(p => typeof p === 'string').map(p => realish(path.resolve(cwd, p)));
+    if (!paths.length) throw new Error('no path');
+    for (const p of paths) {
+      const rel = path.relative(h.root, p);
+      const token = ['bridge.json', 'bridge.log'].some(f => p === path.join(h.root, '.loa', f));
+      if (!under(p, h.root) || token)
+        block(`${under(p, h.root) ? rel : p} can't be read from this session: only this repository's files.`);
+      if (!EDITS.test(tool)) continue;
+      const held =
+        h.git.some(d => under(p, d)) || h.never.some(([kind, at]) => (kind === 'subpath' ? under(p, at) : p === at));
+      if (held) block(`${rel} is never changed by a session: it runs later, outside the session.`);
+    }
+    const why = EDITS.test(tool) ? editRefused(data, cwd) : null;
+    if (why) block(why);
+    process.exit(0);
+  } catch (e) {
+    block(`this tool call couldn't be checked (${e.message}), so it was not run.`);
+  }
 }
 
 /**

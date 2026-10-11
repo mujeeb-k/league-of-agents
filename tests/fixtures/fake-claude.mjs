@@ -2,6 +2,12 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 const args = process.argv.slice(2);
+// Its version, as `claude --version` prints it: one that refuses a tool call when a hook marked so can't run
+// (2.1.295), unless FAKE_CLAUDE_VERSION names another.
+if (args[0] === '--version') {
+  console.log(`${process.env.FAKE_CLAUDE_VERSION || '2.1.295'} (Claude Code)`);
+  process.exit(0);
+}
 // While the file FAKE_CLAUDE_LOGGED_OUT names exists, it answers as a logged-out Claude Code does: to
 // `auth status`, and to a prompt.
 const loggedOut = !!process.env.FAKE_CLAUDE_LOGGED_OUT && fs.existsSync(process.env.FAKE_CLAUDE_LOGGED_OUT);
@@ -37,19 +43,38 @@ if (/\babuse\b/.test(prompt)) {
   out({ type: 'result', result: `save: ${r.status}`, session_id: 'sess-123', total_cost_usd: 0 });
   process.exit(0);
 }
-/** Runs the hooks the repo's .claude/settings.local.json holds for a tool, as Claude Code does: what one refused with. */
+/**
+ * Runs the hooks for a tool, as Claude Code does: those the repo's .claude/settings.local.json holds, and those its
+ * --settings argument holds. Returns what one refused with. A hook may hand back the tool's input rewritten
+ * (`updatedInput`), which replaces it in `payload`. A hook that can't run refuses the call when it is marked
+ * `onFailure: "block"`, from 2.1.295 on; FAKE_CLAUDE_BREAK_HOOK makes every such hook one that can't.
+ */
+const given = args.includes('--settings') ? JSON.parse(args[args.indexOf('--settings') + 1]).hooks || {} : {};
+const blocksOnFailure = Number((process.env.FAKE_CLAUDE_VERSION || '2.1.295').split('.')[2]) >= 295;
 const runHooks = (event, payload) => {
   const hooks = fs.existsSync('.claude/settings.local.json')
     ? JSON.parse(fs.readFileSync('.claude/settings.local.json', 'utf8')).hooks || {}
     : {};
-  for (const entry of hooks[event] || [])
+  for (const entry of [...(hooks[event] || []), ...(given[event] || [])])
     if (new RegExp(`^(${entry.matcher || '.*'})$`).test(payload.tool_name))
       for (const h of entry.hooks) {
-        const r = spawnSync(h.command, { shell: true, input: JSON.stringify(payload), encoding: 'utf8' });
+        const command = h.onFailure && process.env.FAKE_CLAUDE_BREAK_HOOK ? '/nowhere/hook' : h.command;
+        const r = spawnSync(command, { shell: true, input: JSON.stringify(payload), encoding: 'utf8' });
         if (r.status === 2) return r.stderr;
+        if (r.status !== 0) {
+          if (h.onFailure === 'block' && blocksOnFailure)
+            return `[${command}]: failed; blocking because onFailure is "block"`;
+          continue;
+        }
+        try {
+          const updated = JSON.parse(r.stdout).hookSpecificOutput?.updatedInput;
+          if (updated) payload.tool_input = updated;
+        } catch {}
       }
   return null;
 };
+/** Whether the bridge holds this session's commands in its sandbox: a hook rewrites each one (bridge/lib/hook.mjs). */
+const held = JSON.stringify(given).includes('hook hold');
 // "want:<path>" in the prompt: write that file with the Write tool, which the scope lock or the sandbox may refuse; and
 // when resumed with "You may now change <paths>.", write those, as Claude Code carries on once allowed.
 const resumed = args.includes('--resume');
@@ -71,7 +96,11 @@ if (wants.length) {
       cwd: process.cwd(),
     });
     // Claude Code 2.1 puts the hook's own words after its own.
-    let error = refused && `PreToolUse:Write hook error: [node .loa/bridge.mjs hook pre]: ${refused}`;
+    let error =
+      refused &&
+      (refused.includes('onFailure')
+        ? `PreToolUse:Write hook error: ${refused}`
+        : `PreToolUse:Write hook error: [node .loa/bridge.mjs hook pre]: ${refused}`);
     if (!error)
       try {
         // As Claude Code's Write does: the file's folders made first.
@@ -101,20 +130,21 @@ if (shells.length) {
       message: { content: [{ type: 'tool_use', id: payload.tool_use_id, name: 'Bash', input: { command } }] },
     });
     const refused = runHooks('PreToolUse', payload);
-    // In the section's sandbox, a write outside it fails as a shell command's would: told, not written.
-    let failed = null;
-    if (!refused)
-      try {
-        fs.appendFileSync(file, '// written by a shell command\n');
-      } catch (e) {
-        failed = e.code;
-      }
+    // The command as the hooks left it. In the section's sandbox, a write outside it fails: told, not written.
+    const failed =
+      !refused && spawnSync(payload.tool_input.command, { shell: '/bin/zsh' }).status !== 0 ? 'EPERM' : null;
     const told = refused ?? failed ?? runHooks('PostToolUse', payload);
     // The command's result, as Claude Code's Bash tool returns it: the shell's own error when the write failed.
-    const content = failed ? `Exit code 1\n(eval):1: operation not permitted: ${file}` : '';
+    const content = refused?.includes('onFailure')
+      ? `PreToolUse:Bash hook error: ${refused}`
+      : failed
+        ? `Exit code 1\n(eval):1: operation not permitted: ${file}`
+        : '';
     out({
       type: 'user',
-      message: { content: [{ type: 'tool_result', tool_use_id: payload.tool_use_id, is_error: !!failed, content }] },
+      message: {
+        content: [{ type: 'tool_result', tool_use_id: payload.tool_use_id, is_error: !!failed || !!content, content }],
+      },
     });
     results.push(told ? `${file}: ${told}` : `${file}: written`);
   }
@@ -140,16 +170,37 @@ out({
     ],
   },
 });
+/**
+ * Writes a file without an edit tool, as a shell command would. Where the bridge holds the session's commands, it is
+ * one: handed to the hook and run as the hook rewrote it, so the sandbox refuses it outside the section.
+ */
+const byCommand = (file, text) => {
+  if (!held) return fs.writeFileSync(file, text);
+  const payload = {
+    tool_name: 'Bash',
+    tool_input: { command: `cat > ${file} <<'LOA_EOF'\n${text}LOA_EOF` },
+    tool_use_id: `toolu_quiet_${file.replace(/\W/g, '_')}`,
+    cwd: process.cwd(),
+  };
+  if (!runHooks('PreToolUse', payload)) spawnSync(payload.tool_input.command, { shell: '/bin/zsh' });
+};
+// The Edit tool's own change, as Claude Code makes it: by the tool, once the hooks let it.
 let t = fs.readFileSync('shared/allowlist.ts', 'utf8');
 t = t.replace(
   "throw new Error('ALLOWLIST_VIOLATION');",
   'throw new Error(`ALLOWLIST_VIOLATION: ${action} on ${origin}`);',
 );
-t += '\nexport function isEmpty(p: Policy) {\n  return p.origins.length === 0;\n}\n';
-fs.writeFileSync('shared/allowlist.ts', t);
+const edit = { file_path: process.cwd() + '/shared/allowlist.ts' };
+if (
+  !held ||
+  !runHooks('PreToolUse', { tool_name: 'Edit', tool_input: edit, tool_use_id: 'toolu_edit', cwd: process.cwd() })
+)
+  fs.writeFileSync('shared/allowlist.ts', t);
+t = fs.readFileSync('shared/allowlist.ts', 'utf8');
+byCommand('shared/allowlist.ts', t + '\nexport function isEmpty(p: Policy) {\n  return p.origins.length === 0;\n}\n');
 // Refused in a section's sandbox when the file is outside it: Claude Code carries on, and so does this.
 try {
-  fs.writeFileSync(
+  byCommand(
     'shared/policy-cache.ts',
     "import { loadPolicy } from './allowlist';\n\nexport const cached = loadPolicy();\n",
   );

@@ -1549,6 +1549,8 @@ test('colored by author: agent lines marked, the rest unknown, and a line shows 
     await page.locator('#prompt').fill('Name the action and origin in allowlist errors');
     await page.locator('#prompt').press('Enter');
     await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
+    // Ended, checks and all, before it is closed.
+    await expect(page.locator('#sideList .run .tags')).toContainText('Checks passed', { timeout: 15_000 });
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await page.keyboard.press('c');
@@ -2784,8 +2786,10 @@ test.describe('sessions at once', () => {
     }),
   );
 
-  // Claude Code runs without its own permission check only inside the sandbox: the same code that puts the sandbox
-  // in front of it gives it that, so one can't come without the other.
+  // Claude Code runs outside the sandbox, as in a terminal, and without its own permission check only when the
+  // sandbox holds its commands: the same code that gives it the hook which runs them inside gives it that, so one
+  // can't come without the other. `outside` is whether the agent's own process could write a file outside the
+  // section (it is not itself in the sandbox); `held`, whether it was given the hook, to refuse a call it can't check.
   const permissionOf = async (env: Record<string, string>, scope: string[]) => {
     const repo = makeRepo();
     const log = path.join(path.dirname(repo), 'probe.log');
@@ -2793,39 +2797,110 @@ test.describe('sessions at once', () => {
     try {
       const r = await call(b, '/api/runs', { agent: 'claude', prompt: 'Probe', scope, resumeFrom: null });
       if (r.status !== 200) return { refused: r.body.code };
+      const run = r.body as unknown as RunDTO;
       await expect
-        .poll(
-          async () =>
-            ((await call(b, `/api/runs/${(r.body as unknown as RunDTO).id}`)).body as unknown as RunDTO).status,
-        )
+        .poll(async () => ((await call(b, `/api/runs/${run.id}`)).body as unknown as RunDTO).status)
         .not.toBe('running');
       const { args, wrote } = JSON.parse(fs.readFileSync(log, 'utf8').trim().split('\n')[0]!) as {
         args: string[];
         wrote: boolean;
       };
-      return { mode: args[args.indexOf('--permission-mode') + 1], wrote };
+      const settings = args.includes('--settings') ? args[args.indexOf('--settings') + 1]! : '{}';
+      const hook = (
+        JSON.parse(settings) as {
+          hooks?: { PreToolUse: { matcher?: string; hooks: { command: string; onFailure: string }[] }[] };
+        }
+      ).hooks?.PreToolUse[0];
+      return {
+        mode: args[args.indexOf('--permission-mode') + 1],
+        outside: wrote,
+        // Every tool, and a call it can't check refused.
+        held:
+          !!hook && !hook.matcher && /hook hold$/.test(hook.hooks[0]!.command) && hook.hooks[0]!.onFailure === 'block',
+        says: scope.length ? !!run.stays : !!run.contained,
+      };
     } finally {
       b.stop();
       fs.rmSync(path.dirname(repo), { recursive: true, force: true });
     }
   };
-  onMac('inside the sandbox, Claude Code runs without its own permission check, and the sandbox holds it', async () => {
-    // On a section, a file outside it can't be written; on the whole repository, any file in the repo can.
-    expect(await permissionOf({}, ['shared/'])).toEqual({ mode: 'bypassPermissions', wrote: false });
-    expect(await permissionOf({}, [])).toEqual({ mode: 'bypassPermissions', wrote: true });
-  });
+  const HELD = { mode: 'bypassPermissions', outside: true, held: true, says: true },
+    FLAGGED = { mode: 'acceptEdits', outside: true, held: false, says: false };
+  onMac(
+    'held by the sandbox, Claude Code runs outside it, with the hook and without its own permission check',
+    async () => {
+      expect(await permissionOf({}, ['shared/'])).toEqual(HELD);
+      expect(await permissionOf({}, [])).toEqual(HELD);
+    },
+  );
   test('where there is no sandbox, Claude Code keeps its own permission check', async () => {
     // A system without one (Linux, Windows): on a section, and on the whole repository.
-    expect(await permissionOf({ LOA_SANDBOX: 'off' }, ['shared/'])).toEqual({ mode: 'acceptEdits', wrote: true });
-    expect(await permissionOf({ LOA_SANDBOX: 'off' }, [])).toEqual({ mode: 'acceptEdits', wrote: true });
+    expect(await permissionOf({ LOA_SANDBOX: 'off' }, ['shared/'])).toEqual(FLAGGED);
+    expect(await permissionOf({ LOA_SANDBOX: 'off' }, [])).toEqual(FLAGGED);
+  });
+  test("a Claude Code too old to refuse a call its hook can't check is not held: it keeps its own check", async () => {
+    // Before 2.1.295 a hook that can't run lets the call through, so nothing would hold such a session.
+    for (const version of ['2.1.294', '2.1.287', '2.0.300', 'unknown']) {
+      expect(await permissionOf({ PROBE_VERSION: version }, ['shared/'])).toEqual(FLAGGED);
+      expect(await permissionOf({ PROBE_VERSION: version }, [])).toEqual(FLAGGED);
+    }
+    for (const version of ['2.1.295', '2.2.0', '3.0.1'])
+      expect(await permissionOf({ PROBE_VERSION: version }, ['shared/'])).toEqual(
+        process.platform === 'darwin' ? HELD : FLAGGED,
+      );
   });
   onMac(
     "a sandbox that can't start starts no session on a section; a whole-repository run keeps the check",
     async () => {
       const broken = { LOA_SANDBOX_EXEC: '/usr/bin/false' };
       expect(await permissionOf(broken, ['shared/'])).toEqual({ refused: 'no-sandbox' });
-      expect(await permissionOf(broken, [])).toEqual({ mode: 'acceptEdits', wrote: true });
+      expect(await permissionOf(broken, [])).toEqual(FLAGGED);
     },
+  );
+  test('not held, with no hook files in the repo, an edit outside the selection is still refused and asked about', async () => {
+    const repo = makeRepo();
+    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_SANDBOX: 'off' }, ['--no-hooks']);
+    try {
+      const started = (
+        await call(b, '/api/runs', { agent: 'claude', prompt: 'want:README.md', scope: ['shared/'], resumeFrom: null })
+      ).body as unknown as RunDTO;
+      await expect
+        .poll(async () => ((await call(b, `/api/runs/${started.id}`)).body as unknown as RunDTO).wants?.[0]?.path)
+        .toBe('README.md');
+      expect(git(repo, 'status', '--porcelain')).toBe('');
+      expect(fs.existsSync(path.join(repo, '.claude'))).toBe(false);
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+    }
+  });
+  onMac("a session whose hook can't run stops there: nothing it asked for is done", () =>
+    twoSessions(
+      async (b, repo) => {
+        const started = (
+          await call(b, '/api/runs', {
+            agent: 'claude',
+            prompt: 'shell:README.md',
+            scope: ['shared/'],
+            resumeFrom: null,
+          })
+        ).body as unknown as RunDTO;
+        await expect
+          .poll(async () => ((await call(b, `/api/runs/${started.id}`)).body as unknown as RunDTO).status)
+          .toBe('failed');
+        const run = (await call(b, `/api/runs/${started.id}`)).body as unknown as RunDTO;
+        expect(run.stream).toContainEqual(
+          expect.objectContaining({
+            t: 'err',
+            text: "The hook that holds this session couldn't run, so the session was stopped.",
+            say: 'hook-failed',
+          }),
+        );
+        expect(run.changes).toEqual([]);
+        expect(git(repo, 'status', '--porcelain')).toBe('');
+      },
+      { FAKE_CLAUDE_BREAK_HOOK: '1' },
+    ),
   );
 
   onMac("a session on a section never runs unlocked: if the sandbox can't start, it is refused", () =>
