@@ -123,6 +123,25 @@ export interface Bridge {
   stop(): void;
 }
 
+/**
+ * Waits, without yielding, until no process of a stopped bridge's group is left running, so the test that deletes
+ * its repo next deletes nothing a bridge is still writing. A process that has exited but isn't yet collected counts
+ * as gone: this process collects it only once it yields.
+ */
+function waitGone(group: number) {
+  const running = () =>
+    execFileSync('ps', ['-A', '-o', 'pgid=,stat='], { encoding: 'utf8' })
+      .split('\n')
+      .some(l => {
+        const [pgid, stat] = l.trim().split(/\s+/);
+        return Number(pgid) === group && !stat!.startsWith('Z');
+      });
+  for (const t0 = Date.now(); running();) {
+    if (Date.now() - t0 > 15_000) throw new Error(`bridge ${group} still running 15 s after it was stopped`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+  }
+}
+
 /** The bridges a test started, for its failure to show what they printed (startedBridges). */
 const started: Bridge[] = [];
 /** The bridges started since last asked, and forgotten: what a failed test reports. */
@@ -177,6 +196,7 @@ export async function startBridge(
       } catch {
         /* already gone */
       }
+      waitGone(proc.pid!);
     },
   };
   started.push(b);
