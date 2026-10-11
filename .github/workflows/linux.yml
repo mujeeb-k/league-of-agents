@@ -29,9 +29,14 @@ jobs:
         with:
           node-version: 20
       - run: npm --prefix web ci
-      - run: npx --prefix web playwright install --with-deps chromium webkit firefox
+      - run: npx --prefix web playwright install --with-deps chromium firefox
       - run: npm --prefix web run check
       - run: npm --prefix web run build
+      # The published bridges some live tests run against, fetched while there is a network.
+      - run: |
+          for v in 0.1.2 0.1.3; do
+            npm install --prefix web/test-results/bridges/$v --no-audit --no-fund leagueofagents-cli@$v
+          done
       # With the network cut off: a network namespace that holds only this machine's own loopback. The bridge and
       # the app say they need nothing else, so every test must pass without it. The first command shows the cut
       # holds.
@@ -40,7 +45,7 @@ jobs:
             ip link set lo up
             exec sudo -u "$1" env "PATH=$2" "HOME=$3" CI=true sh -c "
               if curl -sS -m 5 -o /dev/null https://registry.npmjs.org; then echo the network is reachable; exit 1; fi
-              npx playwright test --project app --project live --project webkit --project firefox"
+              npx playwright test --project app --project live --project firefox"
           ' sh "$USER" "$PATH" "$HOME"
         working-directory: web
       - if: failure()

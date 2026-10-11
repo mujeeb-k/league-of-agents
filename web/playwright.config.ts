@@ -25,7 +25,8 @@ export default defineConfig({
     { name: 'states', testMatch: /states\.spec\.ts/, use: base },
     { name: 'screens', testMatch: /screens\.spec\.ts/, use: base },
     // Safari's and Firefox's engines on the app the bridge serves, where those browsers are sent: the app starts,
-    // and a run is made, reviewed and undone.
+    // and a run is made, reviewed and undone. WebKit runs on the Mac only: Linux has another port of it (GTK), which
+    // is not what Safari ships.
     ...(['webkit', 'firefox'] as const).map(name => ({
       name,
       testMatch: /(interactions|live)\.spec\.ts/,
