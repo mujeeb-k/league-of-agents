@@ -21,8 +21,8 @@ League of Agents 是你的代码库的地图，你在上面指挥编码代理并
 
 - **一眼看到整个项目。** 它的文件夹和代码文件都在一张地图上。缩小看整体结构，放大阅读代码。
 - **让代理精确到行。** 选择一个文件、一个文件夹或几行代码，然后描述改动。在代理名称旁边，你会看到以下两种提示之一：
-  - **“不会越出你所选范围”。** 在 macOS 上，系统自带的沙箱约束 Claude Code、Hermes 和 DeepSeek Harness：它们的命令，以及这些命令启动的每个程序，只能写入你所选范围之内的内容和仓库忽略的文件（构建产物、已安装的软件包）。Hermes 和 DeepSeek Harness 整个在沙箱中运行。Claude Code 本身在沙箱之外运行，和在你的终端中一样，它的命令在沙箱之内，它的文件工具被限制在你所选范围之内。沙箱在仓库之外允许什么，[见下方列表](#macos-上的沙箱)。
-  - **“可以改动你所选范围之外的文件，每一个都会标出给你看。”** Codex 和 Cursor，没有沙箱的地方（Linux、Windows）的所有代理，以及早于 2.1.295 的 Claude Code。Claude Code 的编辑工具在你所选范围之外仍会被阻止；开启 hooks 后，它的 shell 命令在范围之外改动的内容会被恢复原样。
+  - **“不会越出你所选范围”。** 在 macOS 上，Hermes 和 DeepSeek Harness 在系统自带的沙箱中运行：它们，以及它们启动的每个程序，只能写入你所选范围之内的内容和仓库忽略的文件（构建产物、已安装的软件包）。沙箱在仓库之外允许什么，[见下方列表](#macos-上的沙箱)。
+  - **“可以改动你所选范围之外的文件，每一个都会标出给你看。”** Codex 和 Cursor，没有沙箱的地方（Linux、Windows）的所有代理，以及目前的 Claude Code。在 macOS 上，沙箱已经约束 Claude Code 的命令，一个 hook 约束它的文件工具（[具体方式](#macos-上的沙箱)），但在这一设计通过安全审查之前，它的卡片仍显示这句话。Claude Code 的编辑工具在你所选范围之外仍会被阻止；开启 hooks 后，它的 shell 命令在范围之外改动的内容会被恢复原样。
 
   当某个会话试图改动你所选范围之外的文件时，这次写入会被阻止，它的卡片会询问：“想要改动 <file>”。**允许**会把这个文件加入它的所选范围，会话从停下的地方继续；**拒绝**则不让它改动这个文件。如果另一个会话正在处理这个文件，卡片会指出是哪一个，“允许”会等到那个会话结束。在你同意之前，hooks 都是关闭的：在终端中第一次运行 `npx leagueofagents-cli@latest` 时会询问一次并记住你的选择；没有终端时，除非你传入 `--hooks`，否则 hooks 保持关闭。要确认，请在 `.loa/bridge.json` 中查找 `"hooks": true`。
 - **观看工作过程。** 每个正在工作的会话，都会在它正在读取或编辑的文件上有一个标记，地图和小地图上都有，它的编辑会在发生时画出来。跟随一个会话，地图就会随它移动。一次运行的步骤按顺序列出；点击其中一步，可以看到该步骤完成时文件的样子。
@@ -142,13 +142,14 @@ League of Agents 从不把你的代码上传到任何地方。你的代码只会
 
 | 代理 | 命令 |
 |---|---|
-| Claude Code | `claude -p <prompt> --output-format stream-json --verbose --permission-mode acceptEdits` |
+| Claude Code | `claude -p <prompt> --output-format stream-json --verbose --setting-sources user --permission-mode acceptEdits` |
 | Cursor | `cursor-agent -p --force --output-format stream-json <prompt>` |
 | Codex | `codex exec --json --sandbox workspace-write <prompt>` |
 
 后续运行会为 Claude Code 和 Cursor 加上 `--resume <session>`，为 Codex 加上 `resume <session>`。各个权限参数允许的操作：
 
-- **Claude Code，`--permission-mode acceptEdits`：** 它会在仓库中创建和编辑文件而不询问，并且**会在仓库中运行 `mkdir`、`touch`、`rm`、`rmdir`、`mv`、`cp` 和 `sed` 而不询问。** 其他 shell 命令和网络请求需要你在 Claude Code 中设置规则；使用 `-p` 时没有人可以询问，所以它们会被拒绝。（[权限模式](https://code.claude.com/docs/en/permission-modes#auto-approve-file-edits-with-acceptedits-mode)，[非交互式运行](https://code.claude.com/docs/en/headless#auto-approve-tools)）没有沙箱的地方，每次运行都是这样启动的。**在 macOS 上，使用 Claude Code 2.1.295 或更高版本时，会话改用 `--permission-mode bypassPermissions` 启动，并带有一个通过 `--settings` 传入的 hook，Claude Code 在每次工具调用之前都会运行它。** 这个 hook 让每个 shell 命令都在沙箱中运行，并约束文件工具，[如下文所述](#macos-上的沙箱)。为此不会向你的仓库或你的 Claude Code 设置写入任何内容。Claude Code 自己的检查曾拒绝无害的命令（管道、循环、它自己的验证），而对于命令，在文件方面，它不会增加任何沙箱没有强制执行的限制。
+- **Claude Code，`--permission-mode acceptEdits`：** 它会在仓库中创建和编辑文件而不询问，并且**会在仓库中运行 `mkdir`、`touch`、`rm`、`rmdir`、`mv`、`cp` 和 `sed` 而不询问。** 其他 shell 命令和网络请求需要你在 Claude Code 中设置规则；使用 `-p` 时没有人可以询问，所以它们会被拒绝。（[权限模式](https://code.claude.com/docs/en/permission-modes#auto-approve-file-edits-with-acceptedits-mode)，[非交互式运行](https://code.claude.com/docs/en/headless#auto-approve-tools)）没有沙箱的地方，每次运行都是这样启动的。**在 macOS 上，使用 Claude Code 2.1.295 或更高版本时，会话改用 `--permission-mode dontAsk` 启动，并带有一个通过 `--settings` 传入的 hook，Claude Code 在每次工具调用之前都会运行它。** 这时 Claude Code 只做这个 hook 允许的事：这个 hook 让每个 shell 命令都在沙箱中运行，并约束文件工具，[如下文所述](#macos-上的沙箱)。hook 没有看到的调用会交给 Claude Code 自己的权限检查，所以会话不会在两者都没有的情况下运行。为此不会向你的仓库或你的 Claude Code 设置写入任何内容。
+- **Claude Code，`--setting-sources user`：** 会话读取你自己的 Claude Code 设置，从不读取仓库的设置（`.claude/settings.json`、`.claude/settings.local.json`），所以仓库提交的 hook 不会在会话中运行。
 - **Cursor，`-p --force`：** **它会运行 shell 命令而不询问。** `-p` 给它所有工具，包括写入和 shell，`--force` 允许运行命令，除非你明确拒绝了它们。（[CLI 参数](https://cursor.com/docs/cli/reference/parameters)）
 - **Codex，`exec --sandbox workspace-write`：** **它会在仓库中运行命令而不询问。** 它在仓库内读取和编辑文件并运行命令。网络访问是关闭的，它也无法越出仓库。（[非交互模式](https://learn.chatgpt.com/docs/non-interactive-mode)，[审批与安全](https://learn.chatgpt.com/docs/agent-approvals-security)）
 
@@ -159,7 +160,7 @@ League of Agents 从不把你的代码上传到任何地方。你的代码只会
 - **Hermes 和 DeepSeek Harness 整个在沙箱中运行：** 代理以及它启动的每个程序。
 - **Claude Code 在沙箱之外运行，和在你的终端中完全一样，** 所以它的登录和设置照常使用，League of Agents 从不触碰它们。它运行的每个 shell 命令都在沙箱中启动。命令的文本会被写入一个文件并从那里运行，所以其中的任何引号或替换都不会被沙箱之外的 shell 解读。
 - **Claude Code 的文件工具由一个 hook 约束。** 它们只读取这个仓库的文件。它们只写入你所选范围；在整个仓库上，则可以写入任何文件，但 git 自己的文件夹和“即使在上述位置之内也永远不会被写入”一项所列的文件除外。通过 MCP 添加的工具，以及任何可能通过其他途径访问文件或启动程序的工具，在这些会话中都会被拒绝。
-- **这需要 Claude Code 2.1.295 或更高版本，** 它会在自己的 hook 无法运行时拒绝工具调用；这时会话会被停止。更早的 Claude Code 会放行这样的调用，所以它的会话不受约束：它们显示“可以改动你所选范围之外的文件，每一个都会标出给你看。”，并且和[没有沙箱的地方](#没有沙箱的地方)一样工作。
+- **这需要 Claude Code 2.1.295 或更高版本，** 它会在自己的 hook 无法运行时拒绝工具调用；这时会话会被停止。更早的 Claude Code 会放行这样的调用，所以它的会话不受约束：它们和[没有沙箱的地方](#没有沙箱的地方)一样工作。
 
 命令在沙箱中能做什么：
 
@@ -172,7 +173,7 @@ League of Agents 从不把你的代码上传到任何地方。你的代码只会
 - **仓库忽略的文件仍可写入，** 比如 `node_modules` 中已安装的软件包。之后运行它们的东西，比如你的检查、git hook 或开发服务器，会在沙箱之外运行会话写入的内容。
 - **主目录之外的文件夹**（其他磁盘、`/opt`、`/usr/local`）可以被读取，和你的任何程序一样。
 - **会话启动的程序受约束；已经在运行的则不受约束。** tmux 服务器、Docker，或者按请求写入文件的开发服务器，仍然可以替它写入。
-- **Claude Code 本身不在沙箱中。** 它通过工具所做的事情如上所述受到约束。这个程序受到的信任和它在你的终端中一样。你的 Claude Code 设置中以及仓库自己的设置（`.claude/settings.json`）中的 hooks 和 MCP 服务器也是如此：Claude Code 在沙箱之外运行它们，就像你在仓库中运行 `claude` 时一样。只在你信任其 Claude Code 设置的仓库中启动会话。
+- **Claude Code 本身不在沙箱中。** 它通过工具所做的事情如上所述受到约束。这个程序受到的信任和它在你的终端中一样，你自己的 Claude Code 设置中的 hooks 和 MCP 服务器也是如此，Claude Code 在沙箱之外启动它们。仓库的 Claude Code 设置和 hooks 不会被读取。
 - **如果沙箱无法启动**（桥接程序自己就运行在一个沙箱中），在所选范围上的会话会被拒绝，而不是在没有沙箱的情况下运行。这时在整个仓库上的运行会在没有沙箱的情况下运行，拥有你的账户的全部权限，Claude Code 保留它自己的权限检查。
 
 ### 没有沙箱的地方
