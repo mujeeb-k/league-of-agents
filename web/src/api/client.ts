@@ -83,10 +83,11 @@ export async function sessionFor(base: string, code: string): Promise<string | n
 }
 
 /**
- * The most files a map shows: the largest a page draws within every budget (10,000 file tiles in the page take 92 to
- * 137 ms to show a selection). The bridge allows up to 10,000.
+ * The most files a map shows: the largest a page draws within every budget, measured in steps of 1,000 (a selection
+ * shows in 96 to 100 ms at 6,000 file tiles, the budget being 100; in 96 to 112 ms at 7,000). The bridge allows up to
+ * 10,000.
  */
-export const MAP_MAX = 5000;
+export const MAP_MAX = 6000;
 
 export const bridge = {
   /**

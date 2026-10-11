@@ -93,7 +93,7 @@ const report = (rows: object[]) =>
 test.describe.configure({ mode: 'serial' });
 fs.mkdirSync(OUT, { recursive: true });
 
-for (const n of [1000, 5000])
+for (const n of [1000, 6000])
   test(`pan and zoom on a ${n.toLocaleString('en')}-file repo hold 60 fps`, async ({ page, browser }) => {
     test.setTimeout(300_000);
     const repo = bigRepo(n);
@@ -818,9 +818,9 @@ test("a run's timeline of 1,000 steps scrolls at 60 fps, and a click shows its f
   }
 });
 
-// The same measures on a generated 5,000-file repo: the most a map shows (api/client.ts MAP_MAX). Memory is reported
+// The same measures on a generated 6,000-file repo: the most a map shows (api/client.ts MAP_MAX). Memory is reported
 // and held under a budget.
-for (const n of [5000])
+for (const n of [6000])
   test.describe(`a generated ${n.toLocaleString('en')}-file repo, as it opens`, () => {
     const runs: Measured[] = [];
     test.beforeAll(async ({ browser }) => {
