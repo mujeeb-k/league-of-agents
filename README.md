@@ -182,7 +182,7 @@ Snapshots stay on your computer unless you send them: `git push`, `git push --al
 
 - macOS. Linux passes the full test suite in CI, but hasn't been tried with a real agent yet; there, it opens the local app. Windows isn't supported yet.
 - Remote machines, SSH and dev containers aren't supported. League of Agents must run on the same computer as your browser.
-- A map shows up to 6,000 code files, and the first 400 lines of each on its card; a file opens in full, before, after and diff. In a larger repository you pick a folder to map, and can change it at any time. Files over 16 MB aren't on the map.
+- A map shows up to 5,000 code files, and the first 400 lines of each on its card; a file opens in full, before, after and diff. In a larger repository you pick a folder to map, and can change it at any time. Files over 16 MB aren't on the map.
 - Non-code files, such as images, are in snapshots and undo, but not on the map.
 - Files git ignores and new files that usually hold secrets are never in a snapshot and never make a run on their own. An agent's own activity is different: what it reads, prints or edits is kept in `.loa/runs/` on your computer, so if an agent opens a secret file, its content can be there. `uninstall` removes it.
 - Inside a session, agents run commands without asking, network included, and a session can send the repo's contents out over the network. On macOS the sandbox limits which files a session reads and writes ([the list](#the-sandbox-on-macos)); it does not limit the network. Runs on Linux and Windows, and Codex and Cursor everywhere, are not sandboxed.
