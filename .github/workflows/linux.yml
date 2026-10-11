@@ -1,6 +1,6 @@
 # The test suite on Linux: format, lint, types and unit tests, the build, then every interaction and live
-# end-to-end test (the bridge with stand-in agents, in real git repos). The visual baselines are macOS renders
-# and stay on the Mac; the perf suite is run by hand.
+# end-to-end test (the bridge with stand-in agents, in real git repos), with no network but the machine's own.
+# The visual baselines are macOS renders and stay on the Mac; the perf suite is run by hand.
 name: Linux
 
 on:
@@ -29,10 +29,19 @@ jobs:
         with:
           node-version: 20
       - run: npm --prefix web ci
-      - run: npx --prefix web playwright install --with-deps chromium
+      - run: npx --prefix web playwright install --with-deps chromium webkit firefox
       - run: npm --prefix web run check
       - run: npm --prefix web run build
-      - run: npx playwright test --project app --project live
+      # With the network cut off: a network namespace that holds only this machine's own loopback. The bridge and
+      # the app say they need nothing else, so every test must pass without it. The first command shows the cut
+      # holds.
+      - run: |
+          sudo unshare --net sh -c '
+            ip link set lo up
+            exec sudo -u "$1" env "PATH=$2" "HOME=$3" CI=true sh -c "
+              if curl -sS -m 5 -o /dev/null https://registry.npmjs.org; then echo the network is reachable; exit 1; fi
+              npx playwright test --project app --project live --project webkit --project firefox"
+          ' sh "$USER" "$PATH" "$HOME"
         working-directory: web
       - if: failure()
         uses: actions/upload-artifact@v4

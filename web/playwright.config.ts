@@ -24,6 +24,19 @@ export default defineConfig({
     { name: 'visual', testMatch: /visual\.spec\.ts/, use: { ...base, baseURL: APP } },
     { name: 'states', testMatch: /states\.spec\.ts/, use: base },
     { name: 'screens', testMatch: /screens\.spec\.ts/, use: base },
+    // Safari's and Firefox's engines on the app the bridge serves, where those browsers are sent: the app starts,
+    // and a run is made, reviewed and undone.
+    ...(['webkit', 'firefox'] as const).map(name => ({
+      name,
+      testMatch: /(interactions|live)\.spec\.ts/,
+      grep: /smoke|live run, review and revert/,
+      use: {
+        ...devices[name === 'webkit' ? 'Desktop Safari' : 'Desktop Firefox'],
+        viewport: base.viewport,
+        contextOptions: base.contextOptions,
+        baseURL: APP,
+      },
+    })),
     // The README's GIF and the social preview image. Run alone with `npm run media`.
     { name: 'media', testMatch: /(gif|og)\.spec\.ts/, use: base },
     // A large public repository and the real Claude Code. Run alone with `npm run large`.
