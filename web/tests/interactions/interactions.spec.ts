@@ -1497,15 +1497,14 @@ for (const home of ['/', '/zh-CN/', '/fr/', '/pt-BR/', '/es/'])
       await page.keyboard.press('Escape');
       await expect(page.locator('#palette')).toHaveCount(0);
     }
-    // ⌘↵ with two files selected: a session on each.
+    // ⌘↵ with two files selected: a session on each. The first is still selected; a second click on it would
+    // deselect it, unless it came within a double click's time of the first.
     await page.keyboard.press('0');
-    await page.locator('.fr[data-path="server/delivery/endpoint-health.ts"]').click();
     await page.locator('.fr[data-path="server/delivery/dead-letter.ts"]').click({ modifiers: ['Shift'] });
+    await expect(page.locator('#scopeRow .chip:not(.all) > span')).toHaveText(['endpoint-health.ts', 'dead-letter.ts']);
     await page.locator('#prompt').fill('Log every attempt');
     await page.keyboard.press('ControlOrMeta+Enter');
-    // The demo's six runs and the two new ones, counted in the list, where they stay: on the map a demo session is
-    // at work for a second or so, which a busy machine can miss.
-    await expect(page.locator('#sideList [data-run]')).toHaveCount(8);
+    await expect(page.locator('#sels .zone')).toHaveCount(5);
     await page.keyboard.press('Escape');
     await expect(page.locator('#stage')).toBeVisible();
     expect(errors).toEqual([]);
