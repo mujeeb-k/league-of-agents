@@ -152,8 +152,8 @@ Every session by Claude Code, Hermes or DeepSeek Harness runs inside macOS's san
 
 - **Writes inside the repo, on a selection:** only your selection and files the repo ignores. A lockfile outside the selection that `npm install` would change is refused too, so select the folder that holds the package.
 - **Writes inside the repo, on the whole repository:** any file, including git's own, so the agent can commit. Never git's settings (`.git/config`) or its hooks. Such a session can rewrite git history: it can move or delete branches, tags and commits. It can also delete the objects git stores, the snapshots' among them, and the run can then no longer be undone. The session's card says "Can change any file in this repo. Can't touch the rest of your computer."
-- **Writes outside the repo:** only temp folders, the agent's own folders (`~/.claude`, `~/.hermes`, `~/.dsh`) and caches (`~/.cache`, `~/Library/Caches`, `~/.npm`). A Claude Code session can also write your login keychain file (`~/Library/Keychains/login.keychain-db`, with its temp and lock files): Claude Code keeps its login there and must save it when the login is renewed, and macOS has no narrower way to save a keychain item.
-- **Reads:** nothing in your home folder except the repo, the agent's own folders, those caches, git's settings (`~/.gitconfig`, `~/.config/git`), and the programs it runs: Node, the agent's own install, and the folders on your `PATH`. Your SSH keys, browser profiles and other repos in your home folder can't be read. When a command is refused a path, the session's card names it. A Claude Code session can also read `~/Library/Keychains`, where its login is; macOS guards each keychain item separately.
+- **Writes outside the repo:** only temp folders, the agent's own folders (`~/.claude`, `~/.hermes`, `~/.dsh`) and caches (`~/.cache`, `~/Library/Caches`, `~/.npm`).
+- **Reads:** nothing in your home folder except the repo, the agent's own folders, those caches, git's settings (`~/.gitconfig`, `~/.config/git`), and the programs it runs: Node, the agent's own install, and the folders on your `PATH`. Your SSH keys, browser profiles and other repos in your home folder can't be read. When a command is refused a path, the session's card names it.
 - **Never written, even inside those:** the bridge's token (`.loa/bridge.json` and its log, which can't be read either), the bridge's own code, your git settings and your repo's git hooks, the bridge's approved checks (`~/.config/league-of-agents`), and the agents' settings and hook files (Claude Code's `settings.json` and `settings.local.json`, Codex's `config.toml` and `hooks.json`, Cursor's `hooks.json`, Hermes's `config.yaml` and `hooks/`). The folders that hold them, and your repo's, can't be moved or replaced.
 - **Commands run without asking, network included.** The sandbox limits files, not the network: a session can send what it can read, your repo included, anywhere. Use agents and prompts you trust.
 - **Files the repo ignores stay writable,** such as installed packages in `node_modules`. What later runs them, such as your checks, a git hook or a dev server, runs what the session wrote, outside the sandbox.
@@ -171,6 +171,8 @@ On Linux and Windows, and for Codex and Cursor everywhere:
 - Nothing limits what a session reads.
 
 ## Privacy and security
+
+League of Agents never reads, writes, or grants access to the Keychain or any other credential store. The one exception: Hermes and DeepSeek Harness sessions read and write those agents' own folders (`~/.hermes`, `~/.dsh`), which hold their settings and keys.
 
 League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized. What it sends, and to where, is [above](#what-it-sends). Who can reach League of Agents on your computer, and how it's protected, is in [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md). Report security issues privately, as [SECURITY.md](SECURITY.md) explains.
 

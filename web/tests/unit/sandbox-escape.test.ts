@@ -39,7 +39,7 @@ function attempt(commands: Record<string, string>, scope = ['src/']) {
   }
   fs.mkdirSync(path.join(home, 'Library/Keychains'), { recursive: true });
   for (const f of ['login.keychain-db', 'other.keychain-db'])
-    fs.writeFileSync(path.join(home, 'Library/Keychains', f), 'k\n');
+    fs.writeFileSync(path.join(home, 'Library/Keychains', f), `${MARKER}\n`);
   fs.writeFileSync(path.join(repo, 'src/a.txt'), 'a\n');
   fs.writeFileSync(path.join(repo, 'other.txt'), 'o\n');
   fs.writeFileSync(path.join(repo, '.gitignore'), 'out/\n');
@@ -155,40 +155,30 @@ describe.runIf(process.platform === 'darwin')('a session on a section, in its sa
   });
 });
 
-describe.runIf(process.platform === 'darwin')("Claude Code's login in the keychain folder, in a session", () => {
+describe.runIf(process.platform === 'darwin')('the keychain folder, in a session', () => {
   const K = '"$HOME/Library/Keychains"';
 
-  it('saves the login keychain file, as a login renewal does', () => {
+  it("can't be read, listed or copied", () => {
+    expect(
+      attempt({
+        list: `ls ${K}`,
+        read: `cat ${K}/login.keychain-db`,
+        copy: `cp ${K}/login.keychain-db src/k`,
+      }),
+    ).toEqual({ list: false, read: false, copy: false });
+  });
+
+  it("can't be written: no file changed, deleted, moved or added, nor the folder moved", () => {
     expect(
       attempt({
         save: `echo x >> ${K}/login.keychain-db`,
-        replace: `echo new > ${K}/login.keychain-db.sb-1a2b3c-XyZ && mv ${K}/login.keychain-db.sb-1a2b3c-XyZ ${K}/login.keychain-db`,
-      }),
-    ).toEqual({ save: true, replace: true });
-  });
-
-  // Saving a keychain item renames a temp file over the keychain, and the sandbox counts that as removing it: a rule
-  // that lets the login be saved lets the file be deleted or moved out too. Each is tried alone, on a fresh file.
-  it('can so delete the login keychain file too, or move or copy it out', () => {
-    const alone = (cmd: string) => attempt({ done: cmd }).done;
-    expect({
-      remove: alone(`rm ${K}/login.keychain-db`),
-      moveOut: alone(`mv ${K}/login.keychain-db src/k`),
-      copyOut: alone(`cp ${K}/login.keychain-db src/k`),
-    }).toEqual({ remove: true, moveOut: true, copyOut: true });
-  });
-
-  it("can't write, delete, add or replace any other file there, or move the folder", () => {
-    expect(
-      attempt({
-        other: `echo x >> ${K}/other.keychain-db`,
-        removeOther: `rm ${K}/other.keychain-db`,
-        otherOverLogin: `mv ${K}/other.keychain-db ${K}/login.keychain-db`,
-        rename: `mv ${K}/login.keychain-db ${K}/gone`,
+        remove: `rm ${K}/login.keychain-db`,
+        move: `mv ${K}/login.keychain-db src/k`,
+        temp: `echo x > ${K}/login.keychain-db.sb-1a2b3c-XyZ`,
         add: `touch ${K}/new.keychain-db`,
         folder: `mv ${K} "$HOME/Library/Keychains-away"`,
       }),
-    ).toEqual({ other: false, removeOther: false, otherOverLogin: false, rename: false, add: false, folder: false });
+    ).toEqual({ save: false, remove: false, move: false, temp: false, add: false, folder: false });
   });
 });
 
