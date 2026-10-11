@@ -19,8 +19,6 @@ import {
 } from '../support/live';
 import { TOAST } from '../support/targets';
 
-/** macOS: a session on a section runs in the system's sandbox (bridge/lib/sandbox.mjs). */
-const SANDBOX = process.platform === 'darwin';
 const FILE = 'shared/allowlist.ts';
 // Lines 3 to 5 of the seeded file: loadPolicy.
 const SELECTED = SEED[FILE]!.split('\n').slice(2, 5);
@@ -337,11 +335,11 @@ test('each agent is told to edit only inside the scope; one whose writes outside
       const asked =
         'A write outside it is refused, and the user is asked whether you may make it. If you need a file outside it, ' +
         "try the edit once, then carry on inside the scope; you'll be told if they allow it.";
-      // This bridge runs without the hooks: only macOS's sandbox refuses Claude Code's writes outside.
+      // Claude Code's edit tools are refused outside on every system, by the hook its run is started with.
       const [claude, ...others] = lines;
-      expect(told(claude!)).toBe(common + (SANDBOX ? asked : reported) + '\n\nProbe');
+      expect(told(claude!)).toBe(common + asked + '\n\nProbe');
       for (const args of others) expect(told(args)).toBe(common + reported + '\n\nProbe');
-      // With the hooks on, the scope lock refuses Claude Code's edit tools outside, and it is told so.
+      // With the repo's hook files too, it is told the same.
       // One bridge per repo: this one stops so a bridge with the hooks can start there.
       b.stop();
       await expect

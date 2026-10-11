@@ -132,7 +132,7 @@ if (shells.length) {
     const refused = runHooks('PreToolUse', payload);
     // The command as the hooks left it. In the section's sandbox, a write outside it fails: told, not written.
     const failed =
-      !refused && spawnSync(payload.tool_input.command, { shell: '/bin/zsh' }).status !== 0 ? 'EPERM' : null;
+      !refused && spawnSync(payload.tool_input.command, { shell: '/bin/bash' }).status !== 0 ? 'EPERM' : null;
     const told = refused ?? failed ?? runHooks('PostToolUse', payload);
     // The command's result, as Claude Code's Bash tool returns it: the shell's own error when the write failed.
     const content = refused?.includes('onFailure')
@@ -182,7 +182,7 @@ const byCommand = (file, text) => {
     tool_use_id: `toolu_quiet_${file.replace(/\W/g, '_')}`,
     cwd: process.cwd(),
   };
-  if (!runHooks('PreToolUse', payload)) spawnSync(payload.tool_input.command, { shell: '/bin/zsh' });
+  if (!runHooks('PreToolUse', payload)) spawnSync(payload.tool_input.command, { shell: '/bin/bash' });
 };
 // The Edit tool's own change, as Claude Code makes it: by the tool, once the hooks let it.
 let t = fs.readFileSync('shared/allowlist.ts', 'utf8');
