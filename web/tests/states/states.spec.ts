@@ -355,9 +355,11 @@ for (const theme of ['light', 'dark'] as const)
         await start.close();
       } finally {
         b2.stop();
+        fs.rmSync(path.dirname(b2.repo), { recursive: true, force: true });
       }
     } finally {
       b.stop();
+      fs.rmSync(path.dirname(repo), { recursive: true, force: true });
     }
     const page = await ctx.newPage();
     await page.setContent(sheet(theme, rows));

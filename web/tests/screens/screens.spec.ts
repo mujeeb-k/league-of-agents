@@ -226,6 +226,9 @@ test('live screens', async ({ page }) => {
       await shoot(page, 'needs-you');
     }
   } finally {
-    for (const b of stop) b.stop();
+    for (const b of stop) {
+      b.stop();
+      fs.rmSync(path.dirname(b.repo), { recursive: true, force: true });
+    }
   }
 });
