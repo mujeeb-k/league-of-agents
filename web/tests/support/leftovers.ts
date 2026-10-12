@@ -7,9 +7,6 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
 /** The bridges (the repo's own, a published one, the copy the hooks run) and stand-in agents the tests start. */
 const OURS = /\/(loa|bridge)\.mjs( |$)|\/tests\/fixtures\/|\/tests\/support\/(slow|probe)-agent\.mjs/;
@@ -26,9 +23,9 @@ function cwdOf(pid: number): string | null {
 }
 
 /**
- * This run's bridges and stand-in agents still running: started from this checkout or from the run's folder, and
- * working inside that folder, or in a folder of it that is gone (a repo deleted under its bridge). One working
- * anywhere else is another run's, or the developer's own bridge.
+ * This run's bridges and stand-in agents still running: those working inside the run's folder, or in a folder of it
+ * that is gone (a repo deleted under its bridge). One working anywhere else is another run's, or the developer's own
+ * bridge.
  */
 function running(root: string) {
   const real = fs.realpathSync(root);
@@ -37,7 +34,7 @@ function running(root: string) {
     '\n',
   )) {
     const m = /^\s*(\d+)\s+(.*)$/.exec(l);
-    if (!m || !OURS.test(m[2]!) || ![REPO_ROOT, root, real].some(r => m[2]!.includes(r))) continue;
+    if (!m || !OURS.test(m[2]!)) continue;
     const cwd = cwdOf(Number(m[1]));
     if (cwd === null) continue;
     // A folder that is gone was under this run's folder when its name says so: a repo deleted under its bridge.

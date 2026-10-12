@@ -1,0 +1,61 @@
+# The test suite on a clean Mac, on a standard GitHub-hosted runner (free for a public repository): the sandbox that
+# holds sessions is macOS's own, so only a Mac runs those tests. Then the package as people get it: packed, installed
+# from the tarball, and put through two agents in one checkout.
+# The visual baselines are renders of the owner's Mac and stay there; the perf suite is run by hand.
+name: macOS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # The oldest Node the package supports (package.json engines).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Before anything depends on it: the sandbox must start on this runner, or its tests would say nothing.
+      - name: The sandbox starts here
+        run: |
+          sw_vers
+          sandbox-exec -p '(version 1)(allow default)' /usr/bin/true
+          echo "sandbox-exec started a process"
+      - run: npm --prefix web ci
+      - run: npx --prefix web playwright install chromium webkit firefox
+      - run: npm --prefix web run check
+      - run: npm --prefix web run build
+      # The published bridges some live tests run against.
+      - run: |
+          for v in 0.1.2 0.1.3; do
+            npm install --prefix web/test-results/bridges/$v --no-audit --no-fund leagueofagents-cli@$v
+          done
+      - run: npx playwright test --project app --project live --project webkit --project firefox --project motion
+        working-directory: web
+      # The package itself, as `npx leagueofagents-cli` installs it: packed here, installed from the tarball into an
+      # empty folder, and its bridge put through the two-agent scenarios in a freshly generated repo.
+      - name: Pack, install from the tarball, and run two agents in one checkout
+        run: |
+          npm pack --pack-destination "$RUNNER_TEMP"
+          npm install --prefix "$RUNNER_TEMP/installed" --no-audit --no-fund "$RUNNER_TEMP"/leagueofagents-cli-*.tgz
+          export LOA_TEST_BRIDGE="$RUNNER_TEMP/installed/node_modules/leagueofagents-cli/bridge/loa.mjs"
+          cd web && npx playwright test --project live -g "two agents, one checkout"
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-macos
+          path: web/test-results/
+          retention-days: 7

@@ -10,7 +10,8 @@ import { APP } from './targets';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(here, '../../..');
-export const BRIDGE = path.join(REPO_ROOT, 'bridge/loa.mjs');
+/** The bridge the tests start: this checkout's, or the one LOA_TEST_BRIDGE names (an installed package's). */
+export const BRIDGE = process.env.LOA_TEST_BRIDGE || path.join(REPO_ROOT, 'bridge/loa.mjs');
 export const FAKE_CLAUDE = path.join(REPO_ROOT, 'tests/fixtures/fake-claude.mjs');
 export const FAKE_CODEX = path.join(REPO_ROOT, 'tests/fixtures/fake-codex.mjs');
 export const FAKE_ACP = path.join(REPO_ROOT, 'tests/fixtures/fake-acp.mjs');
