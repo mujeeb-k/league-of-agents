@@ -16,6 +16,10 @@ export function overlaps(a: string, b: string): boolean {
 /** Whether section a holds section b: a is the whole repository, or a folder b is in. */
 const holds = (a: string, b: string) => a === '/' || (a.endsWith('/') && b.startsWith(a) && a !== b);
 
+/** Whether every picked section lies inside a run's own. A run on the whole repository holds them all. */
+export const inside = (scope: string[] | undefined, picked: string[]) =>
+  !scope?.length || picked.every(p => scope.some(e => area(e) === area(p) || holds(area(e), area(p))));
+
 /** Whether a run on this scope may change the file. An empty or missing scope is the whole repository. */
 export function covers(scope: string[] | undefined, path: string): boolean {
   return !scope?.length || scope.some(e => overlaps(e, path));

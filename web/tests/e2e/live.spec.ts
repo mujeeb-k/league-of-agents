@@ -5961,3 +5961,51 @@ test('in auto mode the sidebar stays at every zoom while the Runs tab shows or a
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
 });
+
+test("a selection outside the open run's section starts a new session; the menu still picks the follow-up", async ({
+  page,
+}) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo);
+  try {
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+    await page.locator('#prompt').fill('Name the action and origin in allowlist errors');
+    await page.locator('#prompt').press('Enter');
+    await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
+    const chip = page.locator('#followChip'),
+      scope = page.locator('#scopeRow .chip:not(.all):not(.fu):not(.new) > span');
+    // Its own section selected: a follow-up, as before.
+    await expect(scope).toHaveText(['shared/']);
+    await expect(chip).toHaveText('Follow-up to run 1');
+    // A folder outside its section selected instead: a new session. The whole map first, so its label is on screen.
+    await page.keyboard.press('0');
+    await page.locator('.frame[data-dir="apps/console"] > .flabel b').click();
+    await expect(scope).toHaveText(['apps/console/']);
+    await expect(chip).toHaveText('New session');
+    // Back inside the section: a follow-up again.
+    await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+    await expect(scope).toHaveText(['shared/']);
+    await expect(chip).toHaveText('Follow-up to run 1');
+    await page.locator('.frame[data-dir="apps/console"] > .flabel b').click();
+    await expect(chip).toHaveText('New session');
+    // Picked from the menu, the follow-up stands, with that selection; and can be dropped again.
+    await chip.click();
+    await page.locator('#followMenu [data-follow="1"]').click();
+    await expect(chip).toHaveText('Follow-up to run 1');
+    await expect(scope).toHaveText(['apps/console/']);
+    await chip.click();
+    await page.locator('#followMenu [data-follow="new"]').click();
+    await expect(chip).toHaveText('New session');
+    await page.locator('#prompt').fill('Same change again');
+    await page.locator('#prompt').press('Enter');
+    await expect(page.locator('#runbar b')).toHaveText('Run 2', { timeout: 15_000 });
+    const run2 = JSON.parse(fs.readFileSync(path.join(repo, '.loa/runs/2.json'), 'utf8')) as RunDTO;
+    expect(run2.resumeFrom).toBeNull();
+    expect(run2.scope).toEqual(['apps/console/']);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});

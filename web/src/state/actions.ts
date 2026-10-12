@@ -7,7 +7,7 @@ import { forgetRepo, live, liveAction, saveLayoutSoon, stopAll } from '../api/li
 import { applyView, flyAll, flyFile, flyRun, openingView } from '../lib/camera';
 import { agentOf } from '../lib/constants';
 import { buildModel, diffRows, existsNow, filesUnder, layout, linesAt, parseSample } from '../lib/model';
-import { area, clashOf, type Clash } from '../lib/sections';
+import { area, clashOf, inside, type Clash } from '../lib/sections';
 import type { FileNode, Mode, Run } from '../lib/types';
 import { clamp } from '../lib/util';
 import { setMoment } from '../lib/live';
@@ -246,7 +246,8 @@ export function simulateRun(prompt: string, scope = scopeFromSelection()): Run |
 
 /**
  * The run a new prompt would continue, or null. A reverted run is never continued:
- * its session still believes its edits exist, so a retry starts a fresh session.
+ * its session still believes its edits exist, so a retry starts a fresh session. A selection outside the run's
+ * section is other work, so it starts a new session too, unless the run was picked from the menu.
  */
 export function followTarget(): Run | null {
   const r = st.run;
@@ -257,7 +258,8 @@ export function followTarget(): Run | null {
     r.reverted ||
     !r.sessionId ||
     st.noFollow === r.id ||
-    r.agent !== st.agent
+    r.agent !== st.agent ||
+    (st.follow !== r.id && !inside(r.scope, scopeFromSelection()))
   )
     return null;
   return r;

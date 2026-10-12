@@ -81,6 +81,8 @@ export const st = {
   /** A file is open in the editor; in auto mode the sidebar steps aside for it (panels.ts). */
   editing: false,
   noFollow: null as number | null,
+  /** The run picked from the follow-up menu: continued even with a selection outside its section. */
+  follow: null as number | null,
   /** The session the map follows from file to file (state/watch.ts), until the person moves the map. */
   following: null as number | null,
   connectOpen: false,

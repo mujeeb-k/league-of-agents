@@ -109,6 +109,7 @@ function FollowChip({ fu }: { fu: Run | null }) {
             onSelect={() => {
               st.agent = r.agent;
               st.noFollow = null;
+              st.follow = r.id;
               selectRun(r, false);
             }}
           >
@@ -125,6 +126,7 @@ function FollowChip({ fu }: { fu: Run | null }) {
               data-follow="new"
               onSelect={() => {
                 st.noFollow = fu.id;
+                st.follow = null;
                 renderComposer();
               }}
             >
