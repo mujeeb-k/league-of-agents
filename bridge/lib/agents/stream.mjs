@@ -96,21 +96,27 @@ function codexStep(run, type, it) {
     for (const c of callsOf(run).get(it.id) ?? []) stepDone(run, c.i);
 }
 /**
- * A Cursor tool call as a step: started, then completed. From Cursor's documented stream-json (a call named by its
- * kind, as readToolCall, with its args); no recorded run here yet.
+ * A Cursor tool call, started then completed: a line of the run's activity, and a step. A call is named by its kind
+ * (readToolCall, editToolCall, grepToolCall) with its args, as a recorded run has them
+ * (tests/fixtures/agents/cursor); its docs also allow a `function` with a name. A command it runs wasn't recorded:
+ * a kind starting with "shell" is taken for one.
  */
 function cursorStep(run, m) {
   const [kind, call] = Object.entries(m.tool_call ?? {})[0] ?? [];
+  const name = kind === 'function' ? String(call?.name ?? kind) : String(kind).replace(/ToolCall$/, '');
   const file = typeof call?.args?.path === 'string' ? [repoPath(call.args.path)] : [];
-  const act = /^read/.test(kind)
+  const act = /^read/.test(name)
     ? 'read'
-    : /^(write|edit|delete)/.test(kind)
+    : /^(write|edit|delete)/.test(name)
       ? 'edit'
-      : /^shell/.test(kind)
+      : /^shell/.test(name)
         ? 'run'
         : 'other';
-  if (m.subtype === 'started') called(run, m.call_id, act, String(kind).replace(/ToolCall$/, ''), file);
-  else if (m.subtype === 'completed' && act === 'edit')
+  if (m.subtype === 'started') {
+    const label = toolLabel(name.charAt(0).toUpperCase() + name.slice(1), call?.args ?? {});
+    push(run, { t: 'tool', text: label, ...toolSaid(act, file[0], call?.args?.command) });
+    called(run, m.call_id, act, name, file);
+  } else if (m.subtype === 'completed' && act === 'edit')
     for (const c of callsOf(run).get(m.call_id) ?? []) stepDone(run, c.i);
 }
 /** Said on a run whose hook couldn't run (registry.mjs held): nothing holds it, so it is stopped. */
@@ -186,11 +192,11 @@ export function onAgentLine(run, line) {
     if (typeof m.result === 'string') run.summary = m.result.trim();
     if (m.total_cost_usd != null) run.cost = m.total_cost_usd;
     emit('progress', run);
-  } else if (m.type === 'tool_call' || m.type === 'item.completed' || m.type === 'item.started') {
-    const it = m.item || m.tool_call || m;
+  } else if (m.type === 'tool_call') cursorStep(run, m);
+  else if (m.type === 'item.completed' || m.type === 'item.started') {
+    const it = m.item || m;
     push(run, { t: 'tool', text: it.type || it.name || m.type });
     if (it.text && m.type === 'item.completed' && /message/.test(it.type || '')) run.summary = it.text;
-    if (m.type === 'tool_call') cursorStep(run, m);
-    else codexStep(run, m.type, it);
+    codexStep(run, m.type, it);
   }
 }

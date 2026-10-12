@@ -6079,3 +6079,51 @@ test('a run that changed nothing offers no Before, After and Diff', async ({ pag
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
 });
+
+// Cursor's command-line agent: a real run's stream, recorded and replayed, and the names its command goes by.
+test('a recorded Cursor run, replayed: its reads and edits are steps, and its activity names each call', async () => {
+  const repo = makeRepo();
+  const b = await startBridge(repo, FAKE_CLAUDE, {
+    LOA_CURSOR_BIN: REPLAY_AGENT,
+    LOA_FIXTURE: path.join(REPO_ROOT, 'tests/fixtures/agents/cursor/cursor-canvas-run.jsonl'),
+  });
+  try {
+    const run = await runToEnd(b, {
+      agent: 'cursor',
+      prompt: 'Label the buttons that show only an icon',
+      scope: [],
+      resumeFrom: null,
+    });
+    const id = run.id;
+    expect(run.model).toBe('Auto');
+    expect(run.sessionId).toBe('1096efcb-2d6e-40cf-897e-0e8c5e93d0d5');
+    const { steps } = (await call(b, `/api/runs/${id}/steps`)).body as unknown as {
+      steps: { act: string; tool: string; file?: string }[];
+    };
+    // As the real run recorded them: 28 calls, eight reads, then three edits to each of three files.
+    expect(steps.map(s => s.act).join(' ')).toBe(
+      'other other other other other other read read read read read read read read other other other ' +
+        'edit edit edit edit edit edit edit edit edit other other',
+    );
+    const dir = 'frontend/components';
+    expect(steps.filter(s => s.act === 'edit').map(s => s.file)).toEqual([
+      ...Array<string>(3).fill(`${dir}/sidebar/sidebar.tsx`),
+      ...Array<string>(3).fill(`${dir}/commentator/commentator-panel.tsx`),
+      ...Array<string>(3).fill(`${dir}/chat/chat-input.tsx`),
+    ]);
+    expect(new Set(steps.map(s => s.tool))).toEqual(
+      new Set(['getMcpTools', 'glob', 'grep', 'updateTodos', 'read', 'edit']),
+    );
+    // Each call is a line of the activity, by what it did and to which file: none reads "tool_call".
+    const tools = (run.stream ?? []).filter(e => e.t === 'tool');
+    expect(tools).toHaveLength(28);
+    expect(tools.filter(e => e.text === 'tool_call')).toEqual([]);
+    expect(tools.filter(e => e.act === 'edit').map(e => [e.text, e.path])).toContainEqual([
+      `Edit ${dir}/chat/chat-input.tsx`,
+      `${dir}/chat/chat-input.tsx`,
+    ]);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});

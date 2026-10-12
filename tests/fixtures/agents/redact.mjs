@@ -41,6 +41,11 @@ const KEEP = new Set([
   'status',
   'rateLimitType',
   'overageStatus',
+  // Cursor's stream: each call's ids, which pair its started and completed events.
+  'call_id',
+  'toolCallId',
+  'model_call_id',
+  'request_id',
 ]);
 /** Lists in the init event that describe the user's own setup. */
 const ENVIRONMENT = new Set([
@@ -85,7 +90,8 @@ function redact(value, key) {
     return value.map(v => redact(v, key));
   }
   if (value && typeof value === 'object')
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, redact(v, k)]));
+    // A key can be a path too: Cursor's search results are keyed by the workspace's folder.
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [paths(k), redact(v, k)]));
   return value;
 }
 
