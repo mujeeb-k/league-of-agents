@@ -113,6 +113,14 @@ export function publishedBridge(version: string): string {
   return file;
 }
 
+/**
+ * The agents a test bridge finds are the ones its test names, never the ones this machine happens to have: each
+ * other agent's command is a name that is on no PATH.
+ */
+const NO_AGENTS = Object.fromEntries(
+  ['CURSOR', 'CODEX', 'HERMES', 'DSH'].map(a => [`LOA_${a}_BIN`, `loa-test-no-${a.toLowerCase()}`]),
+);
+
 export interface Bridge {
   port: number;
   token: string;
@@ -179,7 +187,7 @@ export async function startBridge(
     {
       cwd: repo,
       // The test app (APP) stands in for the hosted app, the one other origin the bridge accepts.
-      env: { ...process.env, HOME: homeOf(repo), LOA_WEB_URL: APP, LOA_CLAUDE_BIN: agentBin, ...env },
+      env: { ...process.env, ...NO_AGENTS, HOME: homeOf(repo), LOA_WEB_URL: APP, LOA_CLAUDE_BIN: agentBin, ...env },
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,
     },
