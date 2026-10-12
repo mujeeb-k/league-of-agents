@@ -122,6 +122,28 @@ if (wants.length) {
   out({ type: 'result', result: results.join('\n') + resume, session_id: 'sess-123', total_cost_usd: 0.0123 });
   process.exit(0);
 }
+// "tool:<name>" in the prompt: call that tool, which the hooks may refuse, and say what came of it.
+const named = /\btool:(\w+)/.exec(prompt)?.[1];
+if (named) {
+  const payload = { tool_name: named, tool_input: { command: 'true' }, tool_use_id: 'toolu_named', cwd: process.cwd() };
+  out({
+    type: 'assistant',
+    message: { content: [{ type: 'tool_use', id: payload.tool_use_id, name: named, input: payload.tool_input }] },
+  });
+  const refused = runHooks('PreToolUse', payload);
+  const content = refused ? `PreToolUse:${named} hook error: [node .loa/bridge.mjs hook hold]: ${refused}` : 'Done';
+  out({
+    type: 'user',
+    message: { content: [{ type: 'tool_result', tool_use_id: payload.tool_use_id, is_error: !!refused, content }] },
+  });
+  out({
+    type: 'result',
+    result: `${named}: ${refused ? 'refused' : 'done'}`,
+    session_id: 'sess-123',
+    total_cost_usd: 0.0123,
+  });
+  process.exit(0);
+}
 const shells = [...prompt.matchAll(/\bshell:(\S+)/g)].map(m => m[1]);
 if (shells.length) {
   const results = [];

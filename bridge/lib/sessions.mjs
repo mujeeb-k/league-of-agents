@@ -30,7 +30,7 @@ function scopePreamble(run) {
   const parallel = others.length
     ? `Other sessions are working at the same time on: ${[...new Set(others)].join(', ')}. Leave their files as they are.\n`
     : '';
-  if (!scope?.length) return parallel && parallel + '\n';
+  if (!scope?.length) return rules(run) + (parallel && parallel + '\n');
   const line = s => {
     const e = scopeEntry(s);
     return e.from
@@ -42,8 +42,20 @@ function scopePreamble(run) {
     ? 'A write outside it is refused, and the user is asked whether you may make it. If you need a file outside it, ' +
       "try the edit once, then carry on inside the scope; you'll be told if they allow it."
     : 'Changes outside it are reported to the user and can be undone.';
-  return `Scope for this task:\n${scope.map(line).join('\n')}\nEdit only inside this scope. ${outside}\n${parallel}\n`;
+  return `${rules(run)}Scope for this task:\n${scope.map(line).join('\n')}\nEdit only inside this scope. ${outside}\n${parallel}\n`;
 }
+/**
+ * What a session the sandbox holds is told first, so it doesn't spend its turn finding out: where it can install,
+ * and that commits are made from the map.
+ */
+const rules = run =>
+  lockOfRun(run) === 'sandbox'
+    ? 'Rules for this session:\n' +
+      '- Install dependencies, tools and language runtimes only into the ignored folders at the top of this project (such as ' +
+      '.venv or node_modules). Never into the home folder or a temp folder: writes to the home folder are refused, ' +
+      'and a temp folder is cleared.\n' +
+      "- Don't commit. League of Agents handles commits: the user commits this session's files from the map.\n\n"
+    : '';
 const scopeFileOf = run => path.join(LOA, `scope-${run.id}.json`);
 /**
  * Starts the run's agent on its prompt, with the scope above it. The scope lock's file holds the scope, and for line

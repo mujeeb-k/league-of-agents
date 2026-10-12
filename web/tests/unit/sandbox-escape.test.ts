@@ -28,6 +28,8 @@ type Opts = {
   scope?: string[];
   /** Hermes runs whole inside the sandbox; Claude Code's commands reach it through its hook. */
   agent?: 'claude' | 'hermes';
+  /** The repo's .gitignore; `out/` when none is given. */
+  gitignore?: string;
   /** Looks at what is left, before it is cleared away. */
   after?: (s: Session) => void;
 };
@@ -35,7 +37,7 @@ const BRIDGE = path.join(LIB, '../loa.mjs');
 
 /** A fresh home folder and repo, with a session on `scope` prepared in it, handed to `use`. */
 function withSession<T>(
-  { scope = ['src/'], agent = 'claude' }: Opts,
+  { scope = ['src/'], agent = 'claude', gitignore = 'out/\n' }: Opts,
   use: (s: Session, args: string[] | null) => T,
 ): T {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'loa-escape-')));
@@ -54,7 +56,7 @@ function withSession<T>(
   }
   fs.writeFileSync(path.join(repo, 'src/a.txt'), 'a\n');
   fs.writeFileSync(path.join(repo, 'other.txt'), 'o\n');
-  fs.writeFileSync(path.join(repo, '.gitignore'), 'out/\n');
+  fs.writeFileSync(path.join(repo, '.gitignore'), gitignore);
   execFileSync('git', ['init', '-q'], { cwd: repo });
   execFileSync('git', ['add', '-A'], { cwd: repo });
   // A snapshot, as the bridge pins one before a run.
@@ -187,6 +189,22 @@ describe.runIf(process.platform === 'darwin')('a session on a section, in its sa
     ).toEqual({ folder: true, deep: true, file: false });
   });
 
+  it("installs into the project's own ignored folders, whatever the ignore file's rules look like", () => {
+    // A rule with `!` keeps the bridge from reading the rest as patterns: git is asked about these folders directly.
+    expect(
+      attempt(
+        {
+          venv: 'mkdir .venv && mkdir -p .venv/bin && touch .venv/bin/python && rm -rf .venv && mkdir .venv',
+          packages: 'mkdir -p node_modules/left-pad && touch node_modules/left-pad/index.js',
+          notIgnored: 'mkdir venv',
+          asFile: 'rmdir .venv && touch .venv',
+          other: 'mkdir build',
+        },
+        { gitignore: '.venv\nnode_modules/\nbuild/\n!build/keep/\n' },
+      ),
+    ).toEqual({ venv: true, packages: true, notIgnored: false, asFile: false, other: false });
+  });
+
   it("can't read the home folder: keys, a browser's profile, another repo, or what is in it", () => {
     expect(
       attempt({
@@ -217,6 +235,17 @@ describe.runIf(process.platform === 'darwin')('a session on a section, in its sa
         nowhere: 'echo x > /dev/null',
       }),
     ).toEqual({ notes: false, shell: false, otherRepo: false, agent: false, temp: true, nowhere: true });
+  });
+
+  it('lists processes with ps, the one setuid program it may run', () => {
+    expect(
+      attempt({
+        ps: '/bin/ps -o pid= -p $$',
+        piped: 'ps aux | grep -c . >/dev/null',
+        top: '/usr/bin/top -l 1 -n 0',
+        sudo: '/usr/bin/sudo -n true',
+      }),
+    ).toEqual({ ps: true, piped: true, top: false, sudo: false });
   });
 
   it('whatever its quotes, new lines and substitutions, a command runs inside and changes nothing outside', () => {

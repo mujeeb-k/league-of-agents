@@ -2887,6 +2887,22 @@ test.describe('sessions at once', () => {
       fs.rmSync(path.dirname(repo), { recursive: true, force: true });
     }
   });
+  onMac('a tool the hook refuses is said as refused, not as a command that tried to write outside', () =>
+    twoSessions(async b => {
+      const started = (
+        await call(b, '/api/runs', { agent: 'claude', prompt: 'tool:Monitor', scope: ['shared/'], resumeFrom: null })
+      ).body as unknown as RunDTO;
+      await expect
+        .poll(async () => ((await call(b, `/api/runs/${started.id}`)).body as unknown as RunDTO).status)
+        .toBe('done');
+      const run = (await call(b, `/api/runs/${started.id}`)).body as unknown as RunDTO;
+      expect((run.stream ?? []).filter(e => e.t === 'err').map(e => e.text)).toEqual([
+        expect.stringContaining("Monitor can't be used in a session started from the map."),
+      ]);
+      expect((run.stream ?? []).filter(e => e.t === 'deny')).toEqual([]);
+      expect(run.commandBlocked).toBeUndefined();
+    }),
+  );
   onMac("a session whose hook can't run stops there: nothing it asked for is done", () =>
     twoSessions(
       async (b, repo) => {

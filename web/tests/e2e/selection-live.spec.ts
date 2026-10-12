@@ -324,7 +324,8 @@ test('each agent is told to edit only inside the scope; one whose writes outside
         .trim()
         .split('\n')
         .map(l => (JSON.parse(l) as { args: string[] }).args);
-      const told = (args: string[]) => args.find(a => a.startsWith('Scope for this task'));
+      const told = (args: string[]) =>
+        args.find(a => a.includes('Scope for this task'))?.replace(/^[^]*?(?=Scope for this task)/, '');
       const common = [
         'Scope for this task:',
         `- ${FILE}, lines 3 to 5 only: keep every other line of this file as it is`,
@@ -338,6 +339,18 @@ test('each agent is told to edit only inside the scope; one whose writes outside
       // Claude Code's edit tools are refused outside on every system, by the hook its run is started with.
       const [claude, ...others] = lines;
       expect(told(claude!)).toBe(common + asked + '\n\nProbe');
+      // Held by the sandbox (on a Mac), it is told the rules first: where to install, and not to commit.
+      const rules = claude!.find(a => a.includes('Scope for this task'))!.split('Scope for this task')[0];
+      expect(rules).toBe(
+        process.platform === 'darwin'
+          ? 'Rules for this session:\n' +
+              '- Install dependencies, tools and language runtimes only into the ignored folders at the top of this project (such as ' +
+              '.venv or node_modules). Never into the home folder or a temp folder: writes to the home folder are refused, ' +
+              'and a temp folder is cleared.\n' +
+              "- Don't commit. League of Agents handles commits: the user commits this session's files from the map.\n\n"
+          : '',
+      );
+      for (const args of others) expect(args.some(a => a.includes('Rules for this session'))).toBe(false);
       for (const args of others) expect(told(args)).toBe(common + reported + '\n\nProbe');
       // With the repo's hook files too, it is told the same.
       // One bridge per repo: this one stops so a bridge with the hooks can start there.

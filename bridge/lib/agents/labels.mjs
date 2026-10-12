@@ -11,7 +11,9 @@ export const toolText = content =>
  * (macOS's sandbox, in a session that runs in it).
  */
 export const refusedWrite = (text, sandboxed) =>
-  text.includes('League of Agents scope lock:') || (sandboxed && /\bEPERM\b|operation not permitted/i.test(text));
+  text.includes('League of Agents scope lock:') || (sandboxed && refusedBySystem(text));
+/** Whether a command's output says the system refused it something, as the sandbox does. */
+export const refusedBySystem = text => /\bEPERM\b|operation not permitted/i.test(text);
 /** A failed tool call, as an activity entry: denied, or an error. */
 export function toolError(text) {
   const line = text.split('\n')[0].slice(0, 300);

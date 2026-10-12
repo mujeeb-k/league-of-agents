@@ -78,11 +78,24 @@ export const NO_SANDBOX = () =>
 
 const escape = s => s.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&');
 
+/** Where a project's dependencies are installed, at its top: a session is told to install there (sessions.mjs). */
+const INSTALLS = ['.venv', 'venv', 'node_modules'];
+/** Whether git ignores a path that isn't there yet. */
+function ignoredByGit(root, rel) {
+  try {
+    execFileSync('git', ['check-ignore', '-q', '--', rel], { cwd: root, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Regexes for the paths the repo's ignore files ignore, from the patterns simple enough to be sure of: a name or
  * `*.ext`, anchored or not, for a folder or not. A `!` rule in any of them can re-include a path another file's rule
  * covers, so then none is converted; what isn't converted stays unwritable (closed, never open), apart from ignored
- * paths that already exist (sandboxArgs). A rule for folders only (`out/`) gives what is inside them in `paths`, and
+ * paths that already exist (sandboxArgs) and the folders dependencies are installed into (INSTALLS), which git is
+ * asked about directly. A rule for folders only (`out/`) gives what is inside them in `paths`, and
  * the folders themselves in `folders`, written only as folders. Exported for its test.
  * @returns {{ paths: string[], folders: string[] }}
  */
@@ -107,6 +120,13 @@ export function ignoredPatterns(root = ROOT) {
     }
   });
   const out = { paths: [], folders: [] };
+  // The folders a project's dependencies are installed into, at its top: asked of git itself, one by one, so they can
+  // be made whatever the ignore files' rules look like.
+  for (const name of INSTALLS)
+    if (ignoredByGit(root, `${name}/x`)) {
+      out.paths.push(`^${escape(root)}/${escape(name)}/`);
+      out.folders.push(`^${escape(root)}/${escape(name)}$`);
+    }
   if (read.some(([, lines]) => lines.some(l => l.trim().startsWith('!')))) return out;
   for (const [dir, lines] of read) {
     for (let l of lines) {
@@ -404,6 +424,9 @@ export async function prepareSandbox(run, command) {
     ...(folders.length ? [`(allow file-write-create ${folders.join(' ')})`] : []),
     `(deny file-write* ${deny.join(' ')})`,
     `(deny file-read* ${token})`,
+    // ps, which only reads the list of processes. It is a setuid program, and macOS runs none inside a sandbox: the
+    // one way to let a session see what it started is to run this one program outside it.
+    '(allow process-exec (literal "/bin/ps") (with no-sandbox))',
   ].join('\n');
   const args = [SANDBOX_EXEC, '-p', profile, ...params.flatMap(([k, v]) => ['-D', `${k}=${v}`])];
   // Confirmed before the agent starts inside it: a profile the system won't take starts nothing.

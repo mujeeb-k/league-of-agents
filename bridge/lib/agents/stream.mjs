@@ -3,7 +3,16 @@ import path from 'node:path';
 import { AGENTS } from './registry.mjs';
 import { claudeLoggedOut } from './claude.mjs';
 import { noteWrites } from './lines.mjs';
-import { refusedWrite, relPaths, repoRelative, toolError, toolLabel, toolSaid, toolText } from './labels.mjs';
+import {
+  refusedBySystem,
+  refusedWrite,
+  relPaths,
+  repoRelative,
+  toolError,
+  toolLabel,
+  toolSaid,
+  toolText,
+} from './labels.mjs';
 import { launch } from './process.mjs';
 import { shellAccess } from '../shell.mjs';
 import { line } from '../util.mjs';
@@ -147,8 +156,9 @@ export function onAgentLine(run, line) {
       if (c.type !== 'tool_result') continue;
       const text = toolText(c.content),
         [call] = callsOf(run).get(c.tool_use_id) ?? [];
-      // A shell command the sandbox refused a write, failed or not (a command may carry on past it).
-      if (call?.act !== 'edit' && sandboxed && refusedWrite(text, true)) refusedBySandbox(run, text);
+      // A shell command the sandbox refused a write, failed or not (a command may carry on past it). Not a tool the
+      // hook refused: that is no write, and is said as the hook worded it.
+      if (call?.act !== 'edit' && sandboxed && refusedBySystem(text)) refusedBySandbox(run, text);
       if (call?.act === 'edit' && !c.is_error) stepDone(run, call.i);
       if (!c.is_error) continue;
       // Claude Code refused the call because the hook that holds the session couldn't run (registry.mjs held).
