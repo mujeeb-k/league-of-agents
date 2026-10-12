@@ -175,7 +175,8 @@ export function Editor() {
   const panel = useRef<HTMLElement>(null),
     host = useRef<HTMLDivElement>(null),
     shade = useRef<HTMLDivElement>(null),
-    cm = useRef<{ path: string; editor: CodeEditor } | null>(null);
+    // `diff` is the change this code editor shows, as a key: it starts empty with each editor and with each new text.
+    cm = useRef<{ path: string; editor: CodeEditor; diff: string } | null>(null);
   const path = ed.path;
   if (path && path !== shown) setShown(path);
   const blocked = editingBlocked();
@@ -238,7 +239,7 @@ export function Editor() {
           onSave: () => void saveEditor(),
           onClose: closeEditor,
         });
-        cm.current = { path, editor };
+        cm.current = { path, editor, diff: '' };
         if (!view && text !== ed.saved)
           editor.view.dispatch({ changes: { from: 0, to: ed.saved.length, insert: text } });
         editor.view.focus();
@@ -247,6 +248,7 @@ export function Editor() {
       });
     } else if (cm.current.editor.view.state.doc.toString() !== text) {
       cm.current.editor.reset(text);
+      cm.current.diff = '';
       cm.current.editor.setReadOnly(readOnly);
       // Selected lines follow their code to where it is now (refreshEditor); a stale selection stays unselected.
       if (ed.range && !ed.stale) cm.current.editor.select(ed.range);
@@ -260,7 +262,6 @@ export function Editor() {
   // An agent's change to lines of this file shows inline until it is kept or reverted; a draft hides it. In an open
   // run, the run's change shows instead.
   const review = path && !inRun && !drafts.has(path) ? reviewRun(path) : null;
-  const shownDiff = useRef('');
   // Each run's details are asked for once: a run whose details can't be had isn't asked again at every render.
   const detailsAsked = useRef(new Set<number>());
   useEffect(() => {
@@ -272,8 +273,8 @@ export function Editor() {
       return;
     }
     const key = view && inRun ? `run|${inRun.id}|${st.mode}` : review && path ? `${review.id}|${ed.saved}` : '';
-    if (!cm.current || key === shownDiff.current) return;
-    shownDiff.current = key;
+    if (!cm.current || key === cm.current.diff) return;
+    cm.current.diff = key;
     cm.current.editor.showDiff(view ? view.diff : review && path ? inlineDiff(review, path) : null);
   });
 

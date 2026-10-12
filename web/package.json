@@ -13,7 +13,7 @@
     "typecheck": "tsc -b --pretty && tsc -p ../bridge/tsconfig.json --pretty",
     "check:any": "! grep -rnwE \"any\" src/api src/state src/lib --include=*.ts --include=*.tsx",
     "test:unit": "vitest run",
-    "test:e2e": "npm run build && playwright test --project app --project live --project visual --project webkit --project firefox",
+    "test:e2e": "npm run build && playwright test --project app --project live --project visual --project webkit --project firefox --project motion",
     "perf": "npm run build && playwright test --project perf",
     "large": "npm run build && playwright test --project large",
     "media": "npm run build && playwright test --project media",

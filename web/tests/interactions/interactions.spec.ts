@@ -11,6 +11,15 @@ async function view(page: Page) {
     return { x: +m[1]!, y: +m[2]!, s: +m[3]! };
   });
 }
+/** The view once a flight has ended: the same twice running. With reduced motion a flight ends at once. */
+async function rested(page: Page) {
+  for (let a = await view(page); ;) {
+    await page.waitForTimeout(60);
+    const b = await view(page);
+    if (a.x === b.x && a.y === b.y && a.s === b.s) return b;
+    a = b;
+  }
+}
 const stageBox = async (page: Page) => (await page.locator('#stage').boundingBox())!;
 /** A point on the stage where nothing on the canvas is hit, so clicks land on empty canvas. */
 async function emptyPoint(page: Page) {
@@ -340,7 +349,7 @@ test('double click on empty canvas zooms 2x toward the pointer', async ({ page }
   expect((await view(page)).s / s0).toBeCloseTo(2, 3);
 });
 
-test('double click on a file or folder label selects it and zooms to it', async ({ page }) => {
+test('double click on a file or folder label selects it and zooms to it', { tag: '@motion' }, async ({ page }) => {
   await page.keyboard.press('Escape');
   const s0 = (await view(page)).s;
   await page.locator('.fr[data-path="server/delivery/rate-limit.ts"]').dblclick();
@@ -422,12 +431,12 @@ test('shift drag draws a marquee and adds files to scope', async ({ page }) => {
   await expect(page.locator(TOAST)).toHaveText('5 files added to scope');
 });
 
-test('sidebar: tree click selects and flies, tabs switch', async ({ page }) => {
+test('sidebar: tree click selects and flies, tabs switch', { tag: '@motion' }, async ({ page }) => {
   await showSidebar(page);
   await page.keyboard.press('Escape');
   await page.locator('#sideList .ti[data-path="server/delivery/secrets.ts"]').click();
   await expect(page.locator('#sideList .ti[data-path="server/delivery/secrets.ts"]')).toHaveClass(/sel/);
-  expect((await view(page)).s).toBeCloseTo(1.1, 3);
+  expect((await rested(page)).s).toBeCloseTo(1.1, 3);
   await page.locator('#sideList .ti[data-dir="server/api"]').click();
   expect(await chips(page)).toEqual(['server/api/']);
   await page.locator('#sideList .ti[data-dir=""]').click();
@@ -578,7 +587,7 @@ test('sidebar steps aside below code zoom; pin, [ and ] and the inspector handle
   await expect(side).toHaveClass(AWAY);
 });
 
-test('⌘P quick open finds a file, selects it and flies to it; focus returns', async ({ page }) => {
+test('⌘P quick open finds a file, selects it and flies to it; focus returns', { tag: '@motion' }, async ({ page }) => {
   await page.keyboard.press('Escape');
   await page.locator('#prompt').focus();
   await page.keyboard.press('ControlOrMeta+p');
@@ -591,7 +600,7 @@ test('⌘P quick open finds a file, selects it and flies to it; focus returns', 
   await page.keyboard.press('Enter');
   await expect(page.locator('#palette')).toHaveCount(0);
   expect(await chips(page)).toEqual(['backoff.ts']);
-  expect((await view(page)).s).toBeCloseTo(1.1, 3);
+  expect((await rested(page)).s).toBeCloseTo(1.1, 3);
   await expect(page.locator('#prompt')).toBeFocused();
 });
 
@@ -749,7 +758,7 @@ test('several sections and ⌘↵ start a session on each, drawn in its own colo
   await expect(page.locator('#sideList .run.running')).toHaveCount(0);
 });
 
-test('open a run, close it with the button and with Escape', async ({ page }) => {
+test('open a run, close it with the button and with Escape', { tag: '@motion' }, async ({ page }) => {
   await showSidebar(page);
   await page.locator('[data-tab="runs"]').click();
   await page.locator('#sideList [data-run="12"]').click();
@@ -902,18 +911,18 @@ test('demo revert refuses while a later run changed the same files', async ({ pa
   await expect(page.locator('#runbar b')).toHaveText('Run 18');
 });
 
-test('F zooms to the selection, else the run, else everything', async ({ page }) => {
+test('F zooms to the selection, else the run, else everything', { tag: '@motion' }, async ({ page }) => {
   await page.keyboard.press('0');
-  const s0 = (await view(page)).s;
+  const s0 = (await rested(page)).s;
   await page.keyboard.press('f');
-  const sRun = (await view(page)).s;
+  const sRun = (await rested(page)).s;
   expect(sRun).not.toBeCloseTo(s0, 3);
   await page.keyboard.press('Escape');
   await page.keyboard.press('f');
-  expect((await view(page)).s).toBeCloseTo(s0, 5);
+  expect((await rested(page)).s).toBeCloseTo(s0, 5);
   await page.locator('.fr[data-path="server/delivery/secrets.ts"]').click();
   await page.keyboard.press('f');
-  expect((await view(page)).s).toBeCloseTo(1.1, 3);
+  expect((await rested(page)).s).toBeCloseTo(1.1, 3);
 });
 
 test('Escape closes the menu, then clears the selection, then closes the run', async ({ page }) => {
@@ -1193,94 +1202,104 @@ test.describe('editor', () => {
     await page.locator(`.card[data-path="${FILE}"]`).dblclick({ position: { x: 80, y: 80 } });
     await expect(page.locator('#editor')).toBeVisible();
     await expect(page.locator('#editor .cm-content')).toBeFocused();
+    // Expanded from its card (Editor.tsx): until it rests, the code is measured at the size it is passing through.
+    await expect(page.locator('#editor')).toHaveCSS('transform', 'none');
   };
 
-  test('double-click opens a code box in the editor with the full file; Esc collapses it and keeps the draft', async ({
-    page,
-  }) => {
-    await page.keyboard.press('Escape');
-    await openFromCard(page);
-    await expect(page.locator('#editor')).toHaveAttribute('aria-label', 'Editing endpoint-health.ts');
-    await expect(page.locator('#editor .cm-lineNumbers .cm-gutterElement').last()).toHaveText('19');
-    await expect(page.locator('#editor .cm-line').first()).toHaveText(
-      "import { recentAttempts } from './attempt-log';",
-    );
-    await expect(page.locator('#editor .tk-k').first()).toHaveText('import');
-    await expect(page.locator('#scopeRow .chip:not(.all) > span')).toHaveText(['endpoint-health.ts']);
-    // Its related files, under the header: what it imports, then what uses it. Each chip opens that file.
-    const rel = (label: string) => page.locator(`.rel-chip[aria-label^="${label}"]`, {}).locator('span');
-    await expect(rel('Imports')).toHaveText(['attempt-log.ts', 'types.ts']);
-    await expect(rel('Used by')).toHaveText(['endpoints.ts', 'schedule-retry.ts', 'circuit-breaker.ts']);
-    // The demo has no files on disk to open in another editor.
-    await expect(page.locator('#openIn')).toHaveCount(0);
-    // The minimap and the hint step aside; the composer stays.
-    await expect(page.locator('#nav')).toBeHidden();
-    await expect(page.locator('#composer')).toBeVisible();
-    // Typing makes a draft: a dot in the header, on the card and in the explorer.
-    await page.keyboard.press('ControlOrMeta+End');
-    await page.keyboard.type('\nexport const edited = true;');
-    await expect(page.locator('#editor header .dirty')).toBeVisible();
-    await expect(page.locator('#saveFile')).toBeEnabled();
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#editor')).toHaveCount(0);
-    await expect(page.locator(`.card[data-path="${FILE}"]`)).toHaveClass(/dirty/);
-    await showSidebar(page);
-    await expect(page.locator(`#sideList [data-path="${FILE}"] .dirty`)).toBeVisible();
-    // Enter on the selected file opens it again, with the draft.
-    await page.evaluate(() => (document.activeElement as HTMLElement).blur());
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#editor .cm-content')).toContainText('export const edited = true;');
-    // Undo back to the saved text: no draft.
-    await page.keyboard.press('ControlOrMeta+z');
-    await expect(page.locator('#editor header .dirty')).toHaveCount(0);
-    await expect(page.locator('#saveFile')).toBeDisabled();
-    await page.keyboard.press('ControlOrMeta+Shift+z');
-    await expect(page.locator('#editor header .dirty')).toBeVisible();
-    // Discard changes restores the saved text.
-    await page.locator('#discardDraft').click();
-    await expect(page.locator('#editor .cm-content')).not.toContainText('edited = true');
-    await expect(page.locator(`.card[data-path="${FILE}"]`)).not.toHaveClass(/dirty/);
-  });
+  test(
+    'double-click opens a code box in the editor with the full file; Esc collapses it and keeps the draft',
+    { tag: '@motion' },
+    async ({ page }) => {
+      await page.keyboard.press('Escape');
+      await openFromCard(page);
+      await expect(page.locator('#editor')).toHaveAttribute('aria-label', 'Editing endpoint-health.ts');
+      await expect(page.locator('#editor .cm-lineNumbers .cm-gutterElement').last()).toHaveText('19');
+      await expect(page.locator('#editor .cm-line').first()).toHaveText(
+        "import { recentAttempts } from './attempt-log';",
+      );
+      await expect(page.locator('#editor .tk-k').first()).toHaveText('import');
+      await expect(page.locator('#scopeRow .chip:not(.all) > span')).toHaveText(['endpoint-health.ts']);
+      // Its related files, under the header: what it imports, then what uses it. Each chip opens that file.
+      const rel = (label: string) => page.locator(`.rel-chip[aria-label^="${label}"]`, {}).locator('span');
+      await expect(rel('Imports')).toHaveText(['attempt-log.ts', 'types.ts']);
+      await expect(rel('Used by')).toHaveText(['endpoints.ts', 'schedule-retry.ts', 'circuit-breaker.ts']);
+      // The demo has no files on disk to open in another editor.
+      await expect(page.locator('#openIn')).toHaveCount(0);
+      // The minimap and the hint step aside; the composer stays.
+      await expect(page.locator('#nav')).toBeHidden();
+      await expect(page.locator('#composer')).toBeVisible();
+      // Typing makes a draft: a dot in the header, on the card and in the explorer.
+      await page.keyboard.press('ControlOrMeta+End');
+      await page.keyboard.type('\nexport const edited = true;');
+      await expect(page.locator('#editor header .dirty')).toBeVisible();
+      await expect(page.locator('#saveFile')).toBeEnabled();
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#editor')).toHaveCount(0);
+      await expect(page.locator(`.card[data-path="${FILE}"]`)).toHaveClass(/dirty/);
+      await showSidebar(page);
+      await expect(page.locator(`#sideList [data-path="${FILE}"] .dirty`)).toBeVisible();
+      // Enter on the selected file opens it again, with the draft.
+      await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#editor .cm-content')).toContainText('export const edited = true;');
+      // Undo back to the saved text: no draft.
+      await page.keyboard.press('ControlOrMeta+z');
+      await expect(page.locator('#editor header .dirty')).toHaveCount(0);
+      await expect(page.locator('#saveFile')).toBeDisabled();
+      await page.keyboard.press('ControlOrMeta+Shift+z');
+      await expect(page.locator('#editor header .dirty')).toBeVisible();
+      // Discard changes restores the saved text.
+      await page.locator('#discardDraft').click();
+      await expect(page.locator('#editor .cm-content')).not.toContainText('edited = true');
+      await expect(page.locator(`.card[data-path="${FILE}"]`)).not.toHaveClass(/dirty/);
+    },
+  );
 
-  test('a related file opens from its chip, and the sidebar steps aside while editing', async ({ page }) => {
-    await page.keyboard.press('Escape');
-    await openFromCard(page);
-    await expect(page.locator('#side')).toHaveClass(/(^|\s)away(\s|$)/);
-    await page.locator('.rel-chip[data-path="server/delivery/attempt-log.ts"]').click();
-    await expect(page.locator('#editor')).toHaveAttribute('aria-label', 'Editing attempt-log.ts');
-    await expect(page.locator('#editor .cm-line').first()).toContainText('import');
-    await page.keyboard.press('Escape');
-    await expect(page.locator('#editor')).toHaveCount(0);
-  });
+  test(
+    'a related file opens from its chip, and the sidebar steps aside while editing',
+    { tag: '@motion' },
+    async ({ page }) => {
+      await page.keyboard.press('Escape');
+      await openFromCard(page);
+      await expect(page.locator('#side')).toHaveClass(/(^|\s)away(\s|$)/);
+      await page.locator('.rel-chip[data-path="server/delivery/attempt-log.ts"]').click();
+      await expect(page.locator('#editor')).toHaveAttribute('aria-label', 'Editing attempt-log.ts');
+      await expect(page.locator('#editor .cm-line').first()).toContainText('import');
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#editor')).toHaveCount(0);
+    },
+  );
 
-  test('selected lines narrow the scope; ⌘K instructs the agent; its change shows inline to keep or revert', async ({
-    page,
-  }) => {
-    await page.keyboard.press('Escape');
-    await openFromCard(page);
-    await page.locator('#editor .cm-line').nth(5).click();
-    await page.keyboard.press('Home');
-    for (let i = 0; i < 4; i++) await page.keyboard.press('Shift+ArrowDown');
-    await expect(page.locator('#scopeRow .chip:not(.all) > span')).toHaveText(['endpoint-health.ts:6–9']);
-    // ⌘K with lines selected writes the instruction in the composer; without a selection it is the command menu.
-    await page.keyboard.press('ControlOrMeta+k');
-    await expect(page.locator('#prompt')).toBeFocused();
-    await expect(page.locator('#palette')).toHaveCount(0);
-    await page.keyboard.type('Log the failure count');
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#editorBlocked')).toBeVisible();
-    await expect(page.locator('#editorReview')).toHaveText(
-      'Claude Code changed lines 6–9. Keep the change, or revert it.RevertKeep',
-      { timeout: 5000 },
-    );
-    expect(await page.evaluate(() => [...document.querySelectorAll('#editor .cm-added')].length)).toBe(6);
-    await expect(page.locator('#insp .runscope .chip')).toHaveText(['server/delivery/endpoint-health.ts:6-9']);
-    // Revert: the change is gone from the file and from the editor.
-    await page.locator('#rejectChange').click();
-    await expect(page.locator('#editorReview')).toHaveCount(0);
-    await expect(page.locator('#editor .cm-added')).toHaveCount(0);
-    await expect(page.locator('#editor .cm-content')).not.toContainText('logTheFailure');
-  });
+  test(
+    'selected lines narrow the scope; ⌘K instructs the agent; its change shows inline to keep or revert',
+    { tag: '@motion' },
+    async ({ page }) => {
+      await page.keyboard.press('Escape');
+      await openFromCard(page);
+      await page.locator('#editor .cm-line').nth(5).click();
+      await page.keyboard.press('Home');
+      for (let i = 0; i < 4; i++) await page.keyboard.press('Shift+ArrowDown');
+      await expect(page.locator('#scopeRow .chip:not(.all) > span')).toHaveText(['endpoint-health.ts:6–9']);
+      // ⌘K with lines selected writes the instruction in the composer; without a selection it is the command menu.
+      await page.keyboard.press('ControlOrMeta+k');
+      await expect(page.locator('#prompt')).toBeFocused();
+      await expect(page.locator('#palette')).toHaveCount(0);
+      await page.keyboard.type('Log the failure count');
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#editorBlocked')).toBeVisible();
+      await expect(page.locator('#editorReview')).toHaveText(
+        'Claude Code changed lines 6–9. Keep the change, or revert it.RevertKeep',
+        { timeout: 5000 },
+      );
+      expect(await page.evaluate(() => [...document.querySelectorAll('#editor .cm-added')].length)).toBe(6);
+      await expect(page.locator('#insp .runscope .chip')).toHaveText(['server/delivery/endpoint-health.ts:6-9']);
+      // Revert: the change is gone from the file and from the editor.
+      await page.locator('#rejectChange').click();
+      await expect(page.locator('#editorReview')).toHaveCount(0);
+      await expect(page.locator('#editor .cm-added')).toHaveCount(0);
+      await expect(page.locator('#editor .cm-content')).not.toContainText('logTheFailure');
+    },
+  );
 
   test('Propagate: after a rename is saved, the files that use it are updated in one run', async ({ page }) => {
     await page.keyboard.press('Escape');
@@ -1441,15 +1460,19 @@ test.describe('a page per language', () => {
   });
 });
 
-test("opening a file hides the tile's name label, which would float over the editor", async ({ page }) => {
-  const tile = page.locator('.fr').first();
-  await tile.hover();
-  await expect(page.locator('#tileName')).toBeVisible();
-  await tile.click();
-  await page.keyboard.press('Enter');
-  await expect(page.locator('#editor')).toBeVisible();
-  await expect(page.locator('#tileName')).toBeHidden();
-});
+test(
+  "opening a file hides the tile's name label, which would float over the editor",
+  { tag: '@motion' },
+  async ({ page }) => {
+    const tile = page.locator('.fr').first();
+    await tile.hover();
+    await expect(page.locator('#tileName')).toBeVisible();
+    await tile.click();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#editor')).toBeVisible();
+    await expect(page.locator('#tileName')).toBeHidden();
+  },
+);
 
 // Run before each promotion (npm run smoke): every shortcut on every language's homepage, with no page error.
 for (const home of ['/', '/zh-CN/', '/fr/', '/pt-BR/', '/es/'])

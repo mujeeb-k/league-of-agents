@@ -5826,3 +5826,60 @@ test('the app path is configurable: served there, and every link points there', 
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
 });
+
+test(
+  "a run's files open on their change in Diff: one after another, back again, and after a close",
+  { tag: '@motion' },
+  async ({ page }) => {
+    const repo = makeRepo();
+    // Two files longer than the editor is tall, each changed far below its first screen.
+    const long = (name: string) =>
+      Array.from({ length: 300 }, (_, i) => `export const ${name}${i} = ${i};`).join('\n') + '\n';
+    for (const f of ['a', 'b']) fs.writeFileSync(path.join(repo, `shared/${f}.ts`), long(f));
+    git(repo, 'add', '-A');
+    git(repo, 'commit', '-qm', 'long files');
+    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_QUIET_MS: '300' });
+    try {
+      await page.goto(linkFor(b));
+      await expect(page.locator('#conn')).toHaveText('Live');
+      // Both edited in another editor: one run, by watch mode.
+      for (const f of ['a', 'b'])
+        fs.writeFileSync(path.join(repo, `shared/${f}.ts`), long(f).replace(`${f}200 = 200;`, `${f}200 = -1;`));
+      await page.locator('[data-tab="runs"]').click();
+      await page.locator('#sideList [data-run="1"]').click({ timeout: 15_000 });
+      await expect(page.locator('#runbar b')).toHaveText('Run 1');
+      await page.locator('[data-mode="diff"]').click();
+      await page.locator('[data-tab="files"]').click();
+      const open = async (f: string) => {
+        await page.locator(`#side [data-path="shared/${f}.ts"]`).focus();
+        await page.keyboard.press('Enter');
+        await expect(page.locator('#editor')).toHaveAttribute('aria-label', new RegExp(`${f}\\.ts`));
+      };
+      // The changed line, marked and on screen: line 201 of 300.
+      const change = page.locator('#editor .cm-added');
+      const shows = async (f: string) => {
+        await expect(change).toHaveText(`export const ${f}200 = -1;`);
+        await expect(change).toBeInViewport();
+      };
+      await open('a');
+      await shows('a');
+      await open('b');
+      await shows('b');
+      // A file already opened once, opened again with the editor still open.
+      await open('a');
+      await shows('a');
+      // And after the editor closed.
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#editor')).toHaveCount(0);
+      await open('a');
+      await shows('a');
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#editor')).toHaveCount(0);
+      await open('b');
+      await shows('b');
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+    }
+  },
+);

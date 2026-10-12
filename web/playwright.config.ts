@@ -37,6 +37,14 @@ export default defineConfig({
         baseURL: APP,
       },
     })),
+    // The tests tagged @motion again, with motion on: every other project asks for reduced motion, which takes the
+    // editor's expand and collapse (Editor.tsx) and the camera's flights (lib/camera.ts fly) down another path.
+    {
+      name: 'motion',
+      testMatch: /(interactions|live)\.spec\.ts/,
+      grep: /@motion/,
+      use: { ...base, contextOptions: {}, baseURL: APP },
+    },
     // The README's GIF and the social preview image. Run alone with `npm run media`.
     { name: 'media', testMatch: /(gif|og)\.spec\.ts/, use: base },
     // A large public repository and the real Claude Code. Run alone with `npm run large`.

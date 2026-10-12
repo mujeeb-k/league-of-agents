@@ -12,6 +12,7 @@ The League of Agents web app. Vite, React, strict TypeScript, shadcn/ui and Tail
 | `npx playwright test --project app` | The interaction suite |
 | `npx playwright test --project visual` | Screenshots compared with the approved baselines in `tests/visual/visual.spec.ts-snapshots/` (zero differing pixels) |
 | `npx playwright test --project live` | Live mode against a real bridge in temp git repos |
+| `npx playwright test --project motion` | The tests tagged `@motion` again with motion on: every other suite asks for reduced motion, which skips the editor's expand and collapse and the camera's flights |
 | `npm run states` | The interaction inventory: every interactive element in every state that applies, as one contact sheet per theme in `test-results/states/` |
 | `npm run screens` | Every designed screen state at 1440×900 and 1280×800, in both themes, into `test-results/screens/` |
 | `npm run perf` | Performance proof, not part of `npm test`: pan and zoom frame times on a generated 1,000-file repo, and first paint on leagueofagents.dev. Opens a visible Chrome window, so the GPU rasterizes as it does for users. Results and a Chrome trace go to `test-results/perf/`. |
