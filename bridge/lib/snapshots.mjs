@@ -43,9 +43,9 @@ export const secretSpecs = (paths = /** @type {string[] | null} */ (null)) =>
     paths
       ? paths.map(
           p =>
-            `:(glob)${p.endsWith('/') ? `${p}**/` : path.posix.dirname(p) === '.' ? '' : `${path.posix.dirname(p)}/`}${g}`,
+            `:(glob,icase)${p.endsWith('/') ? `${p}**/` : path.posix.dirname(p) === '.' ? '' : `${path.posix.dirname(p)}/`}${g}`,
         )
-      : [`:(glob)**/${g}`],
+      : [`:(glob,icase)**/${g}`],
   );
 /**
  * The working tree as a git tree, written through a private index. The index is kept between snapshots, so

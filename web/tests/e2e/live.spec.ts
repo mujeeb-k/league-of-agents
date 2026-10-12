@@ -1322,6 +1322,15 @@ const SECRET_NAMES = [
   'service-account-prod.json',
   'infra/prod.tfvars',
 ];
+  // Whatever the case of the name: file systems on macOS and Windows don't tell them apart.
+  'UPPER.PEM',
+  'upper/Id_Rsa',
+  'upper/.ENV',
+  'upper/.Env.Production',
+  'upper/Secrets.JSON',
+  'upper/Server.Key',
+  'upper/Prod.TFVARS',
+  'upper/Service-Account-Prod.Json',
 function plantSecrets(repo: string) {
   for (const f of SECRET_NAMES) {
     fs.mkdirSync(path.dirname(path.join(repo, f)), { recursive: true });
