@@ -586,6 +586,9 @@ const catalogue: Catalogue = {
     'Mudado enquanto as execuções {runs} trabalhavam, por nenhuma delas.',
   "Changed files the map doesn't show: {files}": 'Arquivos mudados que o mapa não mostra: {files}',
   'Changed outside scope: {files}': 'Mudado fora do escopo: {files}',
+  "Changed in run {id}'s section: {files}": 'Mudado na seção da execução {id}: {files}',
+  "Run {id} changed {files} in this section. Those changes are run {id}'s.":
+    'A execução {id} mudou {files} nesta seção. Essas mudanças são da execução {id}.',
   'Put back what a shell command changed outside the section: {files}':
     'Devolvido ao que era o que um comando de shell mudou fora da seção: {files}',
   "Couldn't start: {why}": 'Não deu para iniciar: {why}',

@@ -1,8 +1,9 @@
 // Sessions at once. Runs whose sections don't overlap work at the same time, and a run on the whole repository works
-// alone. From the first of them starting to the last ending (an epoch), the baseline stays where it was. Each run owns
-// the changes in its own section, and, for an agent that reports its edits, only the files those edits named. When
-// the last one ends, whatever changed that no run owns (an edit by hand, an agent outside its section) is recorded as
-// a run of its own, credited to none of them.
+// alone. From the first of them starting to the last ending (an epoch), the baseline stays where it was. A file an
+// agent's edit tool named is that run's change, wherever the file is: inside another session's section, it is said
+// on both runs. Whatever else changed in a run's own section while it worked is its own too (its commands name no
+// file). When the last one ends, whatever changed that no run owns (an edit by hand, a command outside its section)
+// is recorded as a run of its own, credited to none of them.
 import { line, refused, serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
 import { CONF } from './repo.mjs';
@@ -11,6 +12,7 @@ import { blobAt, commitWith, computeChanges, pin, snapshotNow } from './snapshot
 import { runs, working, newRun, finishRun, saveRun } from './runs.mjs';
 import { base, setBase, settle } from './watch.mjs';
 import { emit, emitRun } from './events.mjs';
+import { stepsOf } from './steps.mjs';
 
 /**
  * The epoch under way: its baseline, whether runs overlapped in it, its runs, what each file should hold at its end
@@ -61,11 +63,17 @@ export function joinEpoch(run) {
 /** Sessions that overlap leave the baseline where it was until the last one ends. */
 export const keepsBaseline = run => !!run.overlapped;
 
+/** The files a run's edit tools named and weren't refused: what its agent reported changing (steps.mjs). */
+const reported = run => new Set(stepsOf(run).flatMap(s => (s?.act === 'edit' && s.file && !s.refused ? [s.file] : [])));
+/** The other session of the epoch whose section holds a file. */
+const holder = (run, file) => epoch.runs.find(r => r !== run && r.scope?.length && inScope(r.scope, file));
+
 /**
  * The run's own changes, from all that changed while it worked. A run that worked alone owns them all,
- * except what a revert during it wrote. A run that overlapped owns whatever changed in its own section while it
- * worked, by its edit tools or its commands; what changed outside every section is said, and left for the epoch's
- * end.
+ * except what a revert during it wrote. A run that overlapped owns the files its edit tools named, wherever they
+ * are, and whatever else changed in its own section while it worked (its commands), unless another session's edit
+ * tools named that file: then it is that session's. A file of its own inside another session's section is said on
+ * both runs. What changed outside every section and no session named is said, and left for the epoch's end.
  */
 export async function ownChanges(run, changes) {
   if (!epoch) return changes;
@@ -78,16 +86,24 @@ export async function ownChanges(run, changes) {
     return own;
   }
   const sections = epoch.runs.flatMap(r => r.scope ?? []);
+  const named = reported(run);
+  const byAnother = file => epoch.runs.some(r => r !== run && reported(r).has(file));
   const own = [],
     outside = [];
+  /** Files of this run's inside another session's section, by that session. */
+  const crossed = new Map();
   for (const c of changes) {
-    if (!inScope(run.scope, c.path)) {
-      if (!inScope(sections, c.path)) outside.push(c.path);
+    const mine = named.has(c.path) || (inScope(run.scope, c.path) && !byAnother(c.path));
+    if (!mine) {
+      if (!inScope(sections, c.path) && !byAnother(c.path)) outside.push(c.path);
     } else if (!(await reverted(c))) {
       own.push(c);
       epoch.expected.set(c.path, run.after);
+      const other = !inScope(run.scope, c.path) && holder(run, c.path);
+      if (other) crossed.set(other, [...(crossed.get(other) ?? []), c.path]);
     }
   }
+  for (const [other, files] of crossed) crossing(run, other, files.join(', '));
   if (outside.length)
     run.stream.push(
       line('warn', 'outside-sections', `Changed outside every section while others worked: ${outside.join(', ')}`, {
@@ -95,6 +111,26 @@ export async function ownChanges(run, changes) {
       }),
     );
   return own;
+}
+
+/**
+ * A session changed files inside another session's section: said on both. The other may have ended already; its
+ * record is saved again and sent.
+ */
+function crossing(run, other, files) {
+  run.stream.push(
+    line('warn', 'in-section-of', `Changed in run ${other.id}'s section: ${files}`, { id: other.id, files }),
+  );
+  other.stream.push(
+    line('warn', 'by-session', `Run ${run.id} changed ${files} in this section. Those changes are run ${run.id}'s.`, {
+      id: run.id,
+      files,
+    }),
+  );
+  if (other.status !== 'running') {
+    saveRun(other);
+    emitRun(other);
+  }
 }
 
 /** A revert while runs work: what it wrote is the revert's, not theirs, and not left over at the epoch's end. */

@@ -15,6 +15,8 @@ export const FAKE_CLAUDE = path.join(REPO_ROOT, 'tests/fixtures/fake-claude.mjs'
 export const FAKE_CODEX = path.join(REPO_ROOT, 'tests/fixtures/fake-codex.mjs');
 export const FAKE_ACP = path.join(REPO_ROOT, 'tests/fixtures/fake-acp.mjs');
 export const FAKE_CURSOR = path.join(REPO_ROOT, 'tests/fixtures/fake-cursor.mjs');
+/** Generates the repo two sessions work in at once: a/, and b/ that imports it (tests/fixtures/two-sections.mjs). */
+export const TWO_SECTIONS = path.join(REPO_ROOT, 'tests/fixtures/two-sections.mjs');
 export const REPLAY_AGENT = path.join(REPO_ROOT, 'tests/fixtures/replay-agent.mjs');
 export const AGENT_FIXTURES = path.join(REPO_ROOT, 'tests/fixtures/agents/claude');
 export const SLOW_AGENT = path.join(here, 'slow-agent.mjs');

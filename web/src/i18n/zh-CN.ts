@@ -549,6 +549,9 @@ const catalogue: Catalogue = {
   'Changed while runs {runs} worked, by none of them.': '在运行 {runs} 工作期间改动，但不是其中任何一个所为。',
   "Changed files the map doesn't show: {files}": '改动了地图未显示的文件：{files}',
   'Changed outside scope: {files}': '在范围之外的改动：{files}',
+  "Changed in run {id}'s section: {files}": '在运行 {id} 的分区内改动：{files}',
+  "Run {id} changed {files} in this section. Those changes are run {id}'s.":
+    '运行 {id} 改动了此分区内的 {files}。这些改动属于运行 {id}。',
   'Put back what a shell command changed outside the section: {files}':
     '已将 shell 命令在分区之外改动的内容恢复原样：{files}',
   "Couldn't start: {why}": '无法启动：{why}',

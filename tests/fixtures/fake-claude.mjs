@@ -118,6 +118,9 @@ if (wants.length) {
     });
     results.push(`${file}: ${error ? 'refused' : 'written'}`);
   }
+  // "wait:<name>" after them: the turn holds until the file .loa/go-<name> exists, so a test can keep it at work.
+  const hold = /\bwait:(\S+)/.exec(prompt)?.[1];
+  while (hold && !fs.existsSync(`.loa/go-${hold}`)) await new Promise(r => setTimeout(r, 50));
   const resume = resumed ? ` (resumed ${args[args.indexOf('--resume') + 1]})` : '';
   out({ type: 'result', result: results.join('\n') + resume, session_id: 'sess-123', total_cost_usd: 0.0123 });
   process.exit(0);

@@ -11,6 +11,8 @@ const SAID: Record<string, (a: Args) => string> = {
   'by-none': a => t('Changed while runs {runs} worked, by none of them.', a),
   unseen: a => t("Changed files the map doesn't show: {files}", a),
   'outside-scope': a => t('Changed outside scope: {files}', a),
+  'in-section-of': a => t("Changed in run {id}'s section: {files}", a),
+  'by-session': a => t("Run {id} changed {files} in this section. Those changes are run {id}'s.", a),
   'put-back': a => t('Put back what a shell command changed outside the section: {files}', a),
   'not-started': a => t("Couldn't start: {why}", a),
   'no-sandbox-setup': a => t("The sandbox couldn't be set up: {why}", a),

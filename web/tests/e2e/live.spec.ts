@@ -20,6 +20,7 @@ import {
   REPO_ROOT,
   SEED,
   SLOW_AGENT,
+  TWO_SECTIONS,
   allowedChecksFile,
   approveChecks,
   call,
@@ -6160,4 +6161,102 @@ test("Cursor's command named `agent` is found, once its help says it is Cursor's
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
+});
+
+// Two agents in one checkout, with no worktrees: Claude Code's stand-in on a/ and Cursor's on b/, in a generated repo
+// where b/ imports a/, a package.json is shared, and a pre-commit hook rewrites what is staged.
+test.describe('two agents, one checkout', () => {
+  async function twoAgents(fn: (b: Bridge, repo: string) => Promise<void>) {
+    const repo = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'loa-e2e-')), 'two-sections');
+    execFileSync(process.execPath, [TWO_SECTIONS, repo]);
+    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_CURSOR_BIN: FAKE_CURSOR });
+    try {
+      await fn(b, repo);
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+    }
+  }
+  const start = async (b: Bridge, agent: string, scope: string[], prompt: string) =>
+    (await call(b, '/api/runs', { agent, prompt, scope, resumeFrom: null })).body as unknown as RunDTO;
+  const state = async (b: Bridge) => (await call(b, '/api/state')).body as unknown as StateResponse;
+  const runOf = async (b: Bridge, id: number) => (await call(b, `/api/runs/${id}`)).body as unknown as RunDTO;
+  const go = (repo: string, name: string) => fs.writeFileSync(path.join(repo, `.loa/go-${name}`), '');
+  const until = (b: Bridge, id: number, status: string) =>
+    expect.poll(async () => (await runOf(b, id)).status, { timeout: 15_000 }).toBe(status);
+  const read = (repo: string, file: string) => fs.readFileSync(path.join(repo, file), 'utf8');
+  /** What a run said with a code, as the values it gave. */
+  const said = (run: RunDTO, code: string) => (run.stream ?? []).filter(e => e.say === code).map(e => e.args);
+  const paths = (run: RunDTO) => run.changes.map(c => c.path);
+  /** Both at work, each on its section, until the test says go: Claude Code on a/, Cursor on b/. */
+  async function both(b: Bridge, repo: string, claude: string, cursor: string) {
+    const seed = read(repo, 'a/tax.mjs');
+    const a = await start(b, 'claude', ['a/'], `${claude} wait:a`);
+    const c = await start(b, 'cursor', ['b/'], `${cursor} wait:c`);
+    expect((await state(b)).working).toEqual([a.id, c.id]);
+    const end = async () => {
+      go(repo, 'a');
+      go(repo, 'c');
+      await until(b, a.id, 'done');
+      await until(b, c.id, 'done');
+      return [await runOf(b, a.id), await runOf(b, c.id)] as const;
+    };
+    return { a, c, end, seed };
+  }
+
+  test("a file one session's edit tool names inside the other's section is that session's change, said on both", () =>
+    twoAgents(async (b, repo) => {
+      const { end, seed } = await both(b, repo, 'want:a/rounding.mjs', 'edit:b/cart.mjs edit:a/tax.mjs');
+      const [a, c] = await end();
+      // Cursor's edit of a/tax.mjs is Cursor's, not Claude Code's for being in its section.
+      expect(paths(a)).toEqual(['a/rounding.mjs']);
+      expect(paths(c)).toEqual(['a/tax.mjs', 'b/cart.mjs']);
+      expect(c.outOfScope).toEqual(['a/tax.mjs']);
+      expect(said(c, 'in-section-of')).toEqual([{ id: a.id, files: 'a/tax.mjs' }]);
+      expect(said(a, 'by-session')).toEqual([{ id: c.id, files: 'a/tax.mjs' }]);
+      // Nothing is left for a run by none of them.
+      expect((await state(b)).runs.map(r => r.agent)).toEqual(['claude', 'cursor']);
+      // Reverting Claude Code's session leaves Cursor's edit; reverting Cursor's puts the file back.
+      expect((await call(b, `/api/runs/${a.id}/revert`, {})).status).toBe(200);
+      expect(fs.existsSync(path.join(repo, 'a/rounding.mjs'))).toBe(false);
+      expect(read(repo, 'a/tax.mjs')).toContain('// edited by cursor');
+      expect((await call(b, `/api/runs/${c.id}/revert`, {})).status).toBe(200);
+      expect(read(repo, 'a/tax.mjs')).toBe(seed);
+    }));
+
+  test("a file Cursor's edit tool names outside every section is Cursor's change, flagged, and its revert undoes it", () =>
+    twoAgents(async (b, repo) => {
+      const pkg = read(repo, 'package.json');
+      const { end } = await both(b, repo, 'want:a/rounding.mjs', 'edit:b/cart.mjs edit:package.json');
+      const [a, c] = await end();
+      expect(paths(a)).toEqual(['a/rounding.mjs']);
+      // Nothing asks first, as it does for an agent the system holds: the edit lands, and is flagged on its run.
+      expect(c.wants ?? []).toEqual([]);
+      expect([...paths(c), ...(c.unseen ?? []).map(u => u.path)].sort()).toEqual(['b/cart.mjs', 'package.json']);
+      expect(c.outOfScope).toEqual(['package.json']);
+      expect((await state(b)).runs.map(r => r.agent)).toEqual(['claude', 'cursor']);
+      expect((await call(b, `/api/runs/${c.id}/revert`, {})).status).toBe(200);
+      expect(read(repo, 'package.json')).toBe(pkg);
+    }));
+
+  test('both sessions committed at once: two commits, one after the other, each with its own files', () =>
+    twoAgents(async (b, repo) => {
+      const { end } = await both(b, repo, 'want:a/price.mjs', 'edit:b/cart.mjs');
+      const [a, c] = await end();
+      const head = git(repo, 'rev-parse', 'HEAD').trim();
+      const [first, second] = await Promise.all([
+        call(b, `/api/runs/${a.id}/commit`, { message: 'Pricing' }),
+        call(b, `/api/runs/${c.id}/commit`, { message: 'Orders' }),
+      ]);
+      expect([first.status, second.status]).toEqual([200, 200]);
+      const log = git(repo, 'log', '--format=%s', `${head}..HEAD`).trim().split('\n');
+      expect(log.sort()).toEqual(['Orders', 'Pricing']);
+      const files = (subject: string) =>
+        git(repo, 'log', '-1', '--name-only', '--format=', `--grep=^${subject}$`).trim().split('\n');
+      expect(files('Pricing')).toEqual(['a/price.mjs']);
+      expect(files('Orders')).toEqual(['b/cart.mjs']);
+      // The second was made on the first: one line of history, nothing left changed or staged.
+      expect(git(repo, 'rev-list', '--count', `${head}..HEAD`).trim()).toBe('2');
+      expect(git(repo, 'status', '--porcelain')).toBe('');
+    }));
 });
