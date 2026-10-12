@@ -48,13 +48,41 @@ What happens next:
 2. In Chrome, Edge, Brave and Arc, it opens on leagueofagents.dev. The browser asks once to let the site reach your computer: choose Allow. In Safari and Firefox, it opens the local app, which needs no permission.
 3. Select a file, describe a change, and press Enter.
 
+<details>
+<summary><b>New to the terminal? Step by step.</b></summary>
+
+1. **Open Terminal.** Press ⌘ Space, type `Terminal`, and press Return.
+2. **Go to your project.** Type `cd ` with a space after it, drag your project's folder from Finder into the window, and press Return.
+3. **Check it's a git repo.** Run `git rev-parse --show-toplevel`. It prints your project's folder. If it says "not a git repository", run `git init`, which makes the folder one. Nothing is uploaded.
+4. **Start it.** Run `npx leagueofagents-cli@latest`. The first time, npm asks "Ok to proceed?": type `y`. It then asks once whether to add hooks: either answer works.
+5. **What you should see.** "League of Agents is running for" your folder, a link, and your browser opening a map of your project.
+6. **Stop it** with `npx leagueofagents-cli@latest stop`, in the same folder. Closing the browser tab doesn't stop it.
+
+</details>
+
 ### Requirements
 
 - macOS. Linux passes the full test suite, but hasn't been tried with a real agent yet. Windows isn't supported yet.
 - git. On a Mac, this comes with Apple's command line developer tools: `xcode-select --install`. On Linux, from your package manager.
 - Node 20 or later
 - A git repository
-- Claude Code installed and logged in, to run agents from the map. Without it, changes from any editor still show up.
+- One agent installed and logged in, to run agents from the map: see [Set up an agent](#set-up-an-agent). Without one, changes from any editor still show up.
+
+### Set up an agent
+
+League of Agents runs the command-line agents on your computer, and lists the ones it finds when it starts. You need only the ones you want to use. Install each from its own guide, then check it:
+
+| Agent | Command it runs | Installed? | Logged in? | To log in | Install guide |
+|---|---|---|---|---|---|
+| Claude Code | `claude` | `claude --version` | `claude auth status` | `claude auth login` | [Claude Code](https://code.claude.com/docs/en/setup) |
+| Codex (beta) | `codex` | `codex --version` | `codex login status` | `codex login` | [Codex CLI](https://learn.chatgpt.com/docs/codex/cli) |
+| Cursor (beta) | `cursor-agent` | `cursor-agent --version` | `cursor-agent status` | `cursor-agent login` | [Cursor CLI](https://cursor.com/docs/cli/installation) |
+| Hermes | `hermes acp` | `hermes acp --check` | `hermes status` | `hermes setup` | [Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation) |
+| DeepSeek Harness | `dsh --profile acp` | `dsh --version` | Its own settings | Its own settings | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) |
+
+- **Cursor and Codex need their command-line agent, which is separate from the app.** Having the Cursor app or the ChatGPT app isn't enough: install the command-line agent from the guide above.
+- **Cursor's command is `agent` or `cursor-agent`**, depending on the install. League of Agents 0.2.0 looks for `cursor-agent`. If yours is only `agent`, start with `LOA_CURSOR_BIN=agent npx leagueofagents-cli@latest`.
+- **After installing an agent, stop League of Agents and start it again.** It looks for agents when it starts. Claude Code is the exception: it appears on its own once installed and logged in.
 
 ## Works with
 

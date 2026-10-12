@@ -53,13 +53,41 @@ npx leagueofagents-cli@latest
 2. 在 Chrome、Edge、Brave 和 Arc 中，它会在 leagueofagents.dev 上打开。浏览器会询问一次是否允许此网站访问你的电脑：请选择允许。在 Safari 和 Firefox 中，它会打开本地应用，不需要任何权限。
 3. 选择一个文件，描述一个改动，然后按 Enter。
 
+<details>
+<summary><b>第一次用终端？一步一步来。</b></summary>
+
+1. **打开“终端”。** 按 ⌘ 空格，输入 `Terminal`，按回车。
+2. **进入你的项目。** 输入 `cd `（后面带一个空格），把项目文件夹从“访达”拖进窗口，再按回车。
+3. **确认它是 git 仓库。** 运行 `git rev-parse --show-toplevel`，它会显示你的项目文件夹。如果提示“not a git repository”，运行 `git init`，把这个文件夹变成仓库。不会上传任何内容。
+4. **启动。** 运行 `npx leagueofagents-cli@latest`。第一次运行时，npm 会问“Ok to proceed?”：输入 `y`。接着它会问一次是否添加 hooks：两种回答都可以。
+5. **你应该看到：** “League of Agents is running for”加上你的文件夹名、一个链接，以及浏览器打开的项目地图。
+6. **停止：** 在同一个文件夹里运行 `npx leagueofagents-cli@latest stop`。关闭浏览器标签页不会停止它。
+
+</details>
+
 ### 系统要求
 
 - macOS。Linux 能通过完整的测试套件，但还没有用真实的代理试过。暂不支持 Windows。
 - git。在 Mac 上，它随 Apple 的命令行开发者工具一起提供：`xcode-select --install`。在 Linux 上，通过你的包管理器安装。
 - Node 20 或更高版本
 - 一个 git 仓库
-- 已安装并登录的 Claude Code，用于从地图运行代理。没有它，来自任何编辑器的改动仍会显示出来。
+- 一个已安装并登录的代理，用于从地图运行代理：见[设置代理](#设置代理)。没有的话，来自任何编辑器的改动仍会显示出来。
+
+### 设置代理
+
+League of Agents 运行你电脑上的命令行代理，并在启动时列出它找到的那些。你只需要想用的那些。按各自的指南安装，然后检查：
+
+| 代理 | 它运行的命令 | 已安装？ | 已登录？ | 登录 | 安装指南 |
+|---|---|---|---|---|---|
+| Claude Code | `claude` | `claude --version` | `claude auth status` | `claude auth login` | [Claude Code](https://code.claude.com/docs/en/setup) |
+| Codex（测试版） | `codex` | `codex --version` | `codex login status` | `codex login` | [Codex CLI](https://learn.chatgpt.com/docs/codex/cli) |
+| Cursor（测试版） | `cursor-agent` | `cursor-agent --version` | `cursor-agent status` | `cursor-agent login` | [Cursor CLI](https://cursor.com/docs/cli/installation) |
+| Hermes | `hermes acp` | `hermes acp --check` | `hermes status` | `hermes setup` | [Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation) |
+| DeepSeek Harness | `dsh --profile acp` | `dsh --version` | 它自己的设置 | 它自己的设置 | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) |
+
+- **Cursor 和 Codex 需要各自的命令行代理，它与应用是分开的。** 只装了 Cursor 应用或 ChatGPT 应用还不够：请按上面的指南安装命令行代理。
+- **Cursor 的命令是 `agent` 或 `cursor-agent`**，取决于安装方式。League of Agents 0.2.0 查找的是 `cursor-agent`。如果你只有 `agent`，用 `LOA_CURSOR_BIN=agent npx leagueofagents-cli@latest` 启动。
+- **安装代理之后，先停止 League of Agents 再重新启动。** 它在启动时查找代理。Claude Code 是例外：安装并登录后会自动出现。
 
 ## 适用于
 

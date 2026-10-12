@@ -19,7 +19,19 @@ The person may not be a developer. Explain each step in plain words, and never e
 
    c. **A git repository.** In the folder they want to map, run `git rev-parse --show-toplevel`. It must print a folder. If it doesn't, ask whether to run `git init` there, or which folder they meant.
 
-2. **Claude Code, if they want to run it from the map.** If you are Claude Code, it is ready. Otherwise, step 4 says if it is missing or not logged in.
+2. **An agent to run from the map.** League of Agents runs the command-line agents it finds on their computer. If you are Claude Code, it is ready; otherwise step 4 says if Claude Code is missing or not logged in. For any other agent they want, check it with its own commands, and never read an agent's credential files:
+
+   | Agent | Installed? | Logged in? | They log in with | Install guide |
+   |---|---|---|---|---|
+   | Claude Code | `claude --version` | `claude auth status` | `claude auth login` | https://code.claude.com/docs/en/setup |
+   | Codex | `codex --version` | `codex login status` (exit code 0: logged in) | `codex login` | https://learn.chatgpt.com/docs/codex/cli |
+   | Cursor | `cursor-agent --version` | `cursor-agent status` | `cursor-agent login` | https://cursor.com/docs/cli/installation |
+   | Hermes | `hermes acp --check` | `hermes status` | `hermes setup` | https://hermes-agent.nousresearch.com/docs/getting-started/installation |
+   | DeepSeek Harness | `dsh --version` | its own settings | its own settings | https://github.com/deepseek-ai/deepseek-harness |
+
+   - Cursor and Codex need their command-line agent, which is separate from the Cursor app and the ChatGPT app. Cursor's may be named `agent`: if `cursor-agent` isn't found and `agent --help` says "Cursor Agent", put `LOA_CURSOR_BIN=agent` before the command in step 4.
+   - If one is missing, give them its install guide and let them decide. They run the login command themselves: it opens their browser, and they type their own password.
+   - An agent installed after League of Agents started is found the next time it starts: `stop`, then step 4 again.
 
 3. **Ask about hooks.** Only if you support hooks (Claude Code, Codex, Cursor), ask:
 
