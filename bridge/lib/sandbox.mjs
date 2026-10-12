@@ -424,9 +424,6 @@ export async function prepareSandbox(run, command) {
     ...(folders.length ? [`(allow file-write-create ${folders.join(' ')})`] : []),
     `(deny file-write* ${deny.join(' ')})`,
     `(deny file-read* ${token})`,
-    // ps, which only reads the list of processes. It is a setuid program, and macOS runs none inside a sandbox: the
-    // one way to let a session see what it started is to run this one program outside it.
-    '(allow process-exec (literal "/bin/ps") (with no-sandbox))',
   ].join('\n');
   const args = [SANDBOX_EXEC, '-p', profile, ...params.flatMap(([k, v]) => ['-D', `${k}=${v}`])];
   // Confirmed before the agent starts inside it: a profile the system won't take starts nothing.

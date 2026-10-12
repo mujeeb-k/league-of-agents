@@ -237,15 +237,14 @@ describe.runIf(process.platform === 'darwin')('a session on a section, in its sa
     ).toEqual({ notes: false, shell: false, otherRepo: false, agent: false, temp: true, nowhere: true });
   });
 
-  it('lists processes with ps, the one setuid program it may run', () => {
+  it('runs no setuid program, ps among them: nothing a session starts runs outside the sandbox', () => {
     expect(
-      attempt({
-        ps: '/bin/ps -o pid= -p $$',
-        piped: 'ps aux | grep -c . >/dev/null',
-        top: '/usr/bin/top -l 1 -n 0',
-        sudo: '/usr/bin/sudo -n true',
-      }),
-    ).toEqual({ ps: true, piped: true, top: false, sudo: false });
+      attempt({ ps: '/bin/ps -o pid= -p $$', top: '/usr/bin/top -l 1 -n 0', sudo: '/usr/bin/sudo -n true' }),
+    ).toEqual({
+      ps: false,
+      top: false,
+      sudo: false,
+    });
   });
 
   it('whatever its quotes, new lines and substitutions, a command runs inside and changes nothing outside', () => {

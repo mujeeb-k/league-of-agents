@@ -46,7 +46,8 @@ function scopePreamble(run) {
 }
 /**
  * What a session the sandbox holds is told first, so it doesn't spend its turn finding out: where it can install,
- * and that commits are made from the map.
+ * that commits are made from the map, that ps is refused (a setuid program, and macOS runs none inside a sandbox),
+ * and that a test which reaches outside the project fails because of the sandbox, not the code.
  */
 const rules = run =>
   lockOfRun(run) === 'sandbox'
@@ -54,7 +55,10 @@ const rules = run =>
       '- Install dependencies, tools and language runtimes only into the ignored folders at the top of this project (such as ' +
       '.venv or node_modules). Never into the home folder or a temp folder: writes to the home folder are refused, ' +
       'and a temp folder is cleared.\n' +
-      "- Don't commit. League of Agents handles commits: the user commits this session's files from the map.\n\n"
+      "- Don't commit. League of Agents handles commits: the user commits this session's files from the map.\n" +
+      "- ps isn't available here: it is refused.\n" +
+      "- If a test fails because it reads or writes outside this project, the sandbox caused it. Don't change code " +
+      'to fix it. Say so in your reply.\n\n'
     : '';
 const scopeFileOf = run => path.join(LOA, `scope-${run.id}.json`);
 /**

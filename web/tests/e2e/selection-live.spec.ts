@@ -339,7 +339,7 @@ test('each agent is told to edit only inside the scope; one whose writes outside
       // Claude Code's edit tools are refused outside on every system, by the hook its run is started with.
       const [claude, ...others] = lines;
       expect(told(claude!)).toBe(common + asked + '\n\nProbe');
-      // Held by the sandbox (on a Mac), it is told the rules first: where to install, and not to commit.
+      // Held by the sandbox (on a Mac), it is told the rules first.
       const rules = claude!.find(a => a.includes('Scope for this task'))!.split('Scope for this task')[0];
       expect(rules).toBe(
         process.platform === 'darwin'
@@ -347,7 +347,10 @@ test('each agent is told to edit only inside the scope; one whose writes outside
               '- Install dependencies, tools and language runtimes only into the ignored folders at the top of this project (such as ' +
               '.venv or node_modules). Never into the home folder or a temp folder: writes to the home folder are refused, ' +
               'and a temp folder is cleared.\n' +
-              "- Don't commit. League of Agents handles commits: the user commits this session's files from the map.\n\n"
+              "- Don't commit. League of Agents handles commits: the user commits this session's files from the map.\n" +
+              "- ps isn't available here: it is refused.\n" +
+              "- If a test fails because it reads or writes outside this project, the sandbox caused it. Don't change code " +
+              'to fix it. Say so in your reply.\n\n'
           : '',
       );
       for (const args of others) expect(args.some(a => a.includes('Rules for this session'))).toBe(false);
