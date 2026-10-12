@@ -123,7 +123,7 @@ export interface RunDTO {
   putBack?: { path: string; ref: string; put: string | null; restored: boolean }[];
   /** Files it changed that the map doesn't show (binary files, the skip list's): reverted and committed with it. */
   unseen?: { path: string; created: boolean; deleted: boolean }[];
-  committed?: { sha: string; at: number; files: string[] };
+  committed?: { sha: string; at: number; files: string[]; hook?: string[] };
   limited?: boolean;
   slot?: number;
   checksRunning?: boolean;

@@ -2,7 +2,8 @@
 // own. The commit is built in an index of its own from HEAD plus the session's files as the session left them, so
 // nothing else the person has staged or changed goes in, and committed by git itself, so the person's hooks and
 // signing apply. In the person's own index, only the committed files' entries change, to what was committed, so they
-// show clean and everything else staged stays exactly as it was.
+// show clean and everything else staged stays exactly as it was. A hook may commit more than it was handed (a
+// formatter's index file, a generated list): those files are named on the run, and are the commit's, not a session's.
 import fs from 'node:fs';
 import path from 'node:path';
 import { refused, serial } from './util.mjs';
@@ -10,6 +11,8 @@ import { LOA, gitAsync } from './repo.mjs';
 import { blobAt, blobNow, headNow } from './snapshots.mjs';
 import { emitRun } from './events.mjs';
 import { saveRun } from './runs.mjs';
+import { line } from './util.mjs';
+import { noteCommit } from './parallel.mjs';
 
 /**
  * What committing the run would hold. `files`: its own. `yours`: files it changed that the person had changed too
@@ -48,8 +51,8 @@ export function commitRun(run, { message = '', include = [] } = {}) {
     /** @type {[string, string[] | null][]} */
     const entries = [];
     for (const p of chosen) {
-      const line = (await gitAsync(['ls-tree', run.after, '--', p])).trim();
-      entries.push([p, line ? line.split(/\s+/).slice(0, 3) : null]);
+      const entry = (await gitAsync(['ls-tree', run.after, '--', p])).trim();
+      entries.push([p, entry ? entry.split(/\s+/).slice(0, 3) : null]);
     }
     /** Sets each file's entry in an index: the commit's own, or the person's. */
     const setEntries = async env => {
@@ -75,15 +78,27 @@ export function commitRun(run, { message = '', include = [] } = {}) {
       fs.rmSync(index, { force: true });
     }
     const sha = (await gitAsync(['rev-parse', 'HEAD'])).trim();
+    // What git committed: the chosen files, and any file a hook staged besides them.
+    const committed = (await gitAsync(['diff-tree', '--root', '--no-commit-id', '--name-only', '-r', '-z', sha]))
+      .split('\0')
+      .filter(Boolean);
+    const hook = committed.filter(p => !chosen.includes(p));
     // In the person's index, only the committed files change, to what was committed (a hook may have reformatted
     // one): they show clean, and everything else staged stays as it was.
     entries.length = 0;
-    for (const p of chosen) {
-      const line = (await gitAsync(['ls-tree', sha, '--', p])).trim();
-      entries.push([p, line ? line.split(/\s+/).slice(0, 3) : null]);
+    for (const p of [...chosen, ...hook]) {
+      const entry = (await gitAsync(['ls-tree', sha, '--', p])).trim();
+      entries.push([p, entry ? entry.split(/\s+/).slice(0, 3) : null]);
     }
     await setEntries(process.env);
-    run.committed = { sha, at: Date.now(), files: chosen };
+    noteCommit(sha, committed);
+    run.committed = { sha, at: Date.now(), files: chosen, ...(hook.length ? { hook } : {}) };
+    if (hook.length)
+      run.stream.push(
+        line('warn', 'hook-committed', `Your commit hook also committed: ${hook.join(', ')}`, {
+          files: hook.join(', '),
+        }),
+      );
     saveRun(run);
     emitRun(run);
     return run.committed;

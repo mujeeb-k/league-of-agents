@@ -6239,6 +6239,30 @@ test.describe('two agents, one checkout', () => {
       expect(read(repo, 'package.json')).toBe(pkg);
     }));
 
+  test("a commit hook that changes a file in the other session's section: the commit says so, and it is neither session's", () =>
+    twoAgents(async (b, repo) => {
+      // A new module in a/: the repo's pre-commit hook lists every module in b/MODULES.md, and stages it.
+      const { a, c } = await both(b, repo, 'want:a/rounding.mjs', 'edit:b/cart.mjs');
+      go(repo, 'a');
+      await until(b, a.id, 'done');
+      // Committed while the other session still works.
+      const made = await call(b, `/api/runs/${a.id}/commit`, { message: 'Rounding' });
+      expect(made.status).toBe(200);
+      expect(made.body).toMatchObject({ files: ['a/rounding.mjs'], hook: ['b/MODULES.md'] });
+      expect(git(repo, 'show', '--name-only', '--format=', 'HEAD').trim().split('\n')).toEqual([
+        'a/rounding.mjs',
+        'b/MODULES.md',
+      ]);
+      expect(said(await runOf(b, a.id), 'hook-committed')).toEqual([{ files: 'b/MODULES.md' }]);
+      // Nothing of the commit is left looking staged or changed: only the other session's own work.
+      expect(git(repo, 'status', '--porcelain')).toBe(' M b/cart.mjs\n');
+      go(repo, 'c');
+      await until(b, c.id, 'done');
+      // What the hook wrote in b/ is the commit's, not the session's that was working there.
+      expect(paths(await runOf(b, c.id))).toEqual(['b/cart.mjs']);
+      expect((await state(b)).runs.map(r => r.agent)).toEqual(['claude', 'cursor']);
+    }));
+
   test('both sessions committed at once: two commits, one after the other, each with its own files', () =>
     twoAgents(async (b, repo) => {
       const { end } = await both(b, repo, 'want:a/price.mjs', 'edit:b/cart.mjs');

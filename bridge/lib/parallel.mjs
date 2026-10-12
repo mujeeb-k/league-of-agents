@@ -138,6 +138,14 @@ export function noteRevert(run) {
   if (epoch) for (const c of [...run.changes, ...(run.unseen ?? [])]) epoch.expected.set(c.path, run.before);
 }
 
+/**
+ * A commit while runs work: what it changed, a hook's files among them, is the commit's. It isn't the session's in
+ * whose section a hook wrote, and isn't left over at the epoch's end.
+ */
+export function noteCommit(sha, files) {
+  if (epoch) for (const p of files) epoch.expected.set(p, sha);
+}
+
 /** A run's checks: now, or once the epoch ends when it overlapped others still at work. */
 export function checksFor(run) {
   if (!run.changes.length || !CONF.checks?.length) return;

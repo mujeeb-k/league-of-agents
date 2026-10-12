@@ -113,7 +113,7 @@ export interface Run {
   /** Failed because the agent's provider stopped it at its rate or usage limit. */
   limited?: boolean;
   /** The commit the person made of the run's files, from the app (bridge/lib/commit.mjs). */
-  committed?: { sha: string; at: number; files: string[] };
+  committed?: { sha: string; at: number; files: string[]; hook?: string[] };
   /** Files and folders (ending in /) the run was limited to. Empty means the whole repository. */
   scope?: string[];
   /** Claude Code's verdict on its last turn: blocked, or what it needs from you. */
