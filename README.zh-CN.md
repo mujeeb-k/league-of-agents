@@ -192,7 +192,7 @@ League of Agents 从不读取或写入钥匙串及其他任何凭据存储，也
 League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized.
 League of Agents 从不把你的代码上传到任何地方。你的代码只会交给你授权的代理。它发送什么、发送到哪里，见[上文](#它会发送什么)。谁能访问你电脑上的 League of Agents，以及它如何受到保护，见 [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md)。请按 [SECURITY.md](SECURITY.md) 中的说明私下报告安全问题。
 
-快照不包含 git 忽略的文件，也不包含任何文件夹中尚未提交、且名称为以下之一的文件：`.env`、`.env.*`、`*.pem`、`*.key`、`*.p12`、`*.pfx`、`*.jks`、`*.keystore`、`*.kdbx`、`id_rsa`、`id_dsa`、`id_ecdsa`、`id_ed25519`、`.npmrc`、`.pypirc`、`.netrc`、`.git-credentials`、`.htpasswd`、`credentials.json`、`secrets.json`、`secrets.yaml`、`secrets.yml`、`service-account*.json`、`*.tfvars`。这份列表并不完整：任何其他名称的密钥文件都会像普通文件一样被快照，所以请把密钥放在 git 忽略的文件中。已经提交的文件在你仓库的历史中，快照也会包含它。
+**请把密钥放在 git 忽略的文件中**。git 忽略的文件绝不会进入快照：这才是保护所在，所以存放密钥的文件应当列入 `.gitignore`。作为一道安全网而非保证，快照也不包含任何文件夹中尚未提交、且名称为以下之一（不区分字母大小写）的文件：`.env`、`.env.*`、`*.pem`、`*.key`、`*.p12`、`*.pfx`、`*.jks`、`*.keystore`、`*.kdbx`、`id_rsa`、`id_dsa`、`id_ecdsa`、`id_ed25519`、`.npmrc`、`.pypirc`、`.netrc`、`.git-credentials`、`.htpasswd`、`credentials.json`、`secrets.json`、`secrets.yaml`、`secrets.yml`、`service-account*.json`、`*.tfvars`。其他任何名称的密钥，只要所在的文件没有被 git 忽略，就会像普通文件一样被快照。已经提交的文件在你仓库的历史中，快照也会包含它。
 
 除非你主动发送，快照只留在你的电脑上：`git push`、`git push --all` 和 `git push --tags` 从不包含 `refs/loa/`，但 `git push --mirror` 会发送所有引用，包括 `refs/loa/`，复制 `.git` 文件夹也是如此。如果你要镜像一个仓库，请先运行 `uninstall`。
 
