@@ -460,6 +460,9 @@ export function loadDemo() {
   startDemoSessions();
 }
 
+/** Whether a run has a before and an after to compare: one at work, whose edits are drawn as they land, or one that changed files. */
+export const compares = (r: Run) => r.status === 'running' || r.changes.size > 0;
+
 let switching = 0;
 /** Before, after or diff. Lines that appear because of the switch fade in (Scene.tsx, markFresh). */
 export function setMode(m: Mode) {

@@ -7,7 +7,7 @@ import { cn } from '../lib/utils';
 import { drawMini, readCss } from '../lib/minimap';
 import type { Mode } from '../lib/types';
 import { S, dom, st } from '../state/app';
-import { selectRun, setMode, toggleByAuthor } from '../state/actions';
+import { compares, selectRun, setMode, toggleByAuthor } from '../state/actions';
 import { openMapPicker } from '../api/live';
 import { renderSide, useRegion } from '../state/render';
 import { panels, sideVisibleAt, toggleInsp, toggleSide } from '../state/panels';
@@ -78,31 +78,34 @@ function RunBar() {
         <b className="font-semibold whitespace-nowrap">{t('Run {id}', { id: r.id })}</b>
         <span className="truncate text-ink2 max-[860px]:hidden">{r.title}</span>
       </div>
-      <ToggleGroup
-        type="single"
-        value={st.mode}
-        onValueChange={onMode}
-        aria-label={t('Compare')}
-        spacing={2}
-        className="shrink-0 gap-1 rounded-lg bg-muted p-1"
-      >
-        {MODES.map(m => (
-          // The tooltip sits inside the item, so the toggle keeps its own state and arrow-key focus.
-          <ToggleGroupItem
-            key={m.mode}
-            value={m.mode}
-            data-mode={m.mode}
-            className="h-7 rounded-md p-0 text-ink2 hover:bg-transparent hover:text-foreground aria-checked:bg-background aria-checked:text-foreground aria-checked:shadow-xs"
-          >
-            <Tip label={t(m.tip)} keys={m.key}>
-              <span className="flex h-full items-center gap-2 px-3">
-                {t(m.label)}
-                <Kbd className="max-[1100px]:hidden">{m.key}</Kbd>
-              </span>
-            </Tip>
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+      {/* A finished run that changed nothing has no before and after to compare. */}
+      {compares(r) ? (
+        <ToggleGroup
+          type="single"
+          value={st.mode}
+          onValueChange={onMode}
+          aria-label={t('Compare')}
+          spacing={2}
+          className="shrink-0 gap-1 rounded-lg bg-muted p-1"
+        >
+          {MODES.map(m => (
+            // The tooltip sits inside the item, so the toggle keeps its own state and arrow-key focus.
+            <ToggleGroupItem
+              key={m.mode}
+              value={m.mode}
+              data-mode={m.mode}
+              className="h-7 rounded-md p-0 text-ink2 hover:bg-transparent hover:text-foreground aria-checked:bg-background aria-checked:text-foreground aria-checked:shadow-xs"
+            >
+              <Tip label={t(m.tip)} keys={m.key}>
+                <span className="flex h-full items-center gap-2 px-3">
+                  {t(m.label)}
+                  <Kbd className="max-[1100px]:hidden">{m.key}</Kbd>
+                </span>
+              </Tip>
+            </ToggleGroupItem>
+          ))}
+        </ToggleGroup>
+      ) : null}
       <Tip label={t('Close run')} keys="Esc">
         <Button
           variant="ghost"

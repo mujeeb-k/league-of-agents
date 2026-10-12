@@ -6009,3 +6009,30 @@ test("a selection outside the open run's section starts a new session; the menu 
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
 });
+
+test('a run that changed nothing offers no Before, After and Diff', async ({ page }) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo);
+  try {
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.locator('#prompt').fill('ratelimit');
+    await page.locator('#prompt').press('Enter');
+    // It opens as it ends, like any run.
+    await expect(page.locator('#sideList [data-run="1"]')).toContainText('No changes', { timeout: 15_000 });
+    await expect(page.locator('#runbar b')).toHaveText('Run 1');
+    await expect(page.locator('#runbar [data-mode]')).toHaveCount(0);
+    // Their keys do nothing either: nothing on the map switches.
+    await page.locator('#stage').focus();
+    await page.keyboard.press('b');
+    await expect(page.locator('#world')).not.toHaveAttribute('data-switching');
+    // A run that changed files still offers them.
+    await page.locator('#prompt').fill('Name the action and origin in allowlist errors');
+    await page.locator('#prompt').press('Enter');
+    await expect(page.locator('#runbar b')).toHaveText('Run 2', { timeout: 15_000 });
+    await expect(page.locator('#runbar [data-mode]')).toHaveCount(3, { timeout: 15_000 });
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});

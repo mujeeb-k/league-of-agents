@@ -11,7 +11,7 @@ import { readCss } from '../lib/minimap';
 import { openPalette } from '../components/Palette';
 import { retheme } from '../components/TopBar';
 import { S, dom, st } from './app';
-import { loadDemo, selectRun, setMode, stepReview, toggleByAuthor, toggleReviewed } from './actions';
+import { compares, loadDemo, selectRun, setMode, stepReview, toggleByAuthor, toggleReviewed } from './actions';
 import { closeEditor, ed, openEditor } from './editing';
 import { renderAll, renderSel, renderSide, setConnUI } from './render';
 import { applyPanels, toggleInsp, toggleSide } from './panels';
@@ -50,6 +50,7 @@ function onKey(e: KeyboardEvent) {
   const k = e.key.length === 1 && SHORTCUTS.includes(typed) ? typed : (BY_POSITION[e.code] ?? typed);
   const center = (f: number) => zoomAt(...viewCenter(), f);
   if (st.run && 'bad'.includes(k) && k.length === 1) {
+    if (!compares(st.run)) return;
     setMode(({ b: 'before', a: 'after', d: 'diff' } as const)[k as 'b' | 'a' | 'd']);
   } else if (st.run && (k === 'j' || k === 'arrowdown')) {
     e.preventDefault();
