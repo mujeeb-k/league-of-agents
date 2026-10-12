@@ -24,10 +24,13 @@ test.skip(!fs.existsSync(CHROME), 'Google Chrome is not installed');
 
 /** Real Chrome with a fresh profile, the permission set as given, and the site served from web/dist. */
 async function chrome(permission: 'granted' | 'denied' | null): Promise<BrowserContext> {
-  const ctx = await chromium.launchPersistentContext(fs.mkdtempSync(path.join(os.tmpdir(), 'loa-chrome-')), {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'loa-chrome-'));
+  const ctx = await chromium.launchPersistentContext(profile, {
     channel: 'chrome',
     viewport: { width: 1440, height: 900 },
   });
+  // The profile goes with the browser, once Chrome has stopped writing to it.
+  ctx.on('close', () => fs.rmSync(profile, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }));
   await ctx.route(`${SITE}/**`, route => {
     const p = new URL(route.request().url()).pathname;
     if (p.startsWith('/_vercel/')) return route.fulfill({ status: 204 });

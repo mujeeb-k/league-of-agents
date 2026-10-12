@@ -7,13 +7,14 @@
 // only the call; in its full-access mode it writes without asking, and a write the system refuses fails. The prompt steers it: "outside" also asks to edit outside.txt; "command" asks to run one; "slow" waits to be
 // cancelled; "exec: <command>" runs it; "cost" reports a cost. "edit:<path>" asks to edit that file and appends a line to it, instead of the usual edit; "wait:<name>"
 // then holds the turn until the file .loa/go-<name> exists, so a test can keep two sessions at work at once. It logs
-// to a file of the repo's own in /tmp/fake-acp: a session's sandbox lets nothing write in .loa, or in the home folder.
+// to a file beside the repo, in the temp folder its test made for it: a session's sandbox lets nothing write in .loa, or
+// in the home folder, and the test removes that folder when it ends.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import readline from 'node:readline';
 
-const LOG = `/tmp/fake-acp/${process.cwd().replace(/\//g, '_')}.log`;
-fs.mkdirSync('/tmp/fake-acp', { recursive: true });
+const LOG = path.join(path.dirname(process.cwd()), 'fake-acp.log');
 
 // The check takes $FAKE_ACP_CHECK_MS, as a real harness's takes a few seconds.
 if (process.argv.includes('--check')) {

@@ -4,12 +4,17 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 // @ts-expect-error: the bridge is plain JavaScript, type-checked on its own (bridge/jsconfig.json).
 import { ignoredPatterns } from '../../../bridge/lib/sandbox.mjs';
 
+/** The repos and worktrees these tests made, removed when they end. */
+const made: string[] = [];
+afterAll(() => made.forEach(d => fs.rmSync(d, { recursive: true, force: true })));
+
 function repo(files: Record<string, string>) {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'loa-ignore-')));
+  made.push(dir);
   for (const [p, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(dir, p)), { recursive: true });
     fs.writeFileSync(path.join(dir, p), text);
@@ -32,6 +37,7 @@ describe('ignored paths the sandbox allows', () => {
     execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'a'], { cwd: main });
     fs.writeFileSync(path.join(main, '.git/info/exclude'), 'scratch/\n');
     const tree = path.join(path.dirname(main), path.basename(main) + '-tree');
+    made.push(tree);
     execFileSync('git', ['worktree', 'add', '-q', tree], { cwd: main });
     const { paths } = ignoredPatterns(fs.realpathSync(tree)) as { paths: string[] };
     expect(paths.some(r => new RegExp(r).test(path.join(fs.realpathSync(tree), 'scratch/x')))).toBe(true);

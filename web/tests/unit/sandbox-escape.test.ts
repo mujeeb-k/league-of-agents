@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { tagged } from '../support/leftovers';
 
 const LIB = path.join(__dirname, '../../../bridge/lib');
 
@@ -34,6 +35,8 @@ type Opts = {
   after?: (s: Session) => void;
 };
 const BRIDGE = path.join(LIB, '../loa.mjs');
+/** A file in /tmp, which every session may write: named after this run, written and removed by the command itself. */
+const PROBE = tagged('escape-probe');
 
 /** A fresh home folder and repo, with a session on `scope` prepared in it, handed to `use`. */
 function withSession<T>(
@@ -231,7 +234,7 @@ describe.runIf(process.platform === 'darwin')('a session on a section, in its sa
         shell: 'echo x >> "$HOME/.zshrc"',
         otherRepo: 'touch "$HOME/code/other/x"',
         agent: 'mkdir -p "$HOME/.claude/projects/x"',
-        temp: 'touch "${TMPDIR:-/tmp}/loa-escape-probe" /tmp/loa-escape-probe',
+        temp: `touch "$TMPDIR/escape-probe" ${PROBE} && rm "$TMPDIR/escape-probe" ${PROBE}`,
         nowhere: 'echo x > /dev/null',
       }),
     ).toEqual({ notes: false, shell: false, otherRepo: false, agent: false, temp: true, nowhere: true });
@@ -405,7 +408,7 @@ describe.runIf(process.platform === 'darwin')('a Hermes session, whole inside th
         notes: 'touch "$HOME/notes"',
         key: 'cat "$HOME/.ssh/id_ed25519"',
         keychain: 'cat "$HOME/Library/Keychains/login.keychain-db"',
-        temp: 'touch /tmp/loa-escape-probe',
+        temp: `touch ${PROBE} && rm ${PROBE}`,
       }),
     ).toEqual({
       inside: true,

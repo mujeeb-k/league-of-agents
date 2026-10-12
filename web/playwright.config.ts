@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { APP } from './tests/support/targets';
+import { APP, PORT } from './tests/support/targets';
 
 // The built app (web/dist) is served as static files; the dev server is never used.
 const base = {
@@ -17,7 +17,19 @@ export default defineConfig({
   reporter: [['list']],
   timeout: 60_000,
   snapshotPathTemplate: '{testDir}/{testFileDir}/{testFileName}-snapshots/{arg}-{platform}{ext}',
-  webServer: [{ command: 'node tests/support/static-server.mjs 4173 dist', url: APP, reuseExistingServer: true }],
+  // Never a server already on the port: one left by an earlier run, or another checkout's, serves another build, and
+  // the tests would pass or fail on that one. A port in use fails the run, saying so. Against the hosted site
+  // (LOA_APP_URL, npm run smoke:live) nothing is served from here.
+  webServer: process.env.LOA_APP_URL
+    ? []
+    : [
+        {
+          command: `node tests/support/static-server.mjs ${PORT} dist`,
+          url: `http://127.0.0.1:${PORT}`,
+          reuseExistingServer: false,
+        },
+      ],
+  globalSetup: './tests/support/global-setup.ts',
   projects: [
     { name: 'app', testMatch: /interactions\.spec\.ts/, use: { ...base, baseURL: APP } },
     { name: 'live', testMatch: /live\.spec\.ts/, use: base },

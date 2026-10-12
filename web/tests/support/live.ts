@@ -151,7 +151,7 @@ function waitGone(group: number) {
 }
 
 /** Where the stand-in Hermes logs what it was asked, for a repo (tests/fixtures/fake-acp.mjs). */
-export const acpLogOf = (repo: string) => `/tmp/fake-acp/${fs.realpathSync(repo).replace(/\//g, '_')}.log`;
+export const acpLogOf = (repo: string) => path.join(path.dirname(repo), 'fake-acp.log');
 
 /** The bridges a test started, for its failure to show what they printed (startedBridges). */
 const started: Bridge[] = [];

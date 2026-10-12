@@ -17,7 +17,11 @@ The League of Agents web app. Vite, React, strict TypeScript, shadcn/ui and Tail
 | `npm run screens` | Every designed screen state at 1440×900 and 1280×800, in both themes, into `test-results/screens/` |
 | `npm run perf` | Performance proof, not part of `npm test`: pan and zoom frame times on a generated 1,000-file repo, and first paint on leagueofagents.dev. Opens a visible Chrome window, so the GPU rasterizes as it does for users. Results and a Chrome trace go to `test-results/perf/`. |
 
-Playwright uses production builds only, served by `tests/support/static-server.mjs`. Build first.
+Playwright uses production builds only, served by `tests/support/static-server.mjs`. Build first. A server already on the port is never reused: it would serve another build. `LOA_TEST_PORT` sets another port, to test two checkouts at once.
+
+## What the tests leave behind
+
+Nothing. Every run, unit or Playwright, gets one temp folder (`tests/support/leftovers.ts` points `TMPDIR` at it), and every test removes the folders and repos it made and stops the bridges it started. When the run ends, anything still in that folder and any bridge or stand-in agent still running there fails the run by name, and is then removed and stopped.
 
 ## How it is put together
 

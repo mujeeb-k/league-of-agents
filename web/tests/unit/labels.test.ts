@@ -13,20 +13,23 @@ it.runIf(process.platform === 'darwin')('relPaths makes both forms of the repo p
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'loa-labels-'));
   const real = fs.realpathSync(dir);
   expect(dir).not.toBe(real);
-  execFileSync('git', ['init', '-q'], { cwd: dir });
-  const url = (f: string) => JSON.stringify(pathToFileURL(path.join(LIB, f)).href);
-  const text = `${dir}/src/a.ts, ${real}/src/b.ts, cd ${dir}`;
-  const out = execFileSync(
-    process.execPath,
-    [
-      '--input-type=module',
-      '-e',
-      `const r = await import(${url('repo.mjs')}); r.openRepo();
-       const { relPaths } = await import(${url('agents/labels.mjs')});
-       process.stdout.write(relPaths(${JSON.stringify(text)}));`,
-    ],
-    { cwd: dir, encoding: 'utf8' },
-  );
-  expect(out).toBe('src/a.ts, src/b.ts, cd .');
-  fs.rmSync(dir, { recursive: true, force: true });
+  try {
+    execFileSync('git', ['init', '-q'], { cwd: dir });
+    const url = (f: string) => JSON.stringify(pathToFileURL(path.join(LIB, f)).href);
+    const text = `${dir}/src/a.ts, ${real}/src/b.ts, cd ${dir}`;
+    const out = execFileSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        `const r = await import(${url('repo.mjs')}); r.openRepo();
+         const { relPaths } = await import(${url('agents/labels.mjs')});
+         process.stdout.write(relPaths(${JSON.stringify(text)}));`,
+      ],
+      { cwd: dir, encoding: 'utf8' },
+    );
+    expect(out).toBe('src/a.ts, src/b.ts, cd .');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
