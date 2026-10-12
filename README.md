@@ -168,6 +168,7 @@ What a command can do inside the sandbox:
 - **Folders outside your home folder** (other disks, `/opt`, `/usr/local`) can be read as any program of yours can.
 - **What a session starts is held; what already runs is not.** A tmux server, Docker, or a dev server that writes files on request can still write for it.
 - **Claude Code itself is not in the sandbox.** What it does through its tools is held as above. The program is trusted as it is in your terminal, and so are the hooks and MCP servers in your own Claude Code settings, which it starts outside the sandbox. The repo's Claude Code settings and hooks are not read.
+- **`ps` runs outside the sandbox.** macOS runs no setuid program inside one, so a session's `ps` is the one program let out. It only lists processes.
 - **If the sandbox can't start** (the bridge is itself running inside one), a session on a selection is refused rather than run without it. A run on the whole repository then runs without it, with your account's reach, and Claude Code keeps its own permission check.
 
 ### Where there is no sandbox
@@ -197,6 +198,7 @@ Snapshots stay on your computer unless you send them: `git push`, `git push --al
 - Non-code files, such as images, are in snapshots and undo, but not on the map.
 - Files git ignores and new files that usually hold secrets are never in a snapshot and never make a run on their own. An agent's own activity is different: what it reads, prints or edits is kept in `.loa/runs/` on your computer, so if an agent opens a secret file, its content can be there. `uninstall` removes it.
 - Inside a session, agents run commands without asking, network included, and a session can send the repo's contents out over the network. On macOS the sandbox limits which files a session reads and writes ([the list](#the-sandbox-on-macos)); it does not limit the network. Runs on Linux and Windows, Codex and Cursor everywhere, and Claude Code older than 2.1.295 are not sandboxed.
+- In a Claude Code session the sandbox holds (macOS, Claude Code 2.1.295 or later), tools added through MCP are refused.
 - A session on a selection can write files the repo ignores, such as `node_modules` and build output. Your checks, git hooks and dev server may run those files later, outside the sandbox.
 - Runs on sections that don't overlap work at the same time; a run on the whole repository works alone.
 - Shell commands. Hermes runs them without asking, except ones it judges dangerous, which League of Agents refuses. On macOS, on a section, both Hermes and DeepSeek Harness run inside the section's sandbox, so no command can write outside it; DeepSeek Harness then runs in its full-access mode, since its own sandbox can't start inside another. Elsewhere DeepSeek Harness runs them read-only, so a command that writes is refused. What a command changes inside the section is flagged as not made by the agent's edit tools while other sessions work, since only edit tools name the files they change. Revert undoes it.
