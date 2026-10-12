@@ -1,7 +1,7 @@
 // What a session at work has changed so far, drawn as each edit lands (lib/live.ts): the latest edit of a file wins,
 // only while its session works, and not over another run the person opened.
 import { beforeEach, describe, expect, it } from 'vitest';
-import { forgetEnded, liveChange, setLive } from '../../src/lib/live';
+import { forgetEnded, liveChange, setLive, setMoment } from '../../src/lib/live';
 import { S, st } from '../../src/state/app';
 import type { Run } from '../../src/lib/types';
 
@@ -23,6 +23,22 @@ describe('edits drawn as they land', () => {
     // Edited back as it was: nothing to draw.
     setLive(7, 3, 'a.ts', ['x', 'y'], ['x', 'y']);
     expect(liveChange('a.ts')).toBeUndefined();
+  });
+
+  it('draws edits in separate places as separate changes, and a step of the timeline the same', () => {
+    const found = Array.from({ length: 50 }, (_, i) => `line ${i}`);
+    const now = found.slice();
+    now.splice(40, 0, 'second');
+    now.splice(5, 0, 'first');
+    setLive(7, 0, 'a.ts', found, now);
+    expect(liveChange('a.ts')?.hunks).toEqual([
+      { at: 5, del: 0, add: ['first'] },
+      { at: 40, del: 0, add: ['second'] },
+    ]);
+    st.run = { id: 7 } as Run;
+    setMoment(7, 0, 'b.ts', found, now);
+    expect(liveChange('b.ts')?.hunks).toEqual(liveChange('a.ts')?.hunks);
+    setMoment(null);
   });
 
   it('only while the session works, and not over another run the person opened', () => {

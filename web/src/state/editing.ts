@@ -7,7 +7,7 @@ import { explain } from '../api/errors';
 import type { InlineDiff } from '../lib/editor';
 import { applyHunks, diffRows, linesAt } from '../lib/model';
 import { covers } from '../lib/sections';
-import { changedBlock } from '../lib/textdiff';
+import { lineDiff } from '../lib/textdiff';
 import type { Change, Mode, Run } from '../lib/types';
 import { toast } from '../ui/toast';
 import { S, dom, st } from './app';
@@ -282,10 +282,10 @@ export function useDiskVersion() {
 
 /** The demo has no bridge: a save becomes a run by You in the browser. */
 function saveInDemo(path: string, text: string) {
-  const hunk = changedBlock(splitText(ed.saved), splitText(text));
+  const hunks = lineDiff(splitText(ed.saved), splitText(text));
   drafts.delete(path);
   ed.saved = text;
-  if (!hunk) return;
+  if (!hunks.length) return;
   const last = S.RUNS[S.RUNS.length - 1];
   const id = (last ? last.id : 0) + 1;
   S.RUNS.push({
@@ -297,7 +297,7 @@ function saveInDemo(path: string, text: string) {
     when: t('Just now'),
     dur: '',
     status: 'done',
-    changes: new Map([[path, { created: false, deleted: false, pre: null, lines: [], hunks: [hunk] }]]),
+    changes: new Map([[path, { created: false, deleted: false, pre: null, lines: [], hunks }]]),
     reviewed: new Set(),
   });
   toast(t('Saved as run {id}', { id }));

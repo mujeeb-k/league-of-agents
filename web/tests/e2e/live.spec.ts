@@ -988,6 +988,39 @@ test('a renamed file keeps its place, shows as one file renamed, and leaves no g
   }
 });
 
+test('a renamed file edited in two places shows those two changes, not everything between them', async ({ page }) => {
+  const repo = repoWithFolders();
+  const lines = Array.from({ length: 30 }, (_, i) => `export const row${i} = ${i};`);
+  fs.writeFileSync(path.join(repo, 'src/area0/part0/long.ts'), lines.join('\n') + '\n');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-qm', 'a longer file');
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_QUIET_MS: String(QUIET) }, ['--no-hooks']);
+  try {
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    fs.renameSync(path.join(repo, 'src/area0/part0/long.ts'), path.join(repo, 'src/area0/part0/moved.ts'));
+    const now = lines.slice();
+    now[3] = 'export const row3 = -3;';
+    now[9] = 'export const row9 = -9;';
+    fs.writeFileSync(path.join(repo, 'src/area0/part0/moved.ts'), now.join('\n') + '\n');
+    await expect.poll(async () => (await runsOf(b)).length, { timeout: 10_000 }).toBe(1);
+    await page.locator('#sideList .run').click();
+    const card = page.locator('.card[data-path="src/area0/part0/moved.ts"]');
+    await expect(card.locator('header .from')).toHaveText('renamed from long.ts');
+    await expect(card.locator('header .stat')).toHaveText('+2 −2');
+    await page.locator('[data-mode="diff"]').click();
+    expect(await cardRows(page, 'src/area0/part0/moved.ts')).toEqual([
+      '-export const row3 = 3;',
+      '+export const row3 = -3;',
+      '-export const row9 = 9;',
+      '+export const row9 = -9;',
+    ]);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('the layout is kept on a 0.1.2 bridge, in the browser', async ({ page }) => {
   const repo = repoWithFolders(),
     b = await startBridge(repo, FAKE_CLAUDE, {}, [], publishedBridge('0.1.2'));

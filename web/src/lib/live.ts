@@ -3,7 +3,7 @@
 import type { StepDTO } from '../api/types';
 import type { Change } from './types';
 import { S, st } from '../state/app';
-import { changedBlock } from './textdiff';
+import { lineDiff } from './textdiff';
 import { tn } from '../i18n';
 
 const steps = new Map<number, StepDTO[]>();
@@ -57,12 +57,11 @@ export function setMoment(run: number | null, i = 0, path = '', before: string[]
     moment = null;
     return;
   }
-  const hunk = changedBlock(before, now);
   moment = {
     run,
     i,
     path,
-    change: { created: false, deleted: false, pre: before, hunks: hunk ? [hunk] : [], lines: [] },
+    change: { created: false, deleted: false, pre: before, hunks: lineDiff(before, now), lines: [] },
   };
 }
 
@@ -82,9 +81,9 @@ export function liveChange(path: string): Change | undefined {
 export function setLive(run: number, i: number, path: string, before: string[], now: string[]): boolean {
   const was = live.get(path);
   if (was && was.run === run && was.i > i) return false;
-  const hunk = changedBlock(before, now);
-  if (hunk)
-    live.set(path, { run, i, change: { created: false, deleted: false, pre: before, hunks: [hunk], lines: [] } });
+  const hunks = lineDiff(before, now);
+  if (hunks.length)
+    live.set(path, { run, i, change: { created: false, deleted: false, pre: before, hunks, lines: [] } });
   else live.delete(path);
   return true;
 }

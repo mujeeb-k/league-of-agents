@@ -5,7 +5,7 @@ import { authorsOf, rangesOf } from '../lib/attribution';
 import { carryRenames, type SavedLayout } from '../lib/layout';
 import { renamesOf } from '../lib/renames';
 import { bridgeNames } from '../lib/constants';
-import { changedBlock } from '../lib/textdiff';
+import { lineDiff } from '../lib/textdiff';
 import type { Run } from '../lib/types';
 import { t, tn } from '../i18n';
 import { fmtDur, relTime } from '../lib/util';
@@ -67,12 +67,6 @@ function liveRun(r: RunDTO): Run {
     // The file it came from may be one the map doesn't show (the bridge leaves those out of a run's changes).
     const source = from ? r.changes.find(x => x.path === from) : undefined;
     const old = source ? preOf(source) : null;
-    const block =
-      old &&
-      changedBlock(
-        old,
-        c.hunks.flatMap(h => h.add),
-      );
     changes.set(
       c.path,
       from
@@ -80,7 +74,12 @@ function liveRun(r: RunDTO): Run {
             created: false,
             deleted: false,
             pre: old,
-            hunks: block ? [block] : old ? [] : c.hunks,
+            hunks: old
+              ? lineDiff(
+                  old,
+                  c.hunks.flatMap(h => h.add),
+                )
+              : c.hunks,
             lines: [],
             renamedFrom: from,
           }
