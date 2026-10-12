@@ -21,8 +21,6 @@ const catalogue: Catalogue = {
   'Cursor (editor)': 'Cursor (editor)',
   'The bridge rejected that link. Copy the latest one it printed.':
     'El puente rechazó ese enlace. Copia el último que mostró.',
-  'The bridge locked itself after too many wrong links. Restart it with npx leagueofagents-cli@latest start.':
-    'El puente se bloqueó tras demasiados enlaces incorrectos. Reinícialo con npx leagueofagents-cli@latest start.',
   "{agent} isn't installed on this computer.": '{agent} no está instalado en esta computadora.',
   'That run no longer exists on the bridge.': 'Esa ejecución ya no existe en el puente.',
   "The bridge couldn't do that. Try again, or restart the bridge if it keeps happening.":

@@ -54,7 +54,7 @@ All `/api/*` routes need `Authorization: Bearer <token>`; a token in the URL is 
 - an Origin must be the bridge's own, the hosted app's (`--web`, `LOA_WEB_URL`, default `https://leagueofagents.dev`), or the request gets 403 (a preview deployment is trusted by starting the bridge with `--web <its address>`), preflights included;
 - an API request with no Origin that the browser marks `Sec-Fetch-Site: cross-site` or `same-site` gets 403.
 
-CORS echoes only allowed origins and sends `Access-Control-Allow-Private-Network: true`. A wrong token is answered after a delay that doubles each time (100 ms up to 5 s). After 50, every API request gets 423 until the bridge restarts; the log and `status` say so, and `start` replaces a locked bridge.
+CORS echoes only allowed origins and sends `Access-Control-Allow-Private-Network: true`. A wrong token, or an unknown link code, is answered after a delay that doubles each time (100 ms up to 5 s); the right token always works.
 
 | Route | Purpose |
 |---|---|

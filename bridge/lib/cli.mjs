@@ -69,7 +69,7 @@ export async function running() {
       headers: { authorization: 'Bearer ' + b.token },
       signal: AbortSignal.timeout(2000),
     });
-    return r.ok ? b : r.status === 423 ? { ...b, locked: true } : null;
+    return r.ok ? b : null;
   } catch {
     return null;
   }
@@ -107,7 +107,9 @@ export async function startInBackground(hooks) {
   // (`--local`, `--web`). Bridges before 0.2.0 don't record theirs: they let the site in.
   if (already?.locked || (already && (already.web ?? SITE) !== WEB_URL)) await stopBridge(false);
   else if (already) await open(already);
-  const log = fs.openSync(path.join(LOA, 'bridge.log'), 'w');
+  // Its links are in it: for this account alone.
+  const log = fs.openSync(path.join(LOA, 'bridge.log'), 'w', 0o600);
+  fs.chmodSync(path.join(LOA, 'bridge.log'), 0o600);
   const pass = argv.filter(a => !['start', '--hooks', '--no-hooks', '--no-open'].includes(a));
   const child = spawn(process.execPath, [ENTRY, 'serve', ...pass, hooks ? '--hooks' : '--no-hooks'], {
     cwd: ROOT,
@@ -149,11 +151,9 @@ export async function stopBridge(exit = true) {
 export async function bridgeStatus() {
   const b = await running();
   console.log(
-    b?.locked
-      ? `League of Agents is locked for ${path.basename(ROOT)}: too many wrong tokens. Restart it: npx leagueofagents-cli@latest start`
-      : b
-        ? `League of Agents is running for ${path.basename(ROOT)}: ${await freshLink(b)}`
-        : 'League of Agents is not running for this repo.',
+    b
+      ? `League of Agents is running for ${path.basename(ROOT)}: ${await freshLink(b)}`
+      : 'League of Agents is not running for this repo.',
   );
   process.exit(0);
 }

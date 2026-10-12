@@ -22,7 +22,11 @@ export async function serve(hooks) {
   // A port asked for is used as it is (and a busy one says so); otherwise the first free one from 43210, so a
   // second repo's bridge doesn't fail because the first holds the usual port.
   const port = ASKED_PORT ? Number(ASKED_PORT) : await firstFreePort(43210);
-  fs.writeFileSync(bridgeFile, JSON.stringify({ port, token: TOKEN, hooks, pid: process.pid, web: WEB_URL }, null, 2));
+  // The token: for this account alone, whatever a copy or a backup later does with the folder around it.
+  fs.writeFileSync(bridgeFile, JSON.stringify({ port, token: TOKEN, hooks, pid: process.pid, web: WEB_URL }, null, 2), {
+    mode: 0o600,
+  });
+  fs.chmodSync(bridgeFile, 0o600);
   copyForHooks();
   if (hooks) installHooks();
   else removeHooks();

@@ -10,6 +10,7 @@ import type { RunDTO, StateResponse } from '../../src/api/types';
 import {
   AGENT_FIXTURES,
   BRIDGE,
+  acpLogOf,
   FAKE_ACP,
   FAKE_CLAUDE,
   FAKE_CODEX,
@@ -1321,7 +1322,6 @@ const SECRET_NAMES = [
   'config/secrets.yml',
   'service-account-prod.json',
   'infra/prod.tfvars',
-];
   // Whatever the case of the name: file systems on macOS and Windows don't tell them apart.
   'UPPER.PEM',
   'upper/Id_Rsa',
@@ -1331,6 +1331,7 @@ const SECRET_NAMES = [
   'upper/Server.Key',
   'upper/Prod.TFVARS',
   'upper/Service-Account-Prod.Json',
+];
 function plantSecrets(repo: string) {
   for (const f of SECRET_NAMES) {
     fs.mkdirSync(path.dirname(path.join(repo, f)), { recursive: true });
@@ -1783,7 +1784,7 @@ test('an ACP harness (Hermes): asks before editing, reports its model, is refuse
     // The line it showed as a diff before writing it counts as the agent's (attribution).
     const at = SEED[FILE]!.split('\n').length - 1;
     expect(first.agentLines).toEqual({ [FILE]: [[at, at]] });
-    const log = () => fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8');
+    const log = () => fs.readFileSync(acpLogOf(repo), 'utf8');
     expect(log()).toContain('Scope for this task:\\n- shared/');
     // A follow-up resumes the same session. Asked to edit outside the scope, it is refused, and the person asked.
     const asked = (
@@ -1835,7 +1836,7 @@ test("without a sandbox, DeepSeek Harness runs in its read-only mode, so each ed
       })
     ).body as unknown as RunDTO;
     const run = await answered(b, started.id, false);
-    expect(fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8')).toMatch(/^new \S+ mode=read-only$/m);
+    expect(fs.readFileSync(acpLogOf(repo), 'utf8')).toMatch(/^new \S+ mode=read-only$/m);
     expect(run.changes.map(c => c.path)).toEqual([FILE]);
     const at = SEED[FILE]!.split('\n').length - 1;
     expect(run.agentLines).toEqual({ [FILE]: [[at, at]] });
@@ -1869,7 +1870,7 @@ onMac(
         })
       ).body as unknown as RunDTO;
       const run = await answered(b, started.id, false);
-      expect(fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8')).toMatch(/^new \S+ mode=danger-full-access$/m);
+      expect(fs.readFileSync(acpLogOf(repo), 'utf8')).toMatch(/^new \S+ mode=danger-full-access$/m);
       expect(run.changes.map(c => c.path)).toEqual([FILE]);
       const at = SEED[FILE]!.split('\n').length - 1;
       expect(run.agentLines).toEqual({ [FILE]: [[at, at]] });
@@ -2148,7 +2149,7 @@ test.describe('sessions at once', () => {
       expect(c.status).toBe('running');
       expect((await state(b)).working).toEqual([a.id, c.id]);
       // Each prompt names the sections other sessions hold.
-      const log = path.join(repo, '../fake-acp.log');
+      const log = acpLogOf(repo);
       await expect
         .poll(() => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : ''))
         .toContain('Other sessions are working at the same time on: shared/.');
@@ -2458,7 +2459,7 @@ test.describe('sessions at once', () => {
     expect.poll(async () => (await runOf(b, id)).waiting, { timeout: 15_000 }).toBe('done');
   const answer = (b: Bridge, id: number, file: string, allow: boolean) =>
     call(b, `/api/runs/${id}/wants`, { path: file, allow });
-  const acpLog = (repo: string) => fs.readFileSync(path.join(repo, '../fake-acp.log'), 'utf8');
+  const acpLog = (repo: string) => fs.readFileSync(acpLogOf(repo), 'utf8');
 
   test('a write refused outside the section is asked; allowed, the file joins the section and the same session carries on', () =>
     twoSessions(async (b, repo) => {
@@ -4853,7 +4854,61 @@ test('bridge security: foreign origins and rebinding hosts get 403 and change no
   }
 });
 
-test('bridge security: wrong tokens slow down, then lock it until a restart', async ({ page }) => {
+// On Linux the whole suite runs with the network cut off (.github/workflows/linux.yml). On a Mac, this.
+const offline = process.platform === 'darwin' ? test : test.skip;
+offline(
+  'the bridge makes no connection off this computer: under a rule that kills whatever makes one, it works as usual',
+  async ({ page }) => {
+    // Anything in the bridge's process tree that connects anywhere but this computer is killed at once.
+    const rule = [
+      '/usr/bin/sandbox-exec',
+      '-p',
+      '(version 1)(allow default)(deny network-outbound (with send-signal SIGKILL))' +
+        '(allow network-outbound (remote ip "localhost:*") (remote unix-socket))',
+    ];
+    // The rule bites: a program that does connect outside dies of it.
+    const outside = spawnSync(rule[0]!, [
+      ...rule.slice(1),
+      process.execPath,
+      '-e',
+      "require('node:net').connect(443, '192.0.2.1').on('error', () => {}); setTimeout(() => {}, 2000)",
+    ]);
+    expect(outside.signal).toBe('SIGKILL');
+    const repo = makeRepo();
+    // The bridge's own sandbox can't start inside another, so its sessions run without one here.
+    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP, LOA_SANDBOX: 'off' }, [], BRIDGE, rule);
+    try {
+      // The app it serves, a session, its checks, a harness's session, a save, a commit and a revert.
+      await page.goto(linkFor(b));
+      await expect(page.locator('#conn')).toHaveText('Live');
+      await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+      await page.locator('#prompt').fill('Name the action and origin in allowlist errors');
+      await page.locator('#prompt').press('Enter');
+      await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
+      await expect(page.locator('.check .sm')).toHaveText('3 passed', { timeout: 15_000 });
+      await expect
+        .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).agents.hermes?.available)
+        .toBe(true);
+      const harness = await runToEnd(b, {
+        agent: 'hermes',
+        prompt: 'edit:apps/console/main.ts',
+        scope: ['apps/'],
+        resumeFrom: null,
+      });
+      expect((await call(b, `/api/runs/${harness.id}/revert`, {})).status).toBe(200);
+      expect((await call(b, '/api/runs/1/commit', { message: 'Keep it' })).status).toBe(200);
+      expect(git(repo, 'log', '--oneline').trim().split('\n')).toHaveLength(2);
+      // Still there: nothing in it was killed.
+      expect(b.proc.exitCode).toBeNull();
+      expect((await call(b, '/api/state')).status).toBe(200);
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+    }
+  },
+);
+
+test('bridge security: wrong tokens and unknown link codes slow down; the right token always works', async () => {
   const repo = makeRepo();
   const port = String(43000 + Math.floor(Math.random() * 900));
   const loa = (...args: string[]) =>
@@ -4871,7 +4926,13 @@ test('bridge security: wrong tokens slow down, then lock it until a restart', as
     const first = token();
     // The token's folder is closed to other accounts on this machine.
     expect(fs.statSync(path.join(repo, '.loa')).mode & 0o077).toBe(0);
+    // So are the files that hold it, on their own: its settings, and the log its links are printed to.
+    for (const f of ['bridge.json', 'bridge.log'])
+      expect(fs.statSync(path.join(repo, '.loa', f)).mode & 0o077, f).toBe(0);
     // A missing token is turned away at once and counts for nothing.
+    // So are the files that hold it, on their own: its settings, and the log its links are printed to.
+    for (const f of ['bridge.json', 'bridge.log'])
+      expect(fs.statSync(path.join(repo, '.loa', f)).mode & 0o077, f).toBe(0);
     for (let i = 0; i < 20; i++) expect((await state(null)).status).toBe(401);
     // Each wrong token waits longer than the last.
     const t0 = Date.now();
@@ -4883,29 +4944,23 @@ test('bridge security: wrong tokens slow down, then lock it until a restart', as
     expect((await state('\u00e9'.repeat(first.length))).status).toBe(401);
     // The right token still works between wrong ones.
     expect((await state(first)).status).toBe(200);
-    const rest = await Promise.all(Array.from({ length: 47 }, (_, i) => state(`wrong-${i + 3}`)));
-    expect(rest.map(r => r.status)).toEqual(Array(47).fill(401));
-    // Locked: even the right token is refused, and the bridge says so in its log, in status and in the app.
-    expect((await state(first)).status).toBe(423);
-    expect(fs.readFileSync(path.join(repo, '.loa/bridge.log'), 'utf8')).toContain(
-      'Locked after too many wrong tokens. Restart it: npx leagueofagents-cli@latest start',
-    );
-    expect(loa('status')).toContain('League of Agents is locked for sample-repo: too many wrong tokens.');
-    await page.goto(`http://127.0.0.1:${port}/#t=${first}`);
-    await expect(page.locator('#stageState')).toContainText('The bridge locked itself after too many wrong links.');
-    // start replaces it with a fresh bridge and a new token.
-    loa('start', '--port', port, '--no-open', '--no-hooks');
-    const second = token();
-    expect(second).not.toBe(first);
-    // (A pooled connection to the old process may be reset once.)
-    await expect
-      .poll(() =>
-        state(second).then(
-          r => r.status,
-          () => 0,
-        ),
-      )
-      .toBe(200);
+    // However many wrong ones come, from anything on this machine: never locked, and the right token never waits.
+    const rest = Promise.all(Array.from({ length: 80 }, (_, i) => state(`wrong-${i + 3}`)));
+    const t1 = Date.now();
+    expect((await state(first)).status).toBe(200);
+    expect(Date.now() - t1).toBeLessThan(1000);
+    expect((await rest).map(r => r.status)).toEqual(Array(80).fill(401));
+    expect((await state(first)).status).toBe(200);
+    expect(loa('status')).toContain('League of Agents is running for sample-repo');
+    // A link code that isn't one waits as a wrong token does, by now the longest wait.
+    const t2 = Date.now();
+    const code = await fetch(`http://127.0.0.1:${port}/api/session`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code: 'not-a-code' }),
+    });
+    expect(code.status).toBe(401);
+    expect(Date.now() - t2).toBeGreaterThan(4000);
   } finally {
     try {
       loa('stop');

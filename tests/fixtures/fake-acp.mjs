@@ -7,10 +7,13 @@
 // only the call; in its full-access mode it writes without asking, and a write the system refuses fails. The prompt steers it: "outside" also asks to edit outside.txt; "command" asks to run one; "slow" waits to be
 // cancelled; "exec: <command>" runs it; "cost" reports a cost. "edit:<path>" asks to edit that file and appends a line to it, instead of the usual edit; "wait:<name>"
 // then holds the turn until the file .loa/go-<name> exists, so a test can keep two sessions at work at once. It logs
-// to fake-acp.log beside the repo: a session's sandbox lets nothing write in .loa.
+// to a file of the repo's own in /tmp/fake-acp: a session's sandbox lets nothing write in .loa, or in the home folder.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import readline from 'node:readline';
+
+const LOG = `/tmp/fake-acp/${process.cwd().replace(/\//g, '_')}.log`;
+fs.mkdirSync('/tmp/fake-acp', { recursive: true });
 
 // The check takes $FAKE_ACP_CHECK_MS, as a real harness's takes a few seconds.
 if (process.argv.includes('--check')) {
@@ -240,10 +243,10 @@ readline.createInterface({ input: process.stdin }).on('line', async l => {
   else if (m.method === 'session/new') {
     const sessionId = `fake-session-${process.pid}`;
     sessions.add(sessionId);
-    fs.appendFileSync('../fake-acp.log', `new ${sessionId} mode=${process.env.DSH_PERMISSION_MODE}\n`);
+    fs.appendFileSync(LOG, `new ${sessionId} mode=${process.env.DSH_PERMISSION_MODE}\n`);
     reply({ sessionId, configOptions: [model] });
   } else if (m.method === 'session/resume') {
-    fs.appendFileSync('../fake-acp.log', `resume ${m.params.sessionId}\n`);
+    fs.appendFileSync(LOG, `resume ${m.params.sessionId}\n`);
     // Hermes replays the session so far before it answers a resume.
     say(m.params.sessionId, 'Replayed from before.');
     update(m.params.sessionId, {
@@ -255,7 +258,7 @@ readline.createInterface({ input: process.stdin }).on('line', async l => {
     reply({ configOptions: [model] });
   } else if (m.method === 'session/prompt') {
     const text = m.params.prompt.map(p => p.text).join('\n');
-    fs.appendFileSync('../fake-acp.log', `prompt ${JSON.stringify(text)}\n`);
+    fs.appendFileSync(LOG, `prompt ${JSON.stringify(text)}\n`);
     // Steered by the prompt itself, below the scope the bridge writes above it.
     reply({ stopReason: await turn(m.params.sessionId, text.split('\n\n').at(-1)) });
   } else if (m.method === 'session/cancel') cancelled?.();

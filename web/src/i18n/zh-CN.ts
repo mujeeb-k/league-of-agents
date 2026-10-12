@@ -20,8 +20,6 @@ const catalogue: Catalogue = {
   'Codex (terminal)': 'Codex（终端）',
   'Cursor (editor)': 'Cursor（编辑器）',
   'The bridge rejected that link. Copy the latest one it printed.': '桥接程序拒绝了这个链接。请复制它最近打印的链接。',
-  'The bridge locked itself after too many wrong links. Restart it with npx leagueofagents-cli@latest start.':
-    '错误的链接太多，桥接程序已自行锁定。请用 npx leagueofagents-cli@latest start 重新启动它。',
   "{agent} isn't installed on this computer.": '此电脑上没有安装 {agent}。',
   'That run no longer exists on the bridge.': '桥接程序上已不存在该运行。',
   "The bridge couldn't do that. Try again, or restart the bridge if it keeps happening.":

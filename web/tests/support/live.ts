@@ -142,6 +142,9 @@ function waitGone(group: number) {
   }
 }
 
+/** Where the stand-in Hermes logs what it was asked, for a repo (tests/fixtures/fake-acp.mjs). */
+export const acpLogOf = (repo: string) => `/tmp/fake-acp/${fs.realpathSync(repo).replace(/\//g, '_')}.log`;
+
 /** The bridges a test started, for its failure to show what they printed (startedBridges). */
 const started: Bridge[] = [];
 /** The bridges started since last asked, and forgotten: what a failed test reports. */
@@ -153,6 +156,8 @@ export async function startBridge(
   env: Record<string, string> = {},
   args: string[] = [],
   bridge = BRIDGE,
+  /** A command the bridge is started under, such as a sandbox of the test's own. */
+  under: string[] = [],
 ): Promise<Bridge> {
   // A given --port is kept, to bring a bridge back where it was.
   const given = args.indexOf('--port');
@@ -161,8 +166,16 @@ export async function startBridge(
   const consent = args.includes('--no-hooks') || args.includes('--ask') ? [] : ['--hooks'];
   // In the foreground (serve), so the test owns the process; users run it in the background (start).
   const proc = spawn(
-    process.execPath,
-    [bridge, 'serve', ...(given >= 0 ? [] : ['--port', String(port)]), ...consent, ...args.filter(a => a !== '--ask')],
+    under[0] ?? process.execPath,
+    [
+      ...under.slice(1),
+      ...(under.length ? [process.execPath] : []),
+      bridge,
+      'serve',
+      ...(given >= 0 ? [] : ['--port', String(port)]),
+      ...consent,
+      ...args.filter(a => a !== '--ask'),
+    ],
     {
       cwd: repo,
       // The test app (APP) stands in for the hosted app, the one other origin the bridge accepts.

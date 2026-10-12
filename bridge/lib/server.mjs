@@ -84,13 +84,11 @@ function redeem(code) {
 }
 const sessionFits = auth => [...sessionTokens].some(t => sameSecret(auth, t));
 /**
- * Wrong tokens are answered ever more slowly, then lock the API until the bridge restarts. The token can't be
- * guessed in any number of tries; 50 leaves room for stale tabs after a restart, which send two each.
+ * Wrong tokens, and link codes that aren't one, are answered ever more slowly: 100 ms, doubling up to 5 s. The right
+ * token is never slowed or refused for them: anything on this machine can send wrong ones (a stale tab does), and
+ * none can guess the token in any number of tries.
  */
-const LOCK_AFTER = 50;
 let wrongTokens = 0;
-const locked = () => wrongTokens >= LOCK_AFTER;
-const LOCKED = 'Locked after too many wrong tokens. Restart it: npx leagueofagents-cli@latest start';
 
 /** One request: the app's files, or the API, which only this machine's pages holding the token may call. */
 async function handle(req, res) {
@@ -123,11 +121,9 @@ async function handle(req, res) {
   // Another site's page reaches the API without an Origin only through images, links and forms: never valid.
   if (!origin && /^(cross|same)-site$/.test(req.headers['sec-fetch-site'] || ''))
     return send(res, 403, 'Forbidden origin');
-  if (locked()) return send(res, 423, { error: LOCKED }, cors);
-  /** A wrong token or a spent code: answered ever more slowly, and counted toward the lock. */
+  /** A wrong token, or a code that is spent or unknown: answered ever more slowly. */
   const wrong = body => {
     wrongTokens++;
-    if (locked()) console.error(`\n  ${LOCKED}\n`);
     const wait = Math.min(100 * 2 ** (wrongTokens - 1), 5000);
     return setTimeout(() => send(res, 401, body, cors), wait);
   };

@@ -42,10 +42,6 @@ export const BY_CODE: Record<string, string> = {
 export function explain(e: unknown): string {
   if (!(e instanceof BridgeError)) return t(UNREACHABLE);
   if (e.status === 401) return t('The bridge rejected that link. Copy the latest one it printed.');
-  if (e.status === 423)
-    return t(
-      'The bridge locked itself after too many wrong links. Restart it with npx leagueofagents-cli@latest start.',
-    );
   const { code, args = {} } = e.data;
   const said = code ? BY_CODE[code] : undefined;
   if (said) return t(said, typeof args.agent === 'string' ? { ...args, agent: agentOf(args.agent).name } : args);
