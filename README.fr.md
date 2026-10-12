@@ -232,8 +232,8 @@ Les instantanés restent sur votre ordinateur sauf si vous les envoyez : `git pu
 
 ## Pour les équipes
 
-- **Fixez une version.** `@latest` récupère la dernière version à chaque fois. Pour lancer la même version partout, nommez-la : `npx leagueofagents-cli@0.1.3`. Les versions sont listées sur [npm](https://www.npmjs.com/package/leagueofagents-cli?activeTab=versions) et dans les tags de ce dépôt.
-- **Un registre interne.** Le paquet n’a aucune dépendance, donc un miroir n’a besoin que de `leagueofagents-cli` lui-même : `npx --registry https://npm.example.internal leagueofagents-cli@0.1.3`, ou définissez `registry` dans votre `.npmrc`.
+- **Fixez une version.** `@latest` récupère la dernière version à chaque fois. Pour lancer la même version partout, nommez-la : `npx leagueofagents-cli@0.2.0`. Les versions sont listées sur [npm](https://www.npmjs.com/package/leagueofagents-cli?activeTab=versions) et dans les tags de ce dépôt.
+- **Un registre interne.** Le paquet n’a aucune dépendance, donc un miroir n’a besoin que de `leagueofagents-cli` lui-même : `npx --registry https://npm.example.internal leagueofagents-cli@0.2.0`, ou définissez `registry` dans votre `.npmrc`.
 - **Sans site web.** `--local` n’utilise que l’application que League of Agents sert sur 127.0.0.1, dans tous les navigateurs, et ne laisse aucun site web se connecter. Rien n’est récupéré depuis leagueofagents.dev.
 - **Vérifications dans un dépôt partagé.** Les vérifications committées dans `loa.config.json` ne se lancent sur un ordinateur qu’une fois que la personne qui l’utilise a approuvé cette liste exacte, et de nouveau après toute modification de celle-ci. Les approbations sont conservées dans le dossier personnel de chacun, jamais dans le dépôt.
 - **Fichiers de hooks dans git.** Un fichier de hooks suivi par git n’est jamais modifié, donc les sessions de terminal de cet agent ne sont pas enregistrées.

@@ -232,8 +232,8 @@ League of Agents 从不把你的代码上传到任何地方。你的代码只会
 
 ## 团队使用
 
-- **固定版本。** `@latest` 每次都会获取最新版本。要在所有地方运行同一个版本，请指明版本号：`npx leagueofagents-cli@0.1.3`。版本列在 [npm](https://www.npmjs.com/package/leagueofagents-cli?activeTab=versions) 上和这个仓库的标签中。
-- **内部 registry。** 这个软件包没有依赖，所以镜像只需要 `leagueofagents-cli` 本身：`npx --registry https://npm.example.internal leagueofagents-cli@0.1.3`，或者在你的 `.npmrc` 中设置 `registry`。
+- **固定版本。** `@latest` 每次都会获取最新版本。要在所有地方运行同一个版本，请指明版本号：`npx leagueofagents-cli@0.2.0`。版本列在 [npm](https://www.npmjs.com/package/leagueofagents-cli?activeTab=versions) 上和这个仓库的标签中。
+- **内部 registry。** 这个软件包没有依赖，所以镜像只需要 `leagueofagents-cli` 本身：`npx --registry https://npm.example.internal leagueofagents-cli@0.2.0`，或者在你的 `.npmrc` 中设置 `registry`。
 - **不使用网站。** `--local` 在所有浏览器中只使用 League of Agents 在 127.0.0.1 上提供的应用，并且不允许任何网站连接。不会从 leagueofagents.dev 获取任何内容。
 - **共享仓库中的检查。** 提交在 `loa.config.json` 中的检查，只有在某台电脑的使用者批准了这份确切的列表后才会在那台电脑上运行，列表有任何改动后也需要再次批准。批准记录保存在每个人的主目录中，从不放在仓库里。
 - **纳入 git 的 hook 文件。** 已纳入 git 的 hook 文件永远不会被编辑，所以该代理的终端会话不会被记录。

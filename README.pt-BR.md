@@ -232,8 +232,8 @@ Os snapshots ficam no seu computador a menos que você os envie: `git push`, `gi
 
 ## Para equipes
 
-- **Fixe uma versão.** `@latest` busca a versão mais nova a cada vez. Para rodar a mesma versão em todo lugar, informe qual: `npx leagueofagents-cli@0.1.3`. As versões estão listadas no [npm](https://www.npmjs.com/package/leagueofagents-cli?activeTab=versions) e nas tags deste repositório.
-- **Um registro interno.** O pacote não tem dependências, então um espelho precisa só do próprio `leagueofagents-cli`: `npx --registry https://npm.example.internal leagueofagents-cli@0.1.3`, ou defina `registry` no seu `.npmrc`.
+- **Fixe uma versão.** `@latest` busca a versão mais nova a cada vez. Para rodar a mesma versão em todo lugar, informe qual: `npx leagueofagents-cli@0.2.0`. As versões estão listadas no [npm](https://www.npmjs.com/package/leagueofagents-cli?activeTab=versions) e nas tags deste repositório.
+- **Um registro interno.** O pacote não tem dependências, então um espelho precisa só do próprio `leagueofagents-cli`: `npx --registry https://npm.example.internal leagueofagents-cli@0.2.0`, ou defina `registry` no seu `.npmrc`.
 - **Sem site.** `--local` usa só o app que o League of Agents serve em 127.0.0.1, em todos os navegadores, e não deixa nenhum site se conectar. Nada é buscado de leagueofagents.dev.
 - **Verificações em um repositório compartilhado.** Verificações incluídas no commit de `loa.config.json` só rodam em um computador depois que a pessoa nele aprova exatamente aquela lista, e de novo depois de qualquer mudança nela. As aprovações ficam na pasta pessoal de cada pessoa, nunca no repositório.
 - **Arquivos de hooks no git.** Um arquivo de hooks que está no git nunca é editado, então as sessões de terminal desse agente não são registradas.
