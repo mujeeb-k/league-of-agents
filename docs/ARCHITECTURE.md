@@ -1,4 +1,4 @@
-# Architecture (as built, 0.1.2)
+# Architecture (as built, 0.2.0)
 
 ## Pieces
 
@@ -6,8 +6,8 @@
 Browser: web/dist (https://leagueofagents.dev on Vercel, or served by the bridge at 127.0.0.1)
    │  fetch + long polling, Bearer token
    ▼
-Bridge: bridge/loa.mjs (Node 20+, zero deps, runs inside the target repo)
-   │  spawns CLIs, installs hooks, snapshots with git
+Bridge: bridge/loa.mjs and bridge/lib/ (Node 20+, zero deps, runs inside the target repo)
+   │  spawns CLIs, installs hooks, snapshots with git, holds sessions in macOS's sandbox
    ▼
 Agents: Claude Code (claude -p), Cursor (cursor-agent -p), Codex (codex exec), and ACP harnesses (Hermes, DeepSeek Harness, and any the person adds), over the Agent Client Protocol; watch mode records changes made outside a run
 ```
@@ -16,7 +16,7 @@ A hosted https page can reach `http://127.0.0.1` in Chrome, Edge, Brave and Arc 
 
 ## Bridge
 
-Installed for users as the npm package `leagueofagents-cli` (`npx leagueofagents-cli@latest`), which ships `bridge/loa.mjs` and the built `web/dist`.
+Installed for users as the npm package `leagueofagents-cli` (`npx leagueofagents-cli@latest`), which ships `bridge/loa.mjs`, `bridge/lib/` and the built `web/dist`. `loa.mjs` is the entry; the code is in `bridge/lib/`, a module per concern, and the functions named below are there.
 
 Commands, from inside a git repo:
 - `start` (also with no command): runs the bridge in the background, in its own process group, so it outlives the terminal or agent session that started it; waits until it answers, prints the local link and opens it in the default browser (`--no-open` doesn't). If it is already running for the repo, it shows that one.
@@ -49,7 +49,7 @@ On start it:
 
 ### API
 
-All `/api/*` routes need `Authorization: Bearer <token>`; a token in the URL is not accepted. Before the token is read (see `docs/THREAT-MODEL.md`):
+All `/api/*` routes need `Authorization: Bearer <token>`; a token in the URL is not accepted. A link the bridge prints carries a code good for one use, which the page exchanges for a session token of its own (`server.mjs`); the bridge's own token is never in a link. Before the token is read (see `docs/THREAT-MODEL.md`):
 - the Host must be `127.0.0.1:<port>` or `localhost:<port>`, or the request gets 403 (DNS rebinding);
 - an Origin must be the bridge's own, the hosted app's (`--web`, `LOA_WEB_URL`, default `https://leagueofagents.dev`), or the request gets 403 (a preview deployment is trusted by starting the bridge with `--web <its address>`), preflights included;
 - an API request with no Origin that the browser marks `Sec-Fetch-Site: cross-site` or `same-site` gets 403.
@@ -59,7 +59,13 @@ CORS echoes only allowed origins and sends `Access-Control-Allow-Private-Network
 | Route | Purpose |
 |---|---|
 | `GET /` and other non-API paths | Serves the built app from `web/dist` (`LOA_WEB_DIR`), or one file with `LOA_WEB_FILE` |
-| `GET /api/state` | Repo name, branch and absolute root (for opening files in another editor), agents, file tree with first 400 lines per file, all runs, active run id, event seq, the bridge version (`package.json`; the app shows an update banner below `MIN_BRIDGE`) |
+| `GET /api/state` | Repo name, branch and absolute root (for opening files in another editor), agents, file tree with first 400 lines per file, all runs without each file as the run found it or its activity, the runs at work, event seq, the bridge version (`package.json`; the app shows an update banner below `MIN_BRIDGE`). `?root=` maps one folder |
+| `GET /api/runs/:id`, `/before?path=`, `/steps`, `/steps/:n` | A run's details, asked for when it is opened: each file as it found it and its activity; one file whole as it found it; its steps (each tool call, `steps.mjs`); a file as one step left it |
+| `POST /api/runs/:id/wants` | Allow or refuse a file a session asked to change outside its section |
+| `POST /api/runs/:id/put-back` | Restores a file a shell command wrote outside its section, as the command left it, once the person asks |
+| `GET`, `POST /api/runs/:id/commit` | What a commit of the run's files would hold, and the commit itself (`commit.mjs`, below) |
+| `GET /api/folders`, `POST /api/heads` | The repo's folders, for a repo larger than a map; files' lengths and first lines, asked for as a large map shows them |
+| `POST /api/checks`, `/api/checks/off`, `/api/hooks/remove` | Turn found or shared checks on, one off, and take the hooks out |
 | `GET /api/events?since=N[&delta=1]` | Long poll, up to 25s. Events: `state` (refetch), `progress` (run stream, status, checks). With `delta=1`, a `state` event for a finished or checked run carries `delta`: the run and its files as the map shows them (`emitRun()`), and the app applies it without refetching; other apps get the plain event |
 | `POST /api/runs` | `{ agent, prompt, scope[], resumeFrom, lines?, context? }`. Starts an agent run. A scope entry is a folder (`src/`), a file, or lines of a file (`src/main.py:12-18`). For lines, `lines` holds their text and `context` the lines around them; the bridge finds them again (Selections, below) or answers 409 with `{ error, stale }` |
 | `POST /api/attribution/export` | `{ format, files }`: writes who wrote each line, as the app worked it out, to a git note on HEAD, for files whose working copy is HEAD's (`exportAttribution()`): an Agent Trace record (spec 0.1.0) in `refs/notes/agent-trace`, or a Git AI log (agent lines) in `refs/notes/ai`, never over one there. No prompts. Only from the export dialog |
@@ -76,21 +82,28 @@ The file routes serve and write only files the map shows (`listFiles()`: no `.en
 
 ### Runs
 
-Every change becomes a run: an agent's, a save in the map's editor (`you`), or edits from anywhere else (watch mode, `detected`). One run is active at a time.
+Every change becomes a run: an agent's, a save in the map's editor (`you`), or edits from anywhere else (watch mode, `detected`). Runs on sections that don't overlap work at the same time; a run on the whole repository works alone (Sessions at once, below).
 
 **Snapshots** (never your branch, index or working files):
 - `writeTree()` writes the working tree as a git tree through a private index, `GIT_INDEX_FILE=.loa/snapshot.index`. The index starts from `read-tree HEAD` and is kept between snapshots, so git hashes only changed files; it starts again when HEAD moves. It runs `git add -A`, then removes untracked files whose names usually hold secrets, at any depth (`SECRET_FILES`: `.env`, `.env.*`, private keys, keystores, credential and secrets files; `ls-files --others --exclude-standard`), so a new `.env` or `id_rsa` never enters a snapshot. Tracked ones, such as `.env.example`, are in the repo's history already and are snapshotted like any file. Ignored files never enter one.
 - `commitTree(tree, label, head)` makes a commit of that tree whose parent is HEAD, reachable only from the refs it is pinned to.
 - `pin(id, which, commit)` writes `refs/loa/runs/<id>/before` or `/after`.
-- `computeChanges(before, after)` runs `git diff --no-renames -U0` between the two and parses it into `{ path, created, deleted, pre[], hunks[{ at, del, add[] }] }`. `pre` is the file at `before`, up to its first 4,000 lines; `at` is a 0-based index into it. With `--no-renames`, a renamed file is a deleted file and a created one; the app pairs them again (`renamesOf()` in `lib/renames.ts`: at least half their lines shared, one to one) into one change under the new name, from the old text to the new (`liveRun()`), and `carryRenames()` in `lib/layout.ts` gives the new name the old place. The bridge's records, and reverting them, are unchanged.
+- `computeChanges(before, after)` runs `git diff --no-renames -U0` between the two and parses it into `{ path, created, deleted, pre[], hunks[{ at, del, add[] }] }`. `pre` is the file at `before`, up to its first 4,000 lines; `at` is a 0-based index into it. With `--no-renames`, a renamed file is a deleted file and a created one in the bridge's records, and reverting them is unchanged; the bridge names each rename git finds (`git diff -M`, `renamedFrom`), and the app shows one change under the new name, from the old text to the new (`liveRun()`, a line diff from `lib/textdiff.ts`), in the old name's place (`carryRenames()` in `lib/layout.ts`).
 - `saveRun(run)` writes `.loa/runs/<id>.json`: agent, prompt, scope, sessionId, model (as the agent reports it: Claude Code's and Cursor's first `system`/`init` event or Claude Code's replies, read in `onAgentLine()`, or an ACP session's model, `acpModel()`; Codex reports none), status, timestamps, summary, stream (last 400 entries), cost, checks, kept, reverted, outOfScope. Raw agent output is kept as-is in `.loa/runs/<id>.stream.jsonl` and `<id>.stderr.log`. For Claude Code runs and ACP harnesses that show their edits as diffs, `agentLines` holds, per file, the [from, to] ranges of added lines (indexes in the file after the run) whose text the agent put in through its Edit, MultiEdit or Write tools (`noteWrites()` as the stream or the terminal transcript is read, `agentLinesOf()` at `finishRun()`); lines it changed any other way are not in it. `pruneRuns()`, at start and after each run, deletes the runs past both limits, the newest 500 (`KEEP_RUNS`) and the last 30 days (`KEEP_DAYS`): their files and their `refs/loa/runs/<id>/` refs.
 
 **Lifecycle:**
-- `beginRun(opts)` first calls `settle()`, so changes made before the run are recorded as a run of their own and never count as the agent's. The result is the run's `before`, pinned at once. A second run while one is active gets 409.
+- `beginRun(opts)` first calls `settle()`, so changes made before the run are recorded as a run of their own and never count as the agent's. The result is the run's `before`, pinned at once. A run whose section overlaps one at work gets 409 (`clash()`).
 - `startAgent(run, read)` writes `.loa/scope.json` for the scope lock and starts the agent's command (Agents, below).
 - `finishRun(run, status)` takes the `after` snapshot of the whole tree, which becomes the new baseline, pins it, and computes the changes. So **every edit made during the run is counted in it, including your own** in another editor. `scopeViolations(run)` then lists changes outside the scope, for every agent, into `outOfScope`. Checks run in the background if any file changed.
 - `revertRun(run, force)` compares each changed file with the run's `after`. If any changed since, it answers `{ conflict: [...] }` unless forced; otherwise it writes each file back from `before` and deletes the files the run created.
 - A run's title is the first line of its prompt. Runs by watch mode and by `you` are titled by what changed ("Edited main.py", "Edited main.py and 2 more").
+
+**Sessions at once** (`parallel.mjs`):
+- From the first run starting to the last ending, the baseline stays where it was (an epoch). A run that starts beside others begins on a snapshot of that moment (`startingPoint()`).
+- `ownChanges(run, changes)` gives a run that overlapped others whatever changed in its own section while it worked, by its edit tools or its commands. What changed outside every section is said on the run and left for the epoch's end.
+- `closeEpoch()` records whatever no run owns (an edit by hand, an agent outside its section) as a run of its own, by none of them.
+- Checks wait for the last session (`checksFor()`), run once, and every run of the epoch gets the same results.
+- `commitRun()` (`commit.mjs`) commits one run's files with the person's message: built in a private index from HEAD plus those files, by git itself so hooks run, and only if the branch is still where it was. Commits are made one at a time.
 
 **Watch mode:** `watch()` watches the working tree (`fs.watch`, recursive). Once changed files have been quiet for 3 seconds (`LOA_QUIET_MS`), `onQuiet()` calls `settle()`. If HEAD moved (a branch switch, pull, commit or rebase), `rebase(true)` resets the baseline, **no run is recorded**, and a state event lets the map follow the new branch. Otherwise a snapshot that differs from the baseline becomes a `detected` run. Ignored paths never make one (`git check-ignore`); inside `.git` only `HEAD` and branch refs count. During an agent run, watch mode stays quiet: the run's own snapshots cover every change. If watching can't start or fails (on Linux, `ENOSPC` when the limit on watched folders is reached), `watchFailed()` logs it and puts why in the state (`watchOff`), and the app says that edits outside a run aren't recorded.
 
@@ -113,36 +126,37 @@ Lines selected in the editor are held by their text and the lines around them, n
 
 ### The scope lock
 
-- **Claude Code only, and only with the hooks.** The lock is Claude Code's `PreToolUse` hook on `Edit|Write|MultiEdit|NotebookEdit`, running `runHook('pre')`. It exists only when the user said yes to the hooks (or added the plugin, whose hook calls the same code); without them a map run's edits are flagged after the run, not blocked. Claude Code is told its edit tools are blocked only when the hooks are on (`scopePreamble()`).
+- **On macOS, the sandbox** (`sandbox.mjs`): `lockOfRun()` says how a run is held. Hermes and DeepSeek Harness run inside `sandbox-exec` whole. Claude Code (2.1.295 or later) runs outside it, each of its shell commands inside, and a hook passed on its command line (`--settings`, `hook.mjs` hold) holds its file tools. Cursor and Codex are not held: `lockOfRun()` answers `none` for them. The README's "The sandbox on macOS" lists what a held session can read and write.
+- **Elsewhere, Claude Code's hook.** Each run on a selection is started with a `PreToolUse` hook on `Edit|Write|MultiEdit|NotebookEdit`, running `runHook('pre')`, on its command line: nothing is written to the repo for it. With the hooks on, each shell command is bracketed by two snapshots and what it changed outside the scope is put back (`shell.mjs`).
 - **What it checks:** `.loa/scope.json`, written by `startAgent()` as `{ scope, ranges }`. A path outside every scope entry (`inScope()`) is refused with exit 2. For a line range, the hook applies the Edit, MultiEdit or Write to the file and checks `rangeKept()`: every line before and after the range must equal the file as the run found it, so the range may grow or shrink but nothing around it may change.
 - **New files:** allowed only inside a selected folder; a selected file or lines allow none.
-- **What it doesn't see:** under `--permission-mode acceptEdits`, Claude Code runs `mkdir`, `touch`, `rm`, `rmdir`, `mv`, `cp` and `sed` in the repo without asking, and the hook doesn't check those; such a change outside the scope is flagged after the run. Closing this gap is planned.
+- **A write outside the scope asks.** A refused edit becomes a question on the run's card (`blocked()` in `runs.mjs`); Allow adds the file to the scope and the session carries on.
 - **After every run, for every agent,** `scopeViolations()` applies the same rules to the run's changes and lists what fell outside in `outOfScope`.
 
 ### Limits
 
 `readTree()` builds the map's files for `/api/state`:
-- `listFiles()`: tracked and untracked files git doesn't ignore, filtered to code (`CODE_EXT`) and off the skip list (`SKIP`: `node_modules`, `.git`, `.loa`, `dist`, `build`, `coverage`, `.next`, `.turbo`, lockfiles, `.env*`), sorted, **first 1,500** (`MAX_FILES`).
-- Each file's **first 400 lines** (`MAX_LINES`) and its total line count. Files over **400 KB** (400,000 bytes) and binary files are left out.
+- `listFiles()`: tracked and untracked files git doesn't ignore, filtered to code (`CODE_EXT`) and off the skip list (`SKIP`: `node_modules`, `.git`, `.loa`, `dist`, `build`, `coverage`, `.next`, `.turbo`, lockfiles, `.env*`), sorted. The app asks for **5,000** (`MAP_MAX` in `web/src/api/client.ts`; the bridge gives at most 10,000, `MAX_FILES`). A larger repository maps one of its folders (`/api/folders`, `?root=`).
+- Each file's **first 400 lines** (`MAX_LINES`) and its total line count. Files over **16 MB** (`MAX_BYTES`) and binary files are left out.
 - Non-code files are still in snapshots and reverts, just not on the map.
-- One run at a time. macOS is the supported system; Linux passes the test suite in CI (`.github/workflows/linux.yml`) but hasn't been tried with a real agent; Windows isn't supported.
+- Up to five sessions started from one prompt (`MAX_SESSIONS`), on sections that don't overlap. macOS is the supported system; Linux passes the test suite in CI (`.github/workflows/linux.yml`) but hasn't been tried with a real agent; Windows isn't supported.
 
 ### Agents
 
 | Agent | Command | Scope enforcement |
 |---|---|---|
-| Claude Code | `claude -p <prompt> --output-format stream-json --verbose --permission-mode acceptEdits [--resume <session>]` | Preamble in prompt; with the hooks on, the PreToolUse hook blocks out-of-scope edits by its edit tools (exit 2); post-run check |
+| Claude Code | `claude -p <prompt> --output-format stream-json --verbose --setting-sources user --permission-mode acceptEdits --settings <hooks> [--resume <session>]`; `dontAsk` where the sandbox holds it | Preamble in prompt; held by the sandbox and its hook on macOS, by the PreToolUse hook elsewhere (exit 2); post-run check |
 | Cursor | `cursor-agent -p --force --output-format stream-json [--resume] <prompt>` | Preamble, post-run diff check only |
-| Codex (not yet verified with real output) | `codex exec --json --sandbox workspace-write [resume <thread_id>] <prompt>`; the session id is `thread_id` from `thread.started` | Preamble, post-run diff check only |
+| Codex (no real run recorded yet) | `codex exec --json --sandbox workspace-write [resume <thread_id>] <prompt>`; the session id is `thread_id` from `thread.started` | Preamble, post-run diff check only |
 | ACP harnesses | `hermes acp` (found once `hermes acp --check` passes), `dsh --profile acp`, or a command from the person's own `~/.config/league-of-agents/agents.json` (`ACP`); `startAcp()` speaks JSON-RPC 2.0 over stdio: `initialize` (no file system or terminal offered), `session/new` or `session/resume`, `session/prompt`. The model is the session's `model` config option or `models.currentModelId` (`acpModel()`); message chunks are the reply, tool calls the activity, `diff` content, or an edit tool's own arguments (dsh's `edit` and `write`), the agent's lines; updates replayed before the prompt are skipped | Preamble; `permitAcp()` allows an edit only inside the repo and the scope and refuses every other request (commands too), so a harness that asks first is blocked live: Hermes asks before edits, and dsh runs with `DSH_PERMISSION_MODE=read-only`, where its sandbox holds each write until it asks (its request names only the call, so tool calls are kept by id); post-run diff check |
 | Watch mode (`detected`) | Changes made outside a run, by any editor or agent | None: there is no scope |
 | You (`you`) | A save from the editor on the map (`POST /api/save`) | None: the person chose the file |
 
-Product rule: with the hooks on, Claude Code's edit tools are blocked live outside the scope, and so are edits by an ACP harness that asks before editing (Hermes; dsh in its read-only mode). Shell commands Hermes runs without asking aren't blocked. Everything else outside it, by any agent, is flagged after the run. The UI must not imply live blocking beyond that.
+Product rule: a session the sandbox holds can't write outside its section. Without it, Claude Code's edit tools are blocked live outside the scope, and so are edits by an ACP harness that asks before editing (Hermes; dsh in its read-only mode). Everything else outside it, by any agent, is flagged after the run. Cursor and Codex are never held. The UI must not imply live blocking beyond that.
 
 All agent processes get `LOA_MANAGED=1` (terminal hooks ignore them) and `LOA_SCOPE_FILE=.loa/scope.json`.
 
-Note: `acceptEdits` lets Claude Code edit files and run `mkdir`, `touch`, `rm`, `rmdir`, `mv`, `cp` and `sed` in the repo without asking; other shell commands are denied, since `-p` has no one to ask. Checks are run by the bridge instead.
+Note: `acceptEdits` lets Claude Code edit files and run `mkdir`, `touch`, `rm`, `rmdir`, `mv`, `cp` and `sed` in the repo without asking; other shell commands are denied, since `-p` has no one to ask. Checks are run by the bridge instead. Agents are found on PATH when the bridge starts (`loadAgents()`); only Claude Code's login is checked (`claude auth status`, `checkClaude()`).
 
 ## Web app (web/)
 
@@ -151,18 +165,19 @@ Note: `acceptEdits` lets Claude Code edit files and run `mkdir`, `touch`, `rm`, 
 - `src/api` holds typed wire types and a client for every bridge route, plus the long-poll loop.
 - Model: `FILES`, `DIRMAP`, `RUNS`. `layout()` places folders as columns by depth (wider than tall), files as a grid of 420×300 boxes inside each folder frame. The layout in use (`S.LAYOUT`) is kept: known folders and files keep their places, new ones take free space. It is saved per repo (`saveLayoutSoon()` in `api/live.ts`) and loaded on connect, so a reload or another window size opens it as it was; "Tidy layout" lays it out afresh.
 - `viewOf(file)` returns rows for the current mode (before, after, diff) using the run's `pre` and `hunks`.
-- Semantic zoom: below 34% the canvas shows the tree with a tile per file, its name and change ticks, and no line texture: painting a texture per tile made panning drop frames on large repos. Above it, code boxes with import lines.
+- Semantic zoom: below 34% (`NEAR`) the canvas shows the tree with a tile per file, its name and change ticks, and no line texture: painting a texture per tile made panning drop frames on large repos; below 12% (`OVER`), tiles without names. Above 34%, code boxes with import lines.
+- A session's edits are drawn as they land: each edit step's file against the file as the run found it (`lib/live.ts`), as a line diff.
 - Demo mode uses a neutral sample repo (`src/demo`, a fictional webhook service). Live mode loads `/api/state` and polls events.
 
 ## Verified vs not
 
 Verified with real Claude Code runs on scratch repos: selections that follow a rebase and a range that grows, the scope lock blocking an edit outside the selection with the hooks on and not blocking it with them off, and the prompt the agent receives. Every bridge route, watch mode, reverts, the hooks and the scope lock are covered by the end-to-end suites in `web/tests/e2e`, against the real bridge and stand-in agents.
 
-Not yet verified with real runs: Cursor and Codex output (tested against stand-ins that follow their published formats).
+Cursor: one real run recorded (2026-10-12), its reads and edits read as steps. Not yet verified with real runs: Codex output (tested against a stand-in that follows its published format).
 
 ## Known gaps
 
 - A file renamed and moved to another folder that still has files takes a free slot there.
-- File contents (first 400 lines each) are sent in full with `/api/state`. Fine for hundreds of files, not tens of thousands.
-- The scope lock needs the hooks and doesn't see shell commands (above).
+- File contents (first 400 lines each) are sent with `/api/state` for a map under 1,500 files (`LINES_UNDER`). A larger map carries each file's length alone, and the app asks for lines as it shows a file (`/api/heads`).
+- Cursor and Codex are never held to their section.
 - Cursor and Codex stream parsing is approximate.
