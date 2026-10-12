@@ -1,4 +1,5 @@
 // The agents a run can use, which are on this machine, and the connector that starts each.
+import { execFileSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { readJson, onPath } from '../util.mjs';
@@ -46,11 +47,31 @@ export const ACP = {
     env: sandboxed => ({ DSH_PERMISSION_MODE: sandboxed ? 'danger-full-access' : 'read-only' }),
   },
 };
+/**
+ * Cursor's command-line agent: `cursor-agent`, or `agent`, the name its newer installs give it. `agent` is a name
+ * any program could have, so it counts only once its own help says it is Cursor's (its `--version` prints a date and
+ * a build, with no name). LOA_CURSOR_BIN names another.
+ */
+function cursorCommand() {
+  if (process.env.LOA_CURSOR_BIN) return process.env.LOA_CURSOR_BIN;
+  if (onPath('cursor-agent') || !onPath('agent')) return 'cursor-agent';
+  try {
+    const help = execFileSync('agent', ['--help'], {
+      encoding: 'utf8',
+      timeout: 10000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    return /\bCursor\b/.test(help) ? 'agent' : 'cursor-agent';
+  } catch {
+    return 'cursor-agent';
+  }
+}
 /** Which agents are on this machine, and the harnesses the person added. */
 export function loadAgents() {
   const claude = onPath(BIN.claude);
   AGENTS.claude.available = claude;
   AGENTS.claude.problem = claude ? null : 'missing';
+  BIN.cursor = cursorCommand();
   AGENTS.cursor.available = onPath(BIN.cursor);
   AGENTS.codex.available = onPath(BIN.codex);
   for (const a of [readJson(AGENTS_FILE, [])].flat())

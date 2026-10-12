@@ -14,6 +14,7 @@ import {
   FAKE_ACP,
   FAKE_CLAUDE,
   FAKE_CODEX,
+  FAKE_CURSOR,
   PROBE_AGENT,
   REPLAY_AGENT,
   REPO_ROOT,
@@ -6122,6 +6123,39 @@ test('a recorded Cursor run, replayed: its reads and edits are steps, and its ac
       `Edit ${dir}/chat/chat-input.tsx`,
       `${dir}/chat/chat-input.tsx`,
     ]);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test("Cursor's command named `agent` is found, once its help says it is Cursor's; another program named so is not", async () => {
+  const repo = makeRepo();
+  // A PATH with nothing of this machine's own agents on it: the system's folders, Node's, and one of the test's.
+  const bin = path.join(path.dirname(repo), 'bin');
+  fs.mkdirSync(bin);
+  const env = { LOA_CURSOR_BIN: '', PATH: [bin, path.dirname(process.execPath), '/usr/bin', '/bin'].join(':') };
+  const cursorOf = async (b: Bridge) => ((await call(b, '/api/state')).body as unknown as StateResponse).agents.cursor;
+  // Some other program called `agent`.
+  fs.writeFileSync(path.join(bin, 'agent'), '#!/bin/sh\necho "agent: a build agent for something else"\n', {
+    mode: 0o755,
+  });
+  let b = await startBridge(repo, FAKE_CLAUDE, env);
+  try {
+    expect((await cursorOf(b))?.available).toBe(false);
+    b.stop();
+    // Cursor's own, under that name, as its newer installs have it.
+    fs.rmSync(path.join(bin, 'agent'));
+    fs.symlinkSync(FAKE_CURSOR, path.join(bin, 'agent'));
+    b = await startBridge(repo, FAKE_CLAUDE, env);
+    expect((await cursorOf(b))?.available).toBe(true);
+    const run = await runToEnd(b, {
+      agent: 'cursor',
+      prompt: 'edit:shared/log.ts',
+      scope: ['shared/'],
+      resumeFrom: null,
+    });
+    expect(run.changes.map(c => c.path)).toEqual(['shared/log.ts']);
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
