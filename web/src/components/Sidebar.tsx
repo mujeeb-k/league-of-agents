@@ -9,7 +9,7 @@ import { dirStat, existsNow, fileStat, needsYou, runStats } from '../lib/model';
 import type { DirNode, Run, Tab } from '../lib/types';
 import { S, dom, st } from '../state/app';
 import { drafts, openEditor } from '../state/editing';
-import { panels, setPinned, sideVisibleAt } from '../state/panels';
+import { applyPanels, panels, setPinned, sideVisibleAt } from '../state/panels';
 import { isOffline, runAction, selectRun, stopSessions, toggleSel } from '../state/actions';
 import { renderSel, renderSide, useRegion } from '../state/render';
 import { asking, endedAs, holderOf, reachOf, sessionColour, sessionsCost, workingRuns } from '../state/sessions';
@@ -587,6 +587,8 @@ function PinButton() {
 export function Sidebar() {
   useRegion('side');
   const away = !sideVisibleAt(st.v.s);
+  // The tab shown and the sessions at work decide whether it stays when zoomed out: applied as either changes.
+  useEffect(applyPanels);
   // Floats over the canvas, so stepping aside moves only opacity and position (panels.ts keeps this in sync).
   return (
     <aside

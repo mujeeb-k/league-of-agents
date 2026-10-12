@@ -3,8 +3,9 @@
 import { NEAR } from '../lib/constants';
 import { dom, st } from './app';
 import { bump } from './render';
+import { workingRuns } from './sessions';
 
-/** Auto steps aside below code zoom, where the canvas itself shows the tree. */
+/** Auto steps aside below code zoom, where the canvas itself shows the tree, unless it is needed there (wanted). */
 export type SideMode = 'auto' | 'pinned' | 'closed';
 
 const KEY = 'loa.panels';
@@ -42,8 +43,12 @@ export function endFirstLoad() {
   applyPanels();
 }
 
+/** The map shows the tree at every zoom, never the run list: the Runs tab stays, and so does a session at work. */
+const wanted = () => st.tab === 'runs' || workingRuns().length > 0;
+
 export const sideVisibleAt = (s: number) =>
-  !narrow() && (panels.side === 'pinned' || (panels.side === 'auto' && !st.editing && (firstLoad || s >= NEAR)));
+  !narrow() &&
+  (panels.side === 'pinned' || (panels.side === 'auto' && !st.editing && (firstLoad || s >= NEAR || wanted())));
 
 /** Width of the sidebar where it covers the canvas, or 0 when it is out of the way at scale s. */
 export const sideInset = (s: number) => (sideVisibleAt(s) ? dom.side.offsetWidth : 0);

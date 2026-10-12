@@ -20,6 +20,16 @@ async function rested(page: Page) {
     a = b;
   }
 }
+/**
+ * Stops the demo's sessions and goes back to the Files tab. While a session works, or the Runs tab shows, the
+ * sidebar stays at every zoom (panels.ts sideVisibleAt): the tests of how it steps aside start from here.
+ */
+async function stopDemoSessions(page: Page) {
+  await page.locator('[data-tab="runs"]').click();
+  await page.locator('#stopAll').click();
+  await expect(page.locator('#sideList .run.running')).toHaveCount(0);
+  await page.locator('[data-tab="files"]').click();
+}
 const stageBox = async (page: Page) => (await page.locator('#stage').boundingBox())!;
 /** A point on the stage where nothing on the canvas is hit, so clicks land on empty canvas. */
 async function emptyPoint(page: Page) {
@@ -517,6 +527,9 @@ test('[, ] and 0 work by key position on layouts that type something else there'
   const side = page.locator('#side'),
     insp = page.locator('#insp');
   const AWAY = /(^|\s)away(\s|$)/;
+  await stopDemoSessions(page);
+  await page.keyboard.press('0');
+  await expect(side).toHaveClass(AWAY);
   // Stepping into a file zooms in, and the sidebar comes back.
   await page.keyboard.press('j');
   await expect(side).not.toHaveClass(AWAY);
@@ -543,6 +556,7 @@ test('sidebar steps aside below code zoom; pin, [ and ] and the inspector handle
   await page.locator('#insp section').first().waitFor();
   // On first load the sidebar shows, whatever the zoom; the first zoom out fades it.
   await expect(side).not.toHaveClass(AWAY);
+  await stopDemoSessions(page);
   await expect(page.locator('#sideBtn')).toHaveAttribute('aria-pressed', 'true');
   // The demo opens at code zoom (camera.ts openingView); fitting everything zooms out past it.
   await page.keyboard.press('0');
@@ -585,6 +599,17 @@ test('sidebar steps aside below code zoom; pin, [ and ] and the inspector handle
   expect((await insp.boundingBox())!.width).toBe(w0 + 32);
   await page.keyboard.press('j');
   await expect(side).toHaveClass(AWAY);
+});
+
+test('the run list stays through a flight to the whole map', { tag: '@motion' }, async ({ page }) => {
+  await page.reload();
+  await page.locator('#insp section').first().waitFor();
+  await page.locator('[data-tab="runs"]').click();
+  await page.keyboard.press('0');
+  await expect.poll(async () => (await view(page)).s).toBeLessThan(0.34);
+  await expect(page.locator('#world')).not.toHaveClass(/near/);
+  await expect(page.locator('#side')).not.toHaveClass(/(^|\s)away(\s|$)/);
+  await expect(page.locator('#sideList .run').first()).toBeVisible();
 });
 
 test('⌘P quick open finds a file, selects it and flies to it; focus returns', { tag: '@motion' }, async ({ page }) => {

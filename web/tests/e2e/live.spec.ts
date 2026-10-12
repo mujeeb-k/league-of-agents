@@ -5916,3 +5916,48 @@ test(
     }
   },
 );
+
+test('in auto mode the sidebar stays at every zoom while the Runs tab shows or a session works; the Files tab steps aside', async ({
+  page,
+}) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo, SLOW_AGENT);
+  try {
+    // Auto, as a first visit has it: the rest of this suite pins the sidebar.
+    await page.addInitScript(() => localStorage.removeItem('loa.panels'));
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    const side = page.locator('#side'),
+      AWAY = /(^|\s)away(\s|$)/;
+    // A connected repo opens on the Runs tab (api/live.ts connect). The Files tab, as it was: the map shows the
+    // tree below code zoom, so the sidebar steps aside.
+    await page.locator('[data-tab="files"]').click();
+    await zoomTo(page, 20);
+    await expect(side).toHaveClass(AWAY);
+    await zoomTo(page, 60);
+    await expect(side).not.toHaveClass(AWAY);
+    // The Runs tab: the map shows no run list at any zoom, so it stays.
+    await page.locator('[data-tab="runs"]').click();
+    await zoomTo(page, 20);
+    await expect(side).not.toHaveClass(AWAY);
+    await expect(page.locator('#sideBtn')).toHaveAttribute('aria-pressed', 'true');
+    // Back on Files it steps aside at once, and comes back with the code.
+    await page.locator('[data-tab="files"]').click();
+    await expect(side).toHaveClass(AWAY);
+    await zoomTo(page, 60);
+    await expect(side).not.toHaveClass(AWAY);
+    // A session at work keeps it, on either tab.
+    await page.locator('#prompt').fill('Take your time');
+    await page.locator('#prompt').press('Enter');
+    await expect(page.locator('#sideList .run.running')).toHaveCount(1);
+    await page.locator('[data-tab="files"]').click();
+    await zoomTo(page, 20);
+    await expect(side).not.toHaveClass(AWAY);
+    // Once it ends, the Files tab steps aside again.
+    await call(b, '/api/runs/1/cancel', {});
+    await expect(side).toHaveClass(AWAY, { timeout: 10_000 });
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
