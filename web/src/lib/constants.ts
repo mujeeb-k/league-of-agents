@@ -17,11 +17,15 @@ export const NEAR = 0.34,
   TIGHT = 0.2;
 /** The oldest bridge this app works with; an older one gets the update banner. */
 export const MIN_BRIDGE = '0.2.0';
-/** Whether a bridge version is older than `min`; a bridge that sends none is older than every version. */
+/**
+ * Whether a bridge version is older than `min`; a bridge that sends none is older than every version. A prerelease
+ * (0.3.0-next.0) counts as its version: its three numbers are read, and what follows them is left out.
+ */
 export function olderThan(version: string | null, min: string) {
   if (!version) return true;
-  const a = version.split('.').map(Number),
-    b = min.split('.').map(Number);
+  const parts = (v: string) => v.split('.').map(p => parseInt(p, 10) || 0);
+  const a = parts(version),
+    b = parts(min);
   for (let i = 0; i < 3; i++) if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) < (b[i] ?? 0);
   return false;
 }
