@@ -908,6 +908,130 @@ test('the app on a 0.1.2 bridge: a finished run reaches the canvas through the w
   }
 });
 
+// The site is promoted ahead of npm, so this app meets the bridge npm's `latest` has before it meets its own: every
+// flow a person relies on, on the published 0.2.0 bridge, opened as the site opens it. That bridge knows nothing of
+// shared files, sends no `shared` with a run or a commit preview and no `left` with a revert.
+test.describe('the app on the published 0.2.0 bridge', () => {
+  const LATEST = '0.2.0';
+  async function onLatest(page: Page, repo: string, env: Record<string, string> = {}) {
+    const b = await startBridge(repo, FAKE_CLAUDE, env, [], publishedBridge(LATEST));
+    await page.goto(`${APP}/#bridge=${b.port}&t=${codeFor(b)}`);
+    await expect(page.locator('#conn')).toHaveText('Live');
+    return b;
+  }
+  const ask = async (page: Page, text: string) => {
+    await page.locator('#prompt').fill(text);
+    await page.locator('#prompt').press('Enter');
+  };
+
+  test('a run, its review, Keep and Commit', async ({ page }) => {
+    const repo = makeRepo(),
+      b = await onLatest(page, repo);
+    try {
+      // It is the newest there is: nothing asks for an update.
+      expect((await call(b, '/api/state')).body.version).toBe(LATEST);
+      await expect(page.locator('#updateBanner')).toHaveCount(0);
+      await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+      await ask(page, 'Name the action and origin in allowlist errors');
+      await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
+      await expect(page.locator('#runbar b')).toHaveText('Run 1');
+      await expect(page.locator('#runAgent')).toHaveText('Claude Code · claude-sonnet-5-5');
+      // The review list, with nothing on a row but its file, and each button's count.
+      await expect(page.locator('#insp .flist li')).toHaveText(['allowlist.ts+5 −1', 'policy-cache.ts+3']);
+      await expect(page.locator('[data-act="revert"]')).toHaveText('Revert 2 files');
+      await expect(page.locator('[data-act="keep"]')).toHaveText('Keep 2 files');
+      for (const f of ['shared/allowlist.ts', 'shared/policy-cache.ts'])
+        expect(await cardRows(page, f)).toEqual(gitRows(repo, f));
+      await page.locator('.flist [data-rev="shared/allowlist.ts"]').click();
+      await expect(page.locator('#insp .num')).toHaveText('1 of 2');
+      await page.locator('[data-act="keep"]').click();
+      await expect(page.locator(TOAST)).toHaveText('Kept run 1');
+      // Commit: the dialog lists the run's files, counts them, and the bridge commits exactly those.
+      await page.locator('#commitBtn').click();
+      const dlg = page.locator('#commitDlg');
+      await expect(dlg.locator('#commitFiles li')).toHaveText(['shared/allowlist.ts', 'shared/policy-cache.ts']);
+      await expect(page.locator('#commitConfirm')).toHaveText('Commit 2 files');
+      await page.locator('#commitMessage').fill('Name the action and origin');
+      await page.locator('#commitConfirm').click();
+      await expect(page.locator(TOAST)).toHaveText(/^Committed [0-9a-f]{7} to main$/);
+      await expect(page.locator('#insp .outcome')).toContainText('Committed');
+      expect(git(repo, 'show', '--name-only', '--format=', 'HEAD').trim().split('\n')).toEqual([
+        'shared/allowlist.ts',
+        'shared/policy-cache.ts',
+      ]);
+      expect(git(repo, 'status', '--porcelain')).toBe('');
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+    }
+  });
+
+  test('Revert at once, and through a conflict', async ({ page }) => {
+    const repo = makeRepo(),
+      b = await onLatest(page, repo);
+    try {
+      await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+      await ask(page, 'Name the action and origin in allowlist errors');
+      await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
+      // No dialog: a run with no shared file goes back at once.
+      await page.locator('[data-act="revert"]').click();
+      await expect(page.locator(TOAST)).toHaveText('Reverted run 1');
+      await expect(page.locator('#revertDlg')).toHaveCount(0);
+      await expect(page.locator('#insp .outcome')).toContainText('Reverted');
+      expect(git(repo, 'status', '--porcelain')).toBe('');
+      // A second run, and its file changes again: the conflict dialog asks, and its button reverts all the same.
+      await ask(page, 'Same change again');
+      await expect(page.locator('#runbar b')).toHaveText('Run 2', { timeout: 15_000 });
+      await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
+      fs.appendFileSync(path.join(repo, 'shared/allowlist.ts'), '// edited after the run\n');
+      await expect(page.locator('#sideList [data-run="3"]')).toContainText('Edited allowlist.ts', { timeout: 15_000 });
+      await page.locator('[data-act="revert"]').click();
+      await expect(page.locator('#conflictFiles')).toContainText('shared/allowlist.ts');
+      await expect(page.locator('#conflictRevert')).toHaveText('Revert 2 files');
+      await page.locator('#conflictRevert').click();
+      await expect(page.locator(TOAST)).toHaveText('Reverted run 2');
+      expect(fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8')).toBe(SEED['shared/allowlist.ts']);
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+    }
+  });
+
+  test('two sessions at once, and a file outside a section', async ({ page }) => {
+    const repo = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'loa-e2e-')), 'two-sections');
+    execFileSync(process.execPath, [TWO_SECTIONS, repo]);
+    const b = await onLatest(page, repo, { LOA_CURSOR_BIN: FAKE_CURSOR });
+    try {
+      const start = async (agent: string, scope: string[], prompt: string) =>
+        (await call(b, '/api/runs', { agent, prompt, scope, resumeFrom: null })).body as unknown as RunDTO;
+      const status = async (id: number) => ((await call(b, `/api/runs/${id}`)).body as unknown as RunDTO).status;
+      const a = await start('claude', ['a/'], 'want:a/rounding.mjs wait:a');
+      const c = await start('cursor', ['b/'], 'edit:b/cart.mjs edit:package.json');
+      // Both at work at once, each on its card.
+      await expect(page.locator('#sideList .run.running')).toHaveCount(2);
+      fs.writeFileSync(path.join(repo, '.loa/go-a'), '');
+      await expect.poll(() => status(a.id), { timeout: 15_000 }).toBe('done');
+      await expect.poll(() => status(c.id), { timeout: 15_000 }).toBe('done');
+      await page.locator(`#sideList [data-run="${c.id}"]`).click();
+      await expect(page.locator('#runbar b')).toHaveText(`Run ${c.id}`);
+      // What this bridge says of the file outside every section has no row in the list, so its line stays.
+      await expect(page.locator('#insp .flist li')).toHaveText(['cart.mjs+1']);
+      await expect(page.locator('#insp .acts .warn')).toHaveText([
+        'ScopeChanged outside every section while others worked: package.json',
+      ]);
+      // No file is known to be shared: Revert asks nothing.
+      await expect(page.locator('[data-act="revert"]')).toHaveText('Revert 1 file');
+      await page.locator('[data-act="revert"]').click();
+      await expect(page.locator(TOAST)).toHaveText(`Reverted run ${c.id}`);
+      await expect(page.locator('#revertDlg')).toHaveCount(0);
+      expect(fs.readFileSync(path.join(repo, 'b/cart.mjs'), 'utf8')).not.toContain('edited by cursor');
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(repo), { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+    }
+  });
+});
+
 /** A repo with enough folders that a fresh layout depends on the window's shape. */
 function repoWithFolders() {
   const repo = makeRepo();
