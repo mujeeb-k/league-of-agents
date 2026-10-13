@@ -553,6 +553,7 @@ const catalogue: Catalogue = {
   "Run {id} changed {files} in this section. Those changes are run {id}'s.":
     '运行 {id} 改动了此分区内的 {files}。这些改动属于运行 {id}。',
   'Your commit hook also committed: {files}': '你的提交钩子还提交了：{files}',
+  'Run {id} edited {files} too.': '运行 {id} 也编辑了 {files}。',
   'Put back what a shell command changed outside the section: {files}':
     '已将 shell 命令在分区之外改动的内容恢复原样：{files}',
   "Couldn't start: {why}": '无法启动：{why}',

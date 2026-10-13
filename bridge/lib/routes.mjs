@@ -350,7 +350,8 @@ function keepRun({ params }) {
 async function revert({ params, body }) {
   const run = runOf(params);
   if (!run) return noRun;
-  const r = await revertRun(run, !!(await body()).force);
+  const { force, shared } = await body();
+  const r = await revertRun(run, !!force, Array.isArray(shared) ? shared.map(String) : []);
   return [r.conflict ? 409 : 200, r];
 }
 /**

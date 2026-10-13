@@ -106,6 +106,8 @@ export interface Run {
   /** The model the agent reported, if it did. */
   model?: string | null;
   outOfScope?: string[];
+  /** Files another session's edits named too, with those sessions: left out of its revert and commit unless chosen. */
+  shared?: { path: string; with: number[] }[];
   /** Without a sandbox, files a shell command changed outside the section and the bridge put back (bridge/lib/shell.mjs). */
   putBack?: { path: string; restored: boolean }[];
   /** Its colour on the map while it works (theme.css --session-1 to 5), given as it starts. */

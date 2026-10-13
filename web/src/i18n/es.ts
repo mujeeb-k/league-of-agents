@@ -594,6 +594,7 @@ const catalogue: Catalogue = {
   "Run {id} changed {files} in this section. Those changes are run {id}'s.":
     'La ejecución {id} cambió {files} en esta sección. Esos cambios son de la ejecución {id}.',
   'Your commit hook also committed: {files}': 'Tu hook de commit también confirmó: {files}',
+  'Run {id} edited {files} too.': 'La ejecución {id} también editó {files}.',
   'Put back what a shell command changed outside the section: {files}':
     'Se dejó como estaba lo que un comando de shell cambió fuera de la sección: {files}',
   "Couldn't start: {why}": 'No se pudo iniciar: {why}',

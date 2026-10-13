@@ -260,10 +260,12 @@ export function push(run, entry) {
   if (run.stream.length > 400) run.stream.splice(0, run.stream.length - 400);
   emit('progress', run);
 }
-export async function revertRun(run, force) {
+export async function revertRun(run, force, chosen = []) {
+  // A file another session edited too is left as it is unless the person chose it (parallel.mjs share).
+  const left = (run.shared ?? []).map(s => s.path).filter(p => !chosen.includes(p));
   // A run names only files inside the repo; anything else in a run file is never read or touched.
-  const changes = [...run.changes, ...(run.unseen ?? [])].filter(c =>
-    path.resolve(ROOT, c.path).startsWith(ROOT + path.sep),
+  const changes = [...run.changes, ...(run.unseen ?? [])].filter(
+    c => path.resolve(ROOT, c.path).startsWith(ROOT + path.sep) && !left.includes(c.path),
   );
   const drift = [];
   for (const c of changes) {
@@ -281,7 +283,7 @@ export async function revertRun(run, force) {
   else await serial(() => rebase());
   saveRun(run);
   emit('state');
-  return { ok: true };
+  return { ok: true, ...(left.length ? { left } : {}) };
 }
 /**
  * A run the bridge stopped during (a crash, a restart) is closed as interrupted, with the changes made so far:

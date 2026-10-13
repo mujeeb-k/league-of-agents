@@ -6239,6 +6239,41 @@ test.describe('two agents, one checkout', () => {
       expect(read(repo, 'package.json')).toBe(pkg);
     }));
 
+  test('a file both sessions edited is shared: marked on both, and left out of Revert and Commit unless chosen', () =>
+    twoAgents(async (b, repo) => {
+      const seed = read(repo, 'a/tax.mjs');
+      // Claude Code rewrites a/tax.mjs, in its own section; Cursor then adds a line to the same file.
+      const { a, c } = await both(b, repo, 'want:a/tax.mjs want:a/rounding.mjs', 'edit:b/cart.mjs');
+      await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+      go(repo, 'c');
+      await until(b, c.id, 'done');
+      const d = await start(b, 'cursor', ['b/'], 'edit:a/tax.mjs');
+      await until(b, d.id, 'done');
+      go(repo, 'a');
+      await until(b, a.id, 'done');
+      const [ra, rd] = [await runOf(b, a.id), await runOf(b, d.id)];
+      const both2 = '// written by a session\n// edited by cursor in ' + rd.sessionId + '\n';
+      expect(read(repo, 'a/tax.mjs')).toBe(both2);
+      // On both runs, each naming the other.
+      expect(ra.shared).toEqual([{ path: 'a/tax.mjs', with: [d.id] }]);
+      expect(rd.shared).toEqual([{ path: 'a/tax.mjs', with: [a.id] }]);
+      expect(said(ra, 'shared-file')).toEqual([{ id: d.id, files: 'a/tax.mjs' }]);
+      expect(said(rd, 'shared-file')).toEqual([{ id: a.id, files: 'a/tax.mjs' }]);
+      // Committing Cursor's session leaves it out, and says so beforehand.
+      const preview = (await call(b, `/api/runs/${d.id}/commit`)).body;
+      expect(preview).toMatchObject({ files: [], shared: ['a/tax.mjs'] });
+      // Reverting Claude Code's session puts back its own file and leaves the shared one exactly as it is.
+      const reverted = await call(b, `/api/runs/${a.id}/revert`, {});
+      expect([reverted.status, reverted.body]).toEqual([200, { ok: true, left: ['a/tax.mjs'] }]);
+      expect(fs.existsSync(path.join(repo, 'a/rounding.mjs'))).toBe(false);
+      expect(read(repo, 'a/tax.mjs')).toBe(both2);
+      // Chosen, it goes back with the session that is reverted: to the file as that session found it.
+      const chosen = await call(b, `/api/runs/${d.id}/revert`, { shared: ['a/tax.mjs'] });
+      expect([chosen.status, chosen.body]).toEqual([200, { ok: true }]);
+      expect(read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+      expect(seed).not.toBe('// written by a session\n');
+    }));
+
   test("a commit hook that changes a file in the other session's section: the commit says so, and it is neither session's", () =>
     twoAgents(async (b, repo) => {
       // A new module in a/: the repo's pre-commit hook lists every module in b/MODULES.md, and stages it.

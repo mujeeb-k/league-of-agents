@@ -16,21 +16,29 @@ import { noteCommit } from './parallel.mjs';
 
 /**
  * What committing the run would hold. `files`: its own. `yours`: files it changed that the person had changed too
- * before it started (left out unless ticked). `changed`: files changed since it ended (nothing commits until they
- * are reviewed again).
+ * before it started (left out unless ticked). `shared`: files another session edited too (left out unless ticked;
+ * `include` names the ones that are). `changed`: files changed since it ended (nothing commits until they are
+ * reviewed again); a shared file left out isn't asked.
  */
-export async function commitPreview(run) {
+export async function commitPreview(run, include = []) {
   const head = await headNow();
+  const both = (run.shared ?? []).map(s => s.path);
   const files = [],
     yours = [],
+    shared = [],
     changed = [];
   for (const { path: p } of [...run.changes, ...(run.unseen ?? [])]) {
+    if (both.includes(p)) {
+      shared.push(p);
+      if (!include.includes(p)) continue;
+    }
     if ((await blobNow(p)) !== (await blobAt(run.after, p))) changed.push(p);
+    if (both.includes(p)) continue;
     if (head.commit && (await blobAt(run.before, p)) !== (await blobAt(head.commit, p))) yours.push(p);
     else files.push(p);
   }
   const branch = head.ref.startsWith('refs/heads/') ? head.ref.slice('refs/heads/'.length) : null;
-  return { files, yours, changed, branch };
+  return { files, yours, shared, changed, branch };
 }
 
 /** Commits the run's files with the person's message, and the files of theirs they ticked. */
@@ -40,12 +48,12 @@ export function commitRun(run, { message = '', include = [] } = {}) {
     if (run.status === 'running' || run.reverted)
       throw refused('not-committable', 'Only a finished run can be committed.');
     if (!message.trim()) throw refused('no-message', 'Write a commit message first.');
-    const { files, yours, changed } = await commitPreview(run);
+    const { files, yours, shared, changed } = await commitPreview(run, include);
     if (changed.length)
       throw refused('changed-since', `${changed.join(', ')} changed since the run.`, { files: changed.join(', ') });
     const head = await headNow();
     if (!head.ref.startsWith('refs/heads/')) throw refused('detached-head', 'HEAD is detached. Check out a branch.');
-    const chosen = [...files, ...yours.filter(p => include.includes(p))];
+    const chosen = [...files, ...[...yours, ...shared].filter(p => include.includes(p))];
     if (!chosen.length) throw refused('nothing-to-commit', 'Nothing to commit.');
     // Each file as the run left it, as its tree entry (mode, type, id), or null where the run deleted it.
     /** @type {[string, string[] | null][]} */

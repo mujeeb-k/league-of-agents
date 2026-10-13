@@ -1,8 +1,9 @@
 // Sessions at once. Runs whose sections don't overlap work at the same time, and a run on the whole repository works
 // alone. From the first of them starting to the last ending (an epoch), the baseline stays where it was. A file an
 // agent's edit tool named is that run's change, wherever the file is: inside another session's section, it is said
-// on both runs. Whatever else changed in a run's own section while it worked is its own too (its commands name no
-// file). When the last one ends, whatever changed that no run owns (an edit by hand, a command outside its section)
+// on both runs. A file two sessions' edit tools both named is shared: said on both, and left out of either's revert
+// and commit unless the person chooses it. Whatever else changed in a run's own section while it worked is its own
+// too (its commands name no file, so a file one session changed only by a command is never seen as shared). When the last one ends, whatever changed that no run owns (an edit by hand, a command outside its section)
 // is recorded as a run of its own, credited to none of them.
 import { line, refused, serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
@@ -101,6 +102,8 @@ export async function ownChanges(run, changes) {
       epoch.expected.set(c.path, run.after);
       const other = !inScope(run.scope, c.path) && holder(run, c.path);
       if (other) crossed.set(other, [...(crossed.get(other) ?? []), c.path]);
+      if (named.has(c.path))
+        for (const r of epoch.runs) if (r !== run && reported(r).has(c.path)) share(run, r, c.path);
     }
   }
   for (const [other, files] of crossed) crossing(run, other, files.join(', '));
@@ -130,6 +133,27 @@ function crossing(run, other, files) {
   if (other.status !== 'running') {
     saveRun(other);
     emitRun(other);
+  }
+}
+
+/**
+ * Two sessions' edit tools named the same file: shared, said on both, each naming the other. Either may have ended
+ * already; its record is saved again and sent.
+ */
+function share(run, other, file) {
+  for (const [r, o] of [
+    [run, other],
+    [other, run],
+  ]) {
+    r.shared ??= [];
+    const entry = r.shared.find(s => s.path === file) ?? r.shared[r.shared.push({ path: file, with: [] }) - 1];
+    if (entry.with.includes(o.id)) continue;
+    entry.with.push(o.id);
+    r.stream.push(line('warn', 'shared-file', `Run ${o.id} edited ${file} too.`, { id: o.id, files: file }));
+    if (r !== run && r.status !== 'running') {
+      saveRun(r);
+      emitRun(r);
+    }
   }
 }
 
