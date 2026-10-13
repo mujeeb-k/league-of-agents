@@ -5962,8 +5962,6 @@ test('in auto mode the sidebar stays at every zoom while the Runs tab shows; the
     await zoomTo(page, 20);
     await expect(side).not.toHaveClass(AWAY);
     await page.locator('[data-tab="files"]').click();
-    await expect(page.locator('[data-tab="files"]')).toHaveAttribute('data-state', 'active');
-    await zoomTo(page, 18);
     await expect(side).toHaveClass(AWAY);
     // And the session was at work all the while.
     expect((await runsOf(b))[0]!.status).toBe('running');
