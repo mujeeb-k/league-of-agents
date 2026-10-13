@@ -3580,47 +3580,55 @@ test.describe('sessions at once, in the app', () => {
       await expect(page.locator('#nodes .card .at')).toHaveCount(0);
     }));
 
-  test('following a session: the map goes to each file it turns to, until the person moves the map', async ({ page }) =>
-    withHermes(page, async repo => {
-      await folder(page, 'shared').click();
-      await run(page, 'hold:a edit:shared/log.ts wait:b');
-      const follow = page.locator('#sideList [data-run="1"] [data-follow]');
-      await expect(page.locator('#markers .marker[data-run="1"]')).toHaveAttribute('data-path', 'shared/allowlist.ts', {
-        timeout: 15_000,
-      });
-      await follow.click();
-      await expect(follow).toHaveAttribute('aria-pressed', 'true');
-      const centred = (p: string) =>
-        expect
-          .poll(
-            async () => {
-              const r = (await page.locator(`#nodes [data-path="${p}"]`).first().boundingBox())!;
-              const s = (await page.locator('#stage').boundingBox())!;
-              return (
-                Math.hypot(r.x + r.width / 2 - (s.x + s.width / 2), r.y + r.height / 2 - (s.y + s.height / 2)) < 60
-              );
-            },
-            { timeout: 5_000 },
-          )
-          .toBe(true);
-      await centred('shared/allowlist.ts');
-      go(repo, 'a');
-      await centred('shared/log.ts');
-      // Moving the map by hand stops following.
-      const s = (await page.locator('#stage').boundingBox())!;
-      await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(s.x + s.width / 2 + 120, s.y + s.height / 2 + 60, { steps: 4 });
-      await page.mouse.up();
-      await expect(follow).toHaveAttribute('aria-pressed', 'false');
-      // So does moving it by the keyboard: fitting the whole map.
-      await follow.click();
-      await expect(follow).toHaveAttribute('aria-pressed', 'true');
-      await page.keyboard.press('0');
-      await expect(follow).toHaveAttribute('aria-pressed', 'false');
-      go(repo, 'b');
-      await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
-    }));
+  test(
+    'following a session: the map goes to each file it turns to, until the person moves the map',
+    { tag: '@motion' },
+    async ({ page }) =>
+      withHermes(page, async repo => {
+        await folder(page, 'shared').click();
+        await run(page, 'hold:a edit:shared/log.ts wait:b');
+        const follow = page.locator('#sideList [data-run="1"] [data-follow]');
+        await expect(page.locator('#markers .marker[data-run="1"]')).toHaveAttribute(
+          'data-path',
+          'shared/allowlist.ts',
+          {
+            timeout: 15_000,
+          },
+        );
+        await follow.click();
+        await expect(follow).toHaveAttribute('aria-pressed', 'true');
+        const centred = (p: string) =>
+          expect
+            .poll(
+              async () => {
+                const r = (await page.locator(`#nodes [data-path="${p}"]`).first().boundingBox())!;
+                const s = (await page.locator('#stage').boundingBox())!;
+                return (
+                  Math.hypot(r.x + r.width / 2 - (s.x + s.width / 2), r.y + r.height / 2 - (s.y + s.height / 2)) < 60
+                );
+              },
+              { timeout: 5_000 },
+            )
+            .toBe(true);
+        await centred('shared/allowlist.ts');
+        go(repo, 'a');
+        await centred('shared/log.ts');
+        // Moving the map by hand stops following.
+        const s = (await page.locator('#stage').boundingBox())!;
+        await page.mouse.move(s.x + s.width / 2, s.y + s.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(s.x + s.width / 2 + 120, s.y + s.height / 2 + 60, { steps: 4 });
+        await page.mouse.up();
+        await expect(follow).toHaveAttribute('aria-pressed', 'false');
+        // So does moving it by the keyboard: fitting the whole map.
+        await follow.click();
+        await expect(follow).toHaveAttribute('aria-pressed', 'true');
+        await page.keyboard.press('0');
+        await expect(follow).toHaveAttribute('aria-pressed', 'false');
+        go(repo, 'b');
+        await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
+      }),
+  );
 
   test('one session ending leaves what the others reported since as it was: their cost, their activity', async ({
     page,
@@ -5469,7 +5477,8 @@ test('checks for new users: found, offered, turned on in one click, never run be
     ]);
   } finally {
     b.stop();
-    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+    // A check the bridge had started may still be writing as it is stopped: the folder is removed once it is quiet.
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 });
 

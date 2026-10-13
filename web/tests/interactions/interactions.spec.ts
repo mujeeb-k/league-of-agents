@@ -1370,14 +1370,23 @@ test.describe('editor', () => {
     await page.keyboard.press('Escape');
     await page.locator(`.fr[data-path="${FILE}"]`).click();
     await page.keyboard.press('f');
+    // The next card is partly under the inspector: panned into view, as a person would. Nothing scrolls the stage
+    // itself any more, which is how a click used to reach it.
+    const box = await stageBox(page);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(360, 0);
     await page.locator('.card[data-path="server/delivery/http-client.ts"]').click({ modifiers: ['Shift'] });
     await expect(page.locator('#editor')).toHaveCount(0);
     expect(await chips(page)).toEqual(['endpoint-health.ts', 'http-client.ts']);
-    // A plain click selects a code box as the scope, without opening it.
+    // A plain click selects a code box as the scope, without opening it. The card after that one, panned to as well.
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(480, 0);
     await page.locator('.card[data-path="server/delivery/rate-limit.ts"]').click({ position: { x: 80, y: 80 } });
     await expect(page.locator('#editor')).toHaveCount(0);
     expect(await chips(page)).toEqual(['rate-limit.ts']);
-    // With a draft, leaving the page asks first.
+    // With a draft, leaving the page asks first. Panned back to the first file.
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(-840, 0);
     await page.locator(`.card[data-path="${FILE}"]`).dblclick({ position: { x: 80, y: 80 } });
     await expect(page.locator('#editor .cm-content')).toBeFocused();
     await page.keyboard.type('x');

@@ -1,7 +1,10 @@
 /* ---------- stage ---------- */
 #stage {
   position: relative;
-  overflow: hidden;
+  /* Clipped, never scrolled: the map moves by its transform alone. With `hidden`, the browser scrolled the stage to
+     bring a focused control into view (the agent menu, opened while the composer was still moving into place), and
+     the whole map stayed that far off. */
+  overflow: clip;
   background-color: var(--canvas);
   touch-action: none;
   user-select: none;
