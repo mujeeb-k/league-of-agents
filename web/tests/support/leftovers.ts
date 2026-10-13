@@ -61,8 +61,12 @@ export function begin(): string {
 /** A name in /tmp for a file of this run's: the run's folder name, then `name`. */
 export const tagged = (name: string) => path.join('/tmp', `${path.basename(os.tmpdir())}-${name}`);
 
-/** What the tools themselves keep in the temp folder, not the tests: Node's cache of compiled modules. */
-const NOT_OURS = ['node-compile-cache'];
+/**
+ * What the tools themselves keep in the temp folder, not the tests: Node's cache of compiled modules, and a
+ * browser's own temp folder, which it removes as it exits and may still be removing when the run ends (seen once
+ * on Linux: `.org.chromium.Chromium.MQOO7m`, with every test passed).
+ */
+const NOT_OURS = /^(node-compile-cache$|\.(org\.chromium\.Chromium|com\.google\.Chrome)\.)/;
 
 /** A run ends: what it left behind, each in a line, after removing and stopping it. Empty when it left nothing. */
 export function end(root: string): string[] {
@@ -71,7 +75,7 @@ export function end(root: string): string[] {
   const left = [
     ...fs
       .readdirSync(root)
-      .filter(n => !NOT_OURS.includes(n))
+      .filter(n => !NOT_OURS.test(n))
       .map(n => path.join(root, n)),
     ...inTmp.map(n => path.join('/tmp', n)),
   ];

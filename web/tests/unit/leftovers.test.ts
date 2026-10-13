@@ -36,6 +36,14 @@ it('a run that removed what it made and stopped what it started left nothing', (
   expect(fs.existsSync(root)).toBe(false);
 });
 
+it("a browser's own temp folder and Node's cache are the tools', not the tests': removed, and not a failure", () => {
+  const root = begin();
+  for (const n of ['.org.chromium.Chromium.MQOO7m', '.com.google.Chrome.aB3dE9', 'node-compile-cache'])
+    fs.mkdirSync(path.join(root, n));
+  expect(end(root)).toEqual([]);
+  expect(fs.existsSync(root)).toBe(false);
+});
+
 it('names a folder, a file of its own in /tmp and a bridge left behind, removes them and stops it', async () => {
   // Another run's bridge, working in a folder that isn't this run's: never touched.
   const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'loa-other-'));
