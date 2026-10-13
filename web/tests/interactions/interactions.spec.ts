@@ -17,7 +17,9 @@ async function view(page: Page) {
  */
 async function rested(page: Page) {
   const same = (a: { x: number; y: number; s: number }, b: typeof a) => a.x === b.x && a.y === b.y && a.s === b.s;
-  let [a, b] = [await view(page), await view(page)];
+  let a = await view(page);
+  await page.waitForTimeout(60);
+  let b = await view(page);
   for (const t0 = Date.now(); Date.now() - t0 < 5000;) {
     await page.waitForTimeout(60);
     const c = await view(page);

@@ -5951,7 +5951,10 @@ test('in auto mode the sidebar stays at every zoom while the Runs tab shows or a
     await expect(side).not.toHaveClass(AWAY);
     await expect(page.locator('#sideBtn')).toHaveAttribute('aria-pressed', 'true');
     // Back on Files it stays under the pointer, steps aside with the next zoom, and comes back with the code.
+    // The tab has changed before the sidebar is looked at: it would have left in the same render.
     await page.locator('[data-tab="files"]').click();
+    await expect(page.locator('[data-tab="files"]')).toHaveAttribute('data-state', 'active');
+    await expect(page.locator('#sideList .ti').first()).toBeVisible();
     await expect(side).not.toHaveClass(AWAY);
     await zoomTo(page, 18);
     await expect(side).toHaveClass(AWAY);
@@ -5989,6 +5992,7 @@ test("a selection outside the open run's section starts a new session; the menu 
       scope = page.locator('#scopeRow .chip:not(.all):not(.fu):not(.new) > span');
     // A file or a folder picked on the whole map, where every one of them is on screen.
     const pick = async (key: string) => {
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
       await page.keyboard.press('0');
       await page
         .locator(key.startsWith('data-dir') ? `.frame[${key}] > .flabel b` : `#nodes [${key}]`)
