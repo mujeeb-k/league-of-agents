@@ -5926,7 +5926,7 @@ test(
   },
 );
 
-test('in auto mode the sidebar stays at every zoom while the Runs tab shows or a session works; the Files tab steps aside', async ({
+test('in auto mode the sidebar stays at every zoom while the Runs tab shows; the Files tab steps aside, session or not', async ({
   page,
 }) => {
   const repo = makeRepo(),
@@ -5960,16 +5960,17 @@ test('in auto mode the sidebar stays at every zoom while the Runs tab shows or a
     await expect(side).toHaveClass(AWAY);
     await zoomTo(page, 60);
     await expect(side).not.toHaveClass(AWAY);
-    // A session at work keeps it, on either tab.
+    // A session at work changes nothing: starting one shows the Runs tab, which stays; back on Files, it steps aside.
     await page.locator('#prompt').fill('Take your time');
     await page.locator('#prompt').press('Enter');
     await expect(page.locator('#sideList .run.running')).toHaveCount(1);
-    await page.locator('[data-tab="files"]').click();
     await zoomTo(page, 20);
     await expect(side).not.toHaveClass(AWAY);
-    // Once it ends, the Files tab steps aside again.
+    await page.locator('[data-tab="files"]').click();
+    await expect(page.locator('[data-tab="files"]')).toHaveAttribute('data-state', 'active');
+    await zoomTo(page, 18);
+    await expect(side).toHaveClass(AWAY);
     await call(b, '/api/runs/1/cancel', {});
-    await expect(side).toHaveClass(AWAY, { timeout: 10_000 });
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });

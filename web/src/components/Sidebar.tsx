@@ -587,7 +587,7 @@ function PinButton() {
 export function Sidebar() {
   useRegion('side');
   const away = !sideVisibleAt(st.v.s);
-  // The tab shown and the sessions at work decide whether it stays when zoomed out: applied as either changes.
+  // The tab shown decides whether it stays when zoomed out: applied as it changes.
   useEffect(applyPanels);
   // Floats over the canvas, so stepping aside moves only opacity and position (panels.ts keeps this in sync).
   return (

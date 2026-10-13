@@ -1,9 +1,8 @@
 // The sidebar and the inspector around the canvas. The sidebar floats over the canvas, so showing or
 // hiding it moves only opacity and position; the canvas never resizes for it. Choices are remembered.
 import { NEAR } from '../lib/constants';
-import { S, dom, st } from './app';
+import { dom, st } from './app';
 import { bump } from './render';
-import { workingRuns } from './sessions';
 
 /** Auto steps aside below code zoom, where the canvas itself shows the tree, unless it is needed there (wanted). */
 export type SideMode = 'auto' | 'pinned' | 'closed';
@@ -50,11 +49,8 @@ export function holdSide() {
   firstLoad = true;
 }
 
-/**
- * The map shows the tree at every zoom, never the run list: the Runs tab stays, and in a connected repo so does a
- * session at work. In the demo, whose sessions are scripted, the Files tab steps aside as it always has.
- */
-const wanted = () => st.tab === 'runs' || (!!S.CONN && workingRuns().length > 0);
+/** The map shows the tree at every zoom, never the run list: the Runs tab stays. The Files tab steps aside. */
+const wanted = () => st.tab === 'runs';
 
 export const sideVisibleAt = (s: number) =>
   !narrow() &&
