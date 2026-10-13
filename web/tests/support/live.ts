@@ -252,8 +252,9 @@ export async function call(b: Bridge, route: string, body?: object) {
 /**
  * Two sessions in one checkout (the two-sections repo) that both edited a/tax.mjs, both ended: Claude Code, on a/,
  * rewrote it and made a/rounding.mjs; Cursor's stand-in, on b/, then edited b/cart.mjs, a/discount.mjs and it.
+ * With `hold`, Claude Code's session is still at work until `release()`.
  */
-export async function sharedFileBridge() {
+export async function sharedFileBridge(hold = false) {
   const repo = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'loa-e2e-')), 'two-sections');
   execFileSync(process.execPath, [TWO_SECTIONS, repo]);
   const b = await startBridge(repo, FAKE_CLAUDE, { LOA_CURSOR_BIN: FAKE_CURSOR });
@@ -273,7 +274,10 @@ export async function sharedFileBridge() {
     'Add a daily summary. edit:b/cart.mjs edit:a/discount.mjs edit:a/tax.mjs',
   );
   await done(cursor);
-  fs.writeFileSync(path.join(repo, '.loa/go-a'), '');
-  await done(claude);
-  return { b, repo, claude, cursor };
+  const release = async () => {
+    fs.writeFileSync(path.join(repo, '.loa/go-a'), '');
+    await done(claude);
+  };
+  if (!hold) await release();
+  return { b, repo, claude, cursor, release };
 }

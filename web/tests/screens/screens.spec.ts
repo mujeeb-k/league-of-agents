@@ -273,3 +273,29 @@ test('a shared file', async ({ page }) => {
     fs.rmSync(path.dirname(repo), { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 });
+
+// A shared file while its other session still works: its box is off, with the reason. Then reverted without it:
+// the run says what it left.
+test('a shared file whose other session still works', async ({ page }) => {
+  test.setTimeout(120_000);
+  const { b, repo, cursor, release } = await sharedFileBridge(true);
+  try {
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.locator(`#sideList [data-run="${cursor}"]`).click();
+    await page.locator('#insp [data-act="revert"]').click();
+    await expect(page.locator('#revertDlg [data-include="a/tax.mjs"]')).toBeDisabled();
+    await expect(page.locator(TOAST)).toHaveCount(0, { timeout: 10_000 });
+    await shoot(page, 'shared-file-revert-other-session-at-work', NARROW);
+    await page.locator('#revertConfirm').click();
+    await expect(page.locator('#insp .outcome')).toHaveText('Reverted, except a/tax.mjs.');
+    await expect(page.locator(TOAST)).toHaveCount(0, { timeout: 10_000 });
+    await shoot(page, 'shared-file-reverted-except', NARROW, () =>
+      page.locator('#insp .outcome').scrollIntoViewIfNeeded(),
+    );
+    await release();
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  }
+});
