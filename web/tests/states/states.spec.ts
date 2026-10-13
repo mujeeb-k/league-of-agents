@@ -140,10 +140,12 @@ const DEMO: Element[] = [
   {
     name: 'Code card',
     at: '.card[data-path="server/delivery/retry/backoff.ts"]',
+    // The second J brings this card, the run's second file, to the middle of the map: after the first it lies
+    // under the inspector, where the pointer can't reach it.
     prep: p => p.keyboard.press('j'),
     states: {
       default: async p => p.keyboard.press('j'),
-      hover: 'auto',
+      hover: async p => p.keyboard.press('j'),
       selected: p => p.locator('.flist li:nth-child(2) [data-fly]').click(),
     },
   },
