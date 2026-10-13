@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { lineDiff } from '../../src/lib/textdiff';
+import { inNewVersion, lineDiff } from '../../src/lib/textdiff';
 import { applyHunks } from '../../src/lib/model';
 import type { Hunk } from '../../src/lib/types';
 
@@ -18,7 +18,12 @@ function gitDiff(a: string[], b: string[]): Hunk[] {
   fs.writeFileSync(fa, a.map(l => l + '\n').join(''));
   fs.writeFileSync(fb, b.map(l => l + '\n').join(''));
   // Exit 1 says the files differ.
-  const out = spawnSync('git', ['diff', '--no-index', '--no-color', '-U0', fa, fb], { encoding: 'utf8' }).stdout;
+  // Git's own way of comparing, whatever this machine's git is set to use instead.
+  const out = spawnSync(
+    'git',
+    ['diff', '--no-index', '--no-color', '--no-ext-diff', '--diff-algorithm=myers', '-U0', fa, fb],
+    { encoding: 'utf8' },
+  ).stdout;
   const hunks: Hunk[] = [];
   for (const line of out.split('\n')) {
     const m = /^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@/.exec(line);
@@ -98,6 +103,17 @@ describe('lineDiff', () => {
     expect(lineDiff([], ['a', 'b'])).toEqual([{ at: 0, del: 0, add: ['a', 'b'] }]);
     expect(lineDiff(['a', 'b'], [])).toEqual([{ at: 0, del: 2, add: [] }]);
     expect(lineDiff(['a', 'b', 'c'], ['a', 'b', 'c', 'd'])).toEqual([{ at: 3, del: 0, add: ['d'] }]);
+  });
+
+  it('numbers added lines as they are in the new version, past what earlier hunks added', () => {
+    const a = Array.from({ length: 50 }, (_, i) => `line ${i}`);
+    const b = ['new 0', 'new 1', 'new 2', ...a];
+    b[42] = 'changed';
+    // Three lines added at the top, then line 40 of the old file changed: it is line 43 of the new one.
+    expect(inNewVersion(lineDiff(a, b)).map(h => [h.at, h.now])).toEqual([
+      [0, 0],
+      [39, 42],
+    ]);
   });
 
   it('a file rewritten whole is one block, found at once', () => {

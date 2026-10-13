@@ -4,7 +4,7 @@
 import { ChevronDown, X } from 'lucide-react';
 import { EDITORS, editorUrl } from '../lib/openIn';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { CH, CW } from '../lib/constants';
 import type { Editor as CodeEditor } from '../lib/editor';
 import { sideInset } from '../state/panels';
@@ -36,7 +36,7 @@ import { Spinner, Tip } from './bits';
 import { FileIcon } from './FileIcon';
 import { fileKind } from '../lib/fileKind';
 import { Button } from './ui/button';
-import { lineDiff } from '../lib/textdiff';
+import { inNewVersion, lineDiff } from '../lib/textdiff';
 import { t } from '../i18n';
 
 const DUR = 240;
@@ -149,8 +149,11 @@ const reviewLines = (run: Run, path: string) =>
 
 /** What changed on disk since the file was opened: each place it changed, removed and added lines. */
 function DiskChange({ before, now }: { before: string; now: string }) {
-  const was = lines(before),
-    hunks = lineDiff(was, lines(now));
+  // Removed lines are numbered as they were, added lines as they are now.
+  const { was, hunks } = useMemo(() => {
+    const was = lines(before);
+    return { was, hunks: inNewVersion(lineDiff(was, lines(now))) };
+  }, [before, now]);
   if (!hunks.length) return null;
   return (
     <pre className="mt-2 max-h-28 overflow-auto rounded-md bg-muted p-2 font-mono text-xs leading-5">
@@ -160,7 +163,7 @@ function DiskChange({ before, now }: { before: string; now: string }) {
             <div key={'d' + i} className="text-del">{`− ${h.at + i + 1}  ${l}`}</div>
           ))}
           {h.add.map((l, i) => (
-            <div key={'a' + i} className="text-add">{`+ ${h.at + i + 1}  ${l}`}</div>
+            <div key={'a' + i} className="text-add">{`+ ${h.now + i + 1}  ${l}`}</div>
           ))}
         </Fragment>
       ))}

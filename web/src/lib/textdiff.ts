@@ -33,6 +33,19 @@ export function lineDiff(a: string[], b: string[]): Hunk[] {
   return hunks;
 }
 
+/**
+ * Each hunk with where its added lines begin in the new version (`now`, 0-based): `at` counts in the old one, and
+ * every hunk before it moved the rest by what it added and removed.
+ */
+export function inNewVersion(hunks: Hunk[]): (Hunk & { now: number })[] {
+  let moved = 0;
+  return hunks.map(h => {
+    const now = h.at + moved;
+    moved += h.add.length - h.del;
+    return { ...h, now };
+  });
+}
+
 /** Everything between the lines both versions share at the start and at the end, as one hunk. */
 function changedBlock(a: string[], b: string[]): Hunk[] {
   let start = 0;
