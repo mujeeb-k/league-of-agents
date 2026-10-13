@@ -6055,10 +6055,19 @@ test('a run that changed nothing offers no Before, After and Diff', async ({ pag
     await expect(page.locator('#sideList [data-run="1"]')).toContainText('No changes', { timeout: 15_000 });
     await expect(page.locator('#runbar b')).toHaveText('Run 1');
     await expect(page.locator('#runbar [data-mode]')).toHaveCount(0);
-    // Their keys do nothing either: nothing on the map switches.
-    await page.locator('#stage').focus();
-    await page.keyboard.press('b');
-    await expect(page.locator('#world')).not.toHaveAttribute('data-switching');
+    // Their keys do nothing either: the map is never told to switch (setMode marks it while it does).
+    await page.evaluate(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      const w = window as unknown as { switched: number };
+      w.switched = 0;
+      new MutationObserver(() => w.switched++).observe(document.getElementById('world')!, {
+        attributes: true,
+        attributeFilter: ['data-switching'],
+      });
+    });
+    for (const key of ['b', 'd', 'a']) await page.keyboard.press(key);
+    await page.waitForTimeout(400);
+    expect(await page.evaluate(() => (window as unknown as { switched: number }).switched)).toBe(0);
     // A run that changed files still offers them.
     await page.locator('#prompt').fill('Name the action and origin in allowlist errors');
     await page.locator('#prompt').press('Enter');
