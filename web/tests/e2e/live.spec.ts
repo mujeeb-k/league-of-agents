@@ -3847,7 +3847,10 @@ test.describe('sessions at once, in the app', () => {
       await page.keyboard.press('Escape');
       await folder(page, 'apps').click();
       await run(page, 'edit:apps/console/main.ts wait:b');
-      // Run 1 reports its cost after run 2 started, and before run 2 ends.
+      // Run 1 reports its cost after run 2 started, and before run 2 ends: once the app has the whole state with
+      // run 2 in it, so the cost reaches it only as run 1's own report. (Sooner, that state already held the cost,
+      // which is how this test passed whatever the app did with run 2's end, and failed only now and then.)
+      await expect(page.locator('#sideList [data-run="2"]')).toHaveClass(/running/);
       go(repo, 'h');
       const one = page.locator('#sideList [data-run="1"]');
       await expect(one.locator('.cost')).toHaveText('$0.004', { timeout: 15_000 });

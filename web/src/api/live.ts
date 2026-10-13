@@ -528,7 +528,7 @@ async function poll() {
             run = S.RUNS.find(x => x.id === p.id);
           if (run) {
             const wasRunning = run.status === 'running';
-            Object.assign(run, {
+            const said = {
               status: p.status,
               stream: p.stream,
               summary: p.summary,
@@ -538,7 +538,12 @@ async function poll() {
               cost: p.cost,
               turn: p.turn,
               model: p.model ?? run.model,
-            });
+            };
+            Object.assign(run, said);
+            // And on the state another run's end is applied to (withDeltas): or that end would put this run back
+            // as the last whole state had it, without what it has said since.
+            const kept = last?.runs.find(x => x.id === p.id);
+            if (kept) Object.assign(kept, said);
             if (p.steps?.length) {
               // A step that came ahead of others means an event was missed: all of them, fetched again.
               if (addSteps(run.id, p.steps)) void loadSteps(run.id);
