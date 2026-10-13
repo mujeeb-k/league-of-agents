@@ -5928,7 +5928,7 @@ test(
   },
 );
 
-test('in auto mode the sidebar stays at every zoom while the Runs tab shows; the Files tab steps aside, session or not', async ({
+test('in auto mode the sidebar stays at every zoom while the Runs tab shows; a picked Files tab keeps it until the next zoom, session or not', async ({
   page,
 }) => {
   const repo = makeRepo(),
@@ -5952,18 +5952,34 @@ test('in auto mode the sidebar stays at every zoom while the Runs tab shows; the
     await zoomTo(page, 20);
     await expect(side).not.toHaveClass(AWAY);
     await expect(page.locator('#sideBtn')).toHaveAttribute('aria-pressed', 'true');
-    // Back on Files it steps aside at once, with no zoom, and comes back with the code: only the Runs tab holds it.
+    // A click never hides it: picking Files there keeps it up, with the tree, until the next zoom.
     await page.locator('[data-tab="files"]').click();
+    await expect(side.getByRole('treeitem').first()).toBeVisible();
+    await expect(side).not.toHaveClass(AWAY);
+    await zoomTo(page, 22);
     await expect(side).toHaveClass(AWAY);
     await zoomTo(page, 60);
     await expect(side).not.toHaveClass(AWAY);
-    // A session at work changes nothing: starting one shows the Runs tab, which stays; back on Files, it steps aside.
+    // Or until it is closed: [ puts it away, and the next [ brings it back to stay.
+    await page.locator('[data-tab="runs"]').click();
+    await zoomTo(page, 20);
+    await page.locator('[data-tab="files"]').click();
+    await expect(side).not.toHaveClass(AWAY);
+    await page.keyboard.press('[');
+    await expect(side).toHaveClass(AWAY);
+    // Auto again: the init script clears the choice on each load.
+    await page.reload();
+    await expect(page.locator('#conn')).toHaveText('Live');
+    // A session at work changes nothing: starting one shows the Runs tab, which stays; picked there, Files stays
+    // too, and steps aside with the next zoom.
     await page.locator('#prompt').fill('Take your time');
     await page.locator('#prompt').press('Enter');
     await expect(page.locator('#sideList .run.running')).toHaveCount(1);
     await zoomTo(page, 20);
     await expect(side).not.toHaveClass(AWAY);
     await page.locator('[data-tab="files"]').click();
+    await expect(side).not.toHaveClass(AWAY);
+    await zoomTo(page, 22);
     await expect(side).toHaveClass(AWAY);
     // And the session was at work all the while.
     expect((await runsOf(b))[0]!.status).toBe('running');

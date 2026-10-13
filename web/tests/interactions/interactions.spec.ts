@@ -621,12 +621,16 @@ test('focus inside a sidebar that steps aside goes to the button that brings it 
   await page.addInitScript(() => localStorage.removeItem('loa.panels'));
   await page.reload();
   await page.locator('#insp section').first().waitFor();
-  // By the arrow keys from the Runs tab to Files, below code zoom.
+  // By the arrow keys from the Runs tab to Files, below code zoom: picking a tab never hides the sidebar, so focus
+  // stays on the tab. The next zoom steps it aside.
   await page.locator('[data-tab="runs"]').click();
   await page.keyboard.press('0');
   await expect(side).not.toHaveClass(AWAY);
   await page.locator('[data-tab="runs"]').focus();
   await page.keyboard.press('ArrowLeft');
+  await expect(side).not.toHaveClass(AWAY);
+  await expect(page.locator('[data-tab="files"]')).toBeFocused();
+  await page.keyboard.press('-');
   await expect(side).toHaveClass(AWAY);
   await expect(page.locator('#sideBtn')).toBeFocused();
   // And by zooming out with the keys while focus is in the sidebar, on the Files tab at code zoom.

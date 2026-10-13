@@ -34,15 +34,22 @@ function save() {
 }
 
 const narrow = () => matchMedia('(width < 860px)').matches;
-/** In auto mode the sidebar shows on first load, whatever the zoom, until the first zoom, so a first-time visitor sees the files. */
+/**
+ * In auto mode the sidebar shows whatever the zoom until the next zoom: on first load, so a first-time visitor sees
+ * the files, and after the person picks one of its tabs, so a click never hides it.
+ */
 let firstLoad = true;
 export function endFirstLoad() {
   if (!firstLoad) return;
   firstLoad = false;
   applyPanels();
 }
+/** A tab was picked by hand: the sidebar stays as it is until the next zoom, or until it is closed. */
+export function holdSide() {
+  firstLoad = true;
+}
 
-/** The map shows the tree at every zoom, never the run list: the Runs tab stays. The Files tab steps aside. */
+/** The map shows the tree at every zoom, never the run list: the Runs tab stays. The Files tab steps aside on a zoom. */
 const wanted = () => st.tab === 'runs';
 
 export const sideVisibleAt = (s: number) =>
