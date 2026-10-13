@@ -96,8 +96,10 @@ export function authorsOf(
 ): Map<string, Owner[]> {
   const files = new Map<string, Tracked>();
   for (const run of [...runs].sort((a, b) => a.id - b.id)) {
-    if (run.reverted) continue;
+    // A reverted run's lines are gone, but for the shared files its revert left as they are.
+    if (run.reverted && !run.left?.length) continue;
     for (const [path, c] of run.changes) {
+      if (run.reverted && !run.left!.includes(path)) continue;
       if (c.deleted) {
         files.delete(path);
         continue;

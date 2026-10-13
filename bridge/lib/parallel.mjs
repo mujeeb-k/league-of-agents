@@ -94,8 +94,12 @@ export async function ownChanges(run, changes) {
     return own;
   }
   const sections = epoch.runs.flatMap(r => r.scope ?? []);
-  const named = reported(run);
-  const byAnother = file => epoch.runs.some(r => r !== run && reported(r).has(file));
+  // Each session's reported files, read once: an ended session's steps are read from disk.
+  const names = new Map(epoch.runs.map(r => [r, reported(r)]));
+  const named = names.get(run) ?? reported(run);
+  const byAnother = file => epoch.runs.some(r => r !== run && names.get(r).has(file));
+  // A reverted session no longer holds a file, but for the shared ones its revert left as they are.
+  const holds = (r, file) => !r.reverted || !!r.left?.includes(file);
   const own = [],
     outside = [];
   /** Files of this run's inside another session's section, by that session. */
@@ -110,7 +114,8 @@ export async function ownChanges(run, changes) {
       const other = !inScope(run.scope, c.path) && holder(run, c.path);
       if (other) crossed.set(other, [...(crossed.get(other) ?? []), c.path]);
       if (named.has(c.path))
-        for (const r of epoch.runs) if (r !== run && reported(r).has(c.path)) share(run, r, c.path);
+        for (const r of epoch.runs)
+          if (r !== run && names.get(r).has(c.path) && holds(r, c.path)) share(run, r, c.path);
     }
   }
   for (const [other, files] of crossed) crossing(run, other, files.join(', '));
@@ -164,10 +169,31 @@ function share(run, other, file) {
   }
 }
 
-/** A revert while runs work: what it wrote is the revert's, not theirs, and not left over at the epoch's end. */
-export function noteRevert(run) {
+/**
+ * A shared file can't go back or be committed with one session while another that edited it still works: that
+ * session's edits aren't all in the file yet, and the file put back under it would no longer be its change.
+ * The refusal, or null.
+ */
+export function sharedBusy(run, files) {
+  for (const s of run.shared ?? []) {
+    const id = files.includes(s.path) ? s.with.find(i => working.has(i)) : undefined;
+    if (id !== undefined)
+      return refused('shared-busy', `Run ${id} is still working on ${s.path}. Choose it once run ${id} ends.`, {
+        id,
+        files: s.path,
+      });
+  }
+  return null;
+}
+
+/**
+ * A revert while runs work: what it wrote is the revert's, not theirs, and not left over at the epoch's end. The
+ * shared files it left as they are (`left`) it didn't write.
+ */
+export function noteRevert(run, left = []) {
   if (epoch)
     for (const c of [...run.changes, ...(run.unseen ?? [])]) {
+      if (left.includes(c.path)) continue;
       epoch.expected.set(c.path, run.before);
       epoch.written.set(c.path, run.before);
     }

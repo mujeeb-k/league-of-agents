@@ -171,7 +171,8 @@ export const bridge = {
         body: { ...(force ? { force: true } : {}), ...(shared.length ? { shared } : {}) },
       });
     } catch (e) {
-      if (e instanceof BridgeError && e.status === 409) return { conflict: e.data.conflict ?? [] };
+      // Any other refusal (a shared file whose other session still works) is the caller's to word.
+      if (e instanceof BridgeError && e.status === 409 && e.data.conflict) return { conflict: e.data.conflict };
       throw e;
     }
   },

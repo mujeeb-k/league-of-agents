@@ -227,11 +227,26 @@ export function viewOf(f: FileNode): FileView {
 /** The run's files another session edited too, each with those sessions' runs. */
 export const sharedOf = (run: Run) => new Map((run.shared ?? []).map(s => [s.path, s.with]));
 
+/** Every file the run changed: the ones in its review list, then the ones the map doesn't show. */
+export const allFiles = (run: Run) => [...run.changes.keys(), ...(run.unseen ?? []).map(u => u.path)];
+
 /** The run's own files: what a revert puts back unasked, and a commit holds before anything is ticked. */
 export const ownFiles = (run: Run) => {
   const shared = sharedOf(run);
-  return [...run.changes.keys()].filter(p => !shared.has(p));
+  return allFiles(run).filter(p => !shared.has(p));
 };
+
+/**
+ * What the bridge flagged as outside the run's selection, by file: null for a file outside its section, or the
+ * lines the run was held to in that file ("<path> outside lines 3–5", bridge/lib/runs.mjs scopeViolations).
+ */
+export const outsideOf = (run: Run) =>
+  new Map(
+    (run.outOfScope ?? []).map(e => {
+      const m = / outside lines (\d+–\d+)$/.exec(e);
+      return m ? ([e.slice(0, m.index), m[1]!] as const) : ([e, null] as const);
+    }),
+  );
 
 export function fileStat(run: Run, p: string): Stat | null {
   const ch = run.changes.get(p);

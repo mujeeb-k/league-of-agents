@@ -19,7 +19,18 @@ import { flyFile } from '../lib/camera';
 import { shareOf, type Author, type Owner } from '../lib/attribution';
 import { runsRepoCode } from '../lib/checks';
 import { agentOf, modelOf } from '../lib/constants';
-import { existsNow, fileStat, linesAt, needsYou, ownFiles, runStats, sharedOf, viewOf } from '../lib/model';
+import {
+  allFiles,
+  existsNow,
+  fileStat,
+  linesAt,
+  needsYou,
+  outsideOf,
+  ownFiles,
+  runStats,
+  sharedOf,
+  viewOf,
+} from '../lib/model';
 import type { Run } from '../lib/types';
 import { money } from '../lib/util';
 import { said } from '../lib/said';
@@ -137,9 +148,16 @@ const ON_ROW = new Set(['shared-file', 'in-section-of', 'outside-scope']);
 const linkClass =
   'flex h-7 w-full min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 -mx-2 text-left font-mono text-xs text-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring';
 
-/** Where a file outside the run's section is: "Outside b/", by the section's name when it has one. */
-const outsideText = (run: Run) =>
-  run.scope?.length === 1 ? t('Outside {section}', { section: run.scope[0]! }) : t('Outside its sections');
+/**
+ * Where a flagged change is: "Outside b/", by the section's name when the run has one; "Outside lines 3–5" when
+ * the run was held to lines of the file and changed others.
+ */
+const outsideText = (run: Run, lines: string | null) =>
+  lines
+    ? t('Outside lines {lines}', { lines })
+    : run.scope?.length === 1
+      ? t('Outside {section}', { section: run.scope[0]! })
+      : t('Outside its sections');
 
 /** Revert with its count: the run's own files. One whose files are all shared has none until the dialog's ticks. */
 const revertText = (own: number) => (own ? tn(own, 'Revert {n} file', 'Revert {n} files') : t('Revert'));
@@ -205,9 +223,10 @@ function RunView({ run }: { run: Run }) {
   const done = files.filter(p => run.reviewed.has(p)).length,
     running = run.status === 'running';
   const shared = sharedOf(run),
-    outside = new Set(run.outOfScope),
-    own = ownFiles(run).length,
-    offList = (run.outOfScope ?? []).filter(p => !run.changes.has(p));
+    outside = outsideOf(run),
+    own = ownFiles(run).length;
+  // What a row would say, for files the list has no row for (the map doesn't show them).
+  const offList = [...new Set([...shared.keys(), ...outside.keys()])].filter(p => !run.changes.has(p));
   const reply =
     run.summary ||
     [...(run.stream || [])].reverse().find(e => e.t === 'text')?.text ||
@@ -443,7 +462,7 @@ function RunView({ run }: { run: Run }) {
                         ) : outside.has(p) ? (
                           <span className="outside flex shrink-0 items-center gap-1 font-sans text-ink2">
                             <TriangleAlert className="size-3.5 text-mod" />
-                            {outsideText(run)}
+                            {outsideText(run, outside.get(p)!)}
                           </span>
                         ) : null}
                         <span className="ml-auto pl-2">
@@ -471,25 +490,30 @@ function RunView({ run }: { run: Run }) {
               {t('No changes. No files were edited in this run.')}
             </div>
           )}
-          {offList.length ? (
-            // A file outside the section that the list has no row for (the map doesn't show it): one icon, one line.
-            <div className="outside mt-3 flex gap-2 text-pretty">
-              <span className="flex h-5 shrink-0 items-center">
-                <TriangleAlert className="size-4 text-mod" />
-              </span>
-              <span>
-                {outsideText(run)}
-                {': '}
-                <span className="font-mono text-xs [overflow-wrap:anywhere]">{offList.join(', ')}</span>
+          {offList.map(p => (
+            // A shared file, or one outside the section, that the list has no row for: one line each.
+            <div key={p} className="offlist mt-3 flex items-center gap-2">
+              {shared.has(p) ? (
+                <SharedTag runs={shared.get(p)!} />
+              ) : (
+                <>
+                  <TriangleAlert className="size-4 shrink-0 text-mod" />
+                  <span className="shrink-0 text-ink2">{outsideText(run, outside.get(p)!)}</span>
+                </>
+              )}
+              <span className="min-w-0 truncate font-mono text-xs" title={p}>
+                {p}
               </span>
             </div>
-          ) : null}
+          ))}
           {run.putBack?.length ? <PutBack run={run} /> : null}
           {run.reverted ? (
             <div className="outcome mt-4 flex items-center gap-2 text-ink2">
               <Undo2 className="size-4 text-ink3" />
 
-              {t('Reverted. Its changes are gone from your working tree.')}
+              {run.left?.length
+                ? t('Reverted, except {files}.', { files: run.left.join(', ') })
+                : t('Reverted. Its changes are gone from your working tree.')}
             </div>
           ) : run.committed ? (
             <div className="outcome mt-4 flex items-center gap-2">
@@ -549,7 +573,7 @@ function RunView({ run }: { run: Run }) {
                     variant={checksFailed ? 'outline' : 'default'}
                     className="flex-1 tabular-nums"
                   >
-                    {tn(files.length, 'Keep {n} file', 'Keep {n} files')}
+                    {tn(allFiles(run).length, 'Keep {n} file', 'Keep {n} files')}
                   </ActButton>
                 </div>
               )}
@@ -592,9 +616,11 @@ function authorText(o: Owner, run: Run | null): string {
   if (author === 'agent') return t('{agent} wrote it with its edit tools.', { agent: who });
   if (author === 'human') return t('Saved in the editor on the map.');
   if (author === 'mixed') return t('Rewritten in part after an agent wrote it.');
-  return run
+  if (!run) return t("No run kept on this computer changed it, so who wrote it isn't known.");
+  // A bridge that didn't say which lines the run's agent wrote (0.2.0, but for Claude Code): not known, either way.
+  return run.agentLines
     ? t("Changed during run {id}, but not by an agent's edit: by a command, or some other way.", { id: run.id })
-    : t("No run kept on this computer changed it, so who wrote it isn't known.");
+    : t("Changed during run {id}. Who wrote it isn't known.", { id: run.id });
 }
 
 /** Coloured by author: the file's lines by who wrote them, and the clicked line's run and prompt. */

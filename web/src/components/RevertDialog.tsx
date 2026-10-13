@@ -2,7 +2,8 @@
 // when ticked. A run with no shared file reverts at once, with no dialog (api/live.ts liveAction).
 import { openRevert, revertChosen } from '../api/live';
 import { ownFiles, sharedOf } from '../lib/model';
-import { st } from '../state/app';
+import { cn } from '../lib/utils';
+import { S, st } from '../state/app';
 import { bump, useRegion } from '../state/render';
 import { Button } from './ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';
@@ -13,6 +14,8 @@ let returnFocus: HTMLElement | null = null;
 
 export function RevertDialog() {
   useRegion('dialog');
+  // Drawn again as sessions start and end: a shared file's box is off while its other session works.
+  useRegion('side');
   const r = st.revert;
   const own = r ? ownFiles(r.run) : [],
     n = own.length + (r?.include.size ?? 0);
@@ -46,37 +49,44 @@ export function RevertDialog() {
                   {f}
                 </li>
               ))}
-              {[...sharedOf(r.run)].map(([f, runs]) => (
-                <li key={f}>
-                  <label className="flex cursor-pointer items-start gap-2">
-                    <input
-                      type="checkbox"
-                      data-include={f}
-                      checked={r.include.has(f)}
-                      onChange={e => {
-                        if (e.target.checked) r.include.add(f);
-                        else r.include.delete(f);
-                        bump('dialog');
-                      }}
-                      className="mt-px size-3.5 shrink-0 cursor-pointer accent-[var(--sel)]"
-                    />
-                    <span className="min-w-0">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="min-w-0 truncate font-mono" title={f}>
-                          {f}
+              {[...sharedOf(r.run)].map(([f, runs]) => {
+                // While the other session still works on it, the file can't go back: its edits aren't all in yet.
+                const busy = runs.find(id => S.WORKING.includes(id));
+                return (
+                  <li key={f}>
+                    <label className={cn('flex items-start gap-2', !busy && 'cursor-pointer')}>
+                      <input
+                        type="checkbox"
+                        data-include={f}
+                        disabled={busy !== undefined}
+                        checked={r.include.has(f)}
+                        onChange={e => {
+                          if (e.target.checked) r.include.add(f);
+                          else r.include.delete(f);
+                          bump('dialog');
+                        }}
+                        className="mt-px size-3.5 shrink-0 cursor-pointer accent-[var(--sel)] disabled:cursor-default"
+                      />
+                      <span className="min-w-0">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className={cn('min-w-0 truncate font-mono', busy && 'text-muted-foreground')} title={f}>
+                            {f}
+                          </span>
+                          <SharedTag runs={runs} />
                         </span>
-                        <SharedTag runs={runs} />
+                        <span className="mt-0.5 block text-muted-foreground text-pretty">
+                          {busy
+                            ? t('Run {id} is still working. Choose once it ends.', { id: busy })
+                            : t(
+                                'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.',
+                                { id: r.run.id },
+                              )}
+                        </span>
                       </span>
-                      <span className="mt-0.5 block text-muted-foreground text-pretty">
-                        {t(
-                          'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.',
-                          { id: r.run.id },
-                        )}
-                      </span>
-                    </span>
-                  </label>
-                </li>
-              ))}
+                    </label>
+                  </li>
+                );
+              })}
             </ul>
             <DialogFooter>
               <DialogClose asChild>

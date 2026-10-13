@@ -159,6 +159,12 @@ const catalogue: Catalogue = {
   'Ticked, the whole file goes in, the other session’s lines too.': '勾选后，整个文件都会提交，包括另一个会话的行。',
   'Outside {section}': '在 {section} 之外',
   'Outside its sections': '在其分区之外',
+  'Run {id} is still working on {files}. Choose it once run {id} ends.':
+    '运行 {id} 仍在处理 {files}。等运行 {id} 结束后再选择。',
+  'Run {id} is still working. Choose once it ends.': '运行 {id} 仍在进行。等它结束后再选择。',
+  'Outside lines {lines}': '在第 {lines} 行之外',
+  'Reverted, except {files}.': '已撤销，{files} 除外。',
+  "Changed during run {id}. Who wrote it isn't known.": '在运行 {id} 期间改动。不清楚是谁写的。',
   'Reverted run {id}, except {files}': '已撤销运行 {id}，{files} 除外',
   Agent: '代理',
   Human: '人',

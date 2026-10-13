@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { line, readJson, splitLines, serial } from './util.mjs';
+import { line, logError, readJson, splitLines, serial } from './util.mjs';
 import { inScope, rangeKept, scopeEntry } from './scope.mjs';
 import { ROOT, RUNS_DIR, git } from './repo.mjs';
 import { linesOf } from './agents/lines.mjs';
@@ -14,6 +14,7 @@ import {
   keepsBaseline,
   leaveEpoch,
   noteRevert,
+  sharedBusy,
   ownChanges,
   peersOf,
   startingPoint,
@@ -156,9 +157,14 @@ export async function finishRun(run, status = 'done', { checks = true } = {}) {
     );
   const peers = peersOf(run);
   await Promise.all([run, ...peers].map(stepsKept));
-  const wrote = await linesOf(run, peers, { stepsOf, blobAt });
-  run.agentLines = wrote.agent;
-  if (wrote.other) run.otherLines = wrote.other;
+  // Who wrote each line is worked out last, and a run ends whether or not it can be: left unsaid, never stuck.
+  try {
+    const wrote = await linesOf(run, peers, { stepsOf, blobAt });
+    run.agentLines = wrote.agent;
+    if (wrote.other) run.otherLines = wrote.other;
+  } catch (e) {
+    logError(e);
+  }
   if ((run.agent === 'detected' || run.agent === 'you') && run.changes.length) {
     run.title = editedTitle(run.changes);
     // The same title for the app to word: the first file's name, and how many more.
@@ -266,7 +272,10 @@ export function push(run, entry) {
   emit('progress', run);
 }
 export async function revertRun(run, force, chosen = []) {
-  // A file another session edited too is left as it is unless the person chose it (parallel.mjs share).
+  // A file another session edited too is left as it is unless the person chose it (parallel.mjs share), and can't
+  // be chosen while that session still works.
+  const busy = sharedBusy(run, chosen);
+  if (busy) throw busy;
   const left = (run.shared ?? []).map(s => s.path).filter(p => !chosen.includes(p));
   // A run names only files inside the repo; anything else in a run file is never read or touched.
   const changes = [...run.changes, ...(run.unseen ?? [])].filter(
@@ -283,8 +292,10 @@ export async function revertRun(run, force, chosen = []) {
     else if ((await blobAt(run.before, c.path)) !== null) back.push(c.path);
   await restoreFrom(run.before, back);
   run.reverted = true;
+  // What it left is kept on the run: reverted, but for these.
+  if (left.length) run.left = left;
   // The bridge's own writes are not someone's changes: taken into the baseline, or into the epoch under way.
-  if (working.size) noteRevert(run);
+  if (working.size) noteRevert(run, left);
   else await serial(() => rebase());
   saveRun(run);
   emit('state');

@@ -110,6 +110,10 @@ export interface Run {
   outOfScope?: string[];
   /** Files another session's edits named too, with those sessions: left out of its revert and commit unless chosen. */
   shared?: { path: string; with: number[] }[];
+  /** Files it changed that the map doesn't show (binary, or skipped): still its own, in its revert and commit. */
+  unseen?: { path: string }[];
+  /** Reverted, but for these: shared files the person left as they are. */
+  left?: string[];
   /** Without a sandbox, files a shell command changed outside the section and the bridge put back (bridge/lib/shell.mjs). */
   putBack?: { path: string; restored: boolean }[];
   /** Its colour on the map while it works (theme.css --session-1 to 5), given as it starts. */

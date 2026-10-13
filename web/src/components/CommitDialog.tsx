@@ -3,7 +3,7 @@
 // (bridge/lib/commit.mjs), never on its own.
 import { TriangleAlert } from 'lucide-react';
 import { commitDraft, openCommit } from '../api/live';
-import { st } from '../state/app';
+import { S, st } from '../state/app';
 import { bump, useRegion } from '../state/render';
 import { Button } from './ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';
@@ -15,6 +15,8 @@ import { t, tn } from '../i18n';
 
 export function CommitDialog() {
   useRegion('dialog');
+  // Drawn again as sessions start and end: a shared file's box is off while its other session works.
+  useRegion('side');
   const c = st.commit;
   const shared = c ? sharedOf(c.run) : new Map<string, number[]>(),
     n = c ? c.files.length + c.include.size : 0;
@@ -80,13 +82,16 @@ export function CommitDialog() {
               ))}
               {(c.shared ?? []).map(f => {
                 const later = !!c.later?.includes(f);
+                // While the other session still works on it, its edits aren't all in the file yet.
+                const busy = (shared.get(f) ?? []).find(id => S.WORKING.includes(id));
+                const off = later || busy !== undefined;
                 return (
                   <li key={f}>
-                    <label className={cn('flex items-start gap-2', !later && 'cursor-pointer')}>
+                    <label className={cn('flex items-start gap-2', !off && 'cursor-pointer')}>
                       <input
                         type="checkbox"
                         data-include={f}
-                        disabled={later}
+                        disabled={off}
                         checked={c.include.has(f)}
                         onChange={e => {
                           if (e.target.checked) c.include.add(f);
@@ -97,18 +102,17 @@ export function CommitDialog() {
                       />
                       <span className="min-w-0">
                         <span className="flex min-w-0 items-center gap-2">
-                          <span
-                            className={cn('min-w-0 truncate font-mono', later && 'text-muted-foreground')}
-                            title={f}
-                          >
+                          <span className={cn('min-w-0 truncate font-mono', off && 'text-muted-foreground')} title={f}>
                             {f}
                           </span>
                           <SharedTag runs={shared.get(f) ?? []} />
                         </span>
                         <span className="mt-0.5 block text-muted-foreground text-pretty">
-                          {later
-                            ? t('Changed since this run ended, so it can’t go in with it.')
-                            : t('Ticked, the whole file goes in, the other session’s lines too.')}
+                          {busy !== undefined
+                            ? t('Run {id} is still working. Choose once it ends.', { id: busy })
+                            : later
+                              ? t('Changed since this run ended, so it can’t go in with it.')
+                              : t('Ticked, the whole file goes in, the other session’s lines too.')}
                         </span>
                       </span>
                     </label>

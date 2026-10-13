@@ -12,7 +12,7 @@ import { blobAt, blobNow, headNow } from './snapshots.mjs';
 import { emitRun } from './events.mjs';
 import { saveRun } from './runs.mjs';
 import { line } from './util.mjs';
-import { noteCommit } from './parallel.mjs';
+import { noteCommit, sharedBusy } from './parallel.mjs';
 
 /**
  * What committing the run would hold. `files`: its own. `yours`: files it changed that the person had changed too
@@ -52,6 +52,8 @@ export function commitRun(run, { message = '', include = [] } = {}) {
     if (run.status === 'running' || run.reverted)
       throw refused('not-committable', 'Only a finished run can be committed.');
     if (!message.trim()) throw refused('no-message', 'Write a commit message first.');
+    const busy = sharedBusy(run, include);
+    if (busy) throw busy;
     const { files, yours, shared, changed } = await commitPreview(run, include);
     if (changed.length)
       throw refused('changed-since', `${changed.join(', ')} changed since the run.`, { files: changed.join(', ') });
@@ -96,9 +98,13 @@ export function commitRun(run, { message = '', include = [] } = {}) {
       .filter(Boolean);
     const hook = committed.filter(p => !chosen.includes(p));
     // In the person's index, only the committed files change, to what was committed (a hook may have reformatted
-    // one): they show clean, and everything else staged stays as it was.
+    // one): they show clean, and everything else staged stays as it was. So does a hook's file the person had
+    // staged a change of their own to: what they staged is theirs, not the commit's to replace.
+    const id = async args => (await gitAsync(args)).trim().split(/\s+/)[args[0] === 'ls-tree' ? 2 : 1] ?? null;
     entries.length = 0;
     for (const p of [...chosen, ...hook]) {
+      if (hook.includes(p) && (await id(['ls-files', '-s', '--', p])) !== (await id(['ls-tree', head.commit, '--', p])))
+        continue;
       const entry = (await gitAsync(['ls-tree', sha, '--', p])).trim();
       entries.push([p, entry ? entry.split(/\s+/).slice(0, 3) : null]);
     }

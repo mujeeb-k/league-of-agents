@@ -75,7 +75,7 @@ CORS echoes only allowed origins and sends `Access-Control-Allow-Private-Network
 | `POST /api/save` | `{ path, text, base }`. Writes the file as a run by `you`. 409 with the current `text` and `hash` if the file changed on disk since `base` |
 | `POST /api/runs/:id/cancel` | Kills the agent |
 | `POST /api/runs/:id/keep` | Marks kept |
-| `POST /api/runs/:id/revert` | `{ force, shared[] }`. 409 with `conflict[]` if files changed after the run. `shared` names the files another session edited too that go back with it; the rest of those are left, and named in `left[]` |
+| `POST /api/runs/:id/revert` | `{ force, shared[] }`. 409 with `conflict[]` if files changed after the run. `shared` names the files another session edited too that go back with it; the rest of those are left, named in `left[]` and kept on the run (`left`). A shared file whose other session still works is refused (`shared-busy`), in a revert and in a commit |
 | `POST /api/capture/start` and `/stop` | Used by the terminal hooks. They open and close only runs by `claude-terminal`; a new prompt closes a turn that never sent Stop (interrupted), and so does `SessionEnd` |
 
 The file routes serve and write only files the map shows (`listFiles()`: no `.env*`, `.git`, `.loa` or skip-list paths), whose real path is inside the repo, and that are text under 400 KB.

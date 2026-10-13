@@ -171,6 +171,13 @@ const catalogue: Catalogue = {
     'Marcado, entra el archivo entero, también las líneas de la otra sesión.',
   'Outside {section}': 'Fuera de {section}',
   'Outside its sections': 'Fuera de sus secciones',
+  'Run {id} is still working on {files}. Choose it once run {id} ends.':
+    'La ejecución {id} sigue trabajando en {files}. Elígelo cuando la ejecución {id} termine.',
+  'Run {id} is still working. Choose once it ends.': 'La ejecución {id} sigue trabajando. Elige cuando termine.',
+  'Outside lines {lines}': 'Fuera de las líneas {lines}',
+  'Reverted, except {files}.': 'Revertida, excepto {files}.',
+  "Changed during run {id}. Who wrote it isn't known.":
+    'Cambiado durante la ejecución {id}. No se sabe quién lo escribió.',
   'Reverted run {id}, except {files}': 'Ejecución {id} revertida, excepto {files}',
   Agent: 'Agente',
   Human: 'Humano',

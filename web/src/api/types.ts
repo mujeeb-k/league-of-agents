@@ -120,6 +120,8 @@ export interface RunDTO {
   outOfScope?: string[];
   /** Files another session's edits named too, with those sessions: left out of its revert and commit unless chosen. */
   shared?: { path: string; with: number[] }[];
+  /** Reverted, but for these: shared files the person left as they are (bridges after 0.2.0). */
+  left?: string[];
   /**
    * Without a sandbox, files a shell command changed outside the section, put back at once; what it wrote is kept
    * under `ref`, to restore (POST /api/runs/:id/put-back).

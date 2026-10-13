@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { applyHunks, diffRows, parseSample } from '../../src/lib/model';
+import { allFiles, applyHunks, diffRows, outsideOf, ownFiles, parseSample, sharedOf } from '../../src/lib/model';
 import { parseConn } from '../../src/api/conn';
 import { SAMPLE_RUNS, SAMPLE_TREE } from '../../src/demo/sample';
 import { SAMPLE_TEXT } from '../../src/demo/sampleText';
-import type { TreeSpec } from '../../src/lib/types';
+import type { Run, TreeSpec } from '../../src/lib/types';
 
 describe('diffRows', () => {
   it('interleaves context, deletions and additions with both line numbers', () => {
@@ -70,5 +70,46 @@ describe('demo sample', () => {
         const lines = code[p]!.split('\n');
         for (const [at, del] of ch) expect(at + del, `${p} @${at}`).toBeLessThanOrEqual(lines.length);
       }
+  });
+});
+
+describe("a run's files, as Keep, Revert and Commit count them", () => {
+  const run = {
+    changes: new Map([
+      ['a/tax.mjs', {}],
+      ['b/cart.mjs', {}],
+    ]),
+    unseen: [{ path: 'b/logo.png' }, { path: 'a/data.bin' }],
+    shared: [
+      { path: 'a/tax.mjs', with: [1] },
+      { path: 'a/data.bin', with: [1, 4] },
+    ],
+    outOfScope: ['a/tax.mjs', 'shared/allowlist.ts outside lines 3–5'],
+  } as unknown as Run;
+
+  it("counts the files the map doesn't show: a revert puts them back too", () => {
+    expect(allFiles(run)).toEqual(['a/tax.mjs', 'b/cart.mjs', 'b/logo.png', 'a/data.bin']);
+  });
+  it('leaves the shared ones out of its own, shown or not', () => {
+    expect(ownFiles(run)).toEqual(['b/cart.mjs', 'b/logo.png']);
+    expect([...sharedOf(run)]).toEqual([
+      ['a/tax.mjs', [1]],
+      ['a/data.bin', [1, 4]],
+    ]);
+  });
+  it('reads what the bridge flagged: a whole file, or the lines the run was held to', () => {
+    expect([...outsideOf(run)]).toEqual([
+      ['a/tax.mjs', null],
+      ['shared/allowlist.ts', '3–5'],
+    ]);
+  });
+  it('is nothing for a run from a bridge that sends none of it', () => {
+    const old = { changes: new Map([['x.ts', {}]]) } as unknown as Run;
+    expect([allFiles(old), ownFiles(old), [...sharedOf(old)], [...outsideOf(old)]]).toEqual([
+      ['x.ts'],
+      ['x.ts'],
+      [],
+      [],
+    ]);
   });
 });

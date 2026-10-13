@@ -1019,6 +1019,17 @@ test.describe('the app on the published 0.2.0 bridge', () => {
       await expect(page.locator('#insp .acts .warn')).toHaveText([
         'ScopeChanged outside every section while others worked: package.json',
       ]);
+      // Who wrote its line isn't known on this bridge, which reports Claude Code's edits only: said so, not that
+      // no agent's edit wrote it.
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('c');
+      await expect(page.locator('#byAuthor')).toHaveAttribute('aria-pressed', 'true');
+      const line = page.locator('.card[data-path="b/cart.mjs"] .ln', { hasText: 'edited by cursor' });
+      await line.scrollIntoViewIfNeeded();
+      await line.click();
+      await expect(page.locator('#authorLine')).toContainText(`Changed during run ${c.id}. Who wrote it isn't known.`);
+      await page.keyboard.press('c');
+      await page.locator(`#sideList [data-run="${c.id}"]`).click();
       // No file is known to be shared: Revert asks nothing.
       await expect(page.locator('[data-act="revert"]')).toHaveText('Revert 1 file');
       await page.locator('[data-act="revert"]').click();
@@ -4568,6 +4579,8 @@ test('lines selected in the editor scope a live run; changes outside them are fl
       'shared/allowlist.ts outside lines 3–5',
       ...(SANDBOX ? [] : ['shared/policy-cache.ts']),
     ]);
+    // On the file's row in the review list, by the lines it was held to.
+    await expect(page.locator('#insp .flist li', { hasText: 'allowlist.ts' })).toContainText('Outside lines 3–5');
     await expect(page.locator('#editor .cm-added').first()).toBeVisible();
     await expect(page.locator('#editor .cm-removed')).toContainText(["    throw new Error('ALLOWLIST_VIOLATION');"]);
     await page.locator('#rejectChange').click();
@@ -6509,6 +6522,137 @@ test.describe('two agents, one checkout', () => {
       { FAKE_CURSOR_WRITES_FIRST: '1' },
     ));
 
+  test("a shared file can't go back or be committed with one session while the other still works on it", () =>
+    twoAgents(async (b, repo) => {
+      const seed = read(repo, 'a/tax.mjs');
+      const { a, c } = await both(b, repo, 'want:a/tax.mjs', 'edit:b/invoice.mjs');
+      await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+      go(repo, 'c');
+      await until(b, c.id, 'done');
+      const d = await start(b, 'cursor', ['b/'], 'edit:b/cart.mjs edit:a/tax.mjs');
+      await until(b, d.id, 'done');
+      // Cursor's session has ended and Claude Code's still works: the file is shared already.
+      expect((await runOf(b, d.id)).shared).toEqual([{ path: 'a/tax.mjs', with: [a.id] }]);
+      const both2 = read(repo, 'a/tax.mjs');
+      const busy = { code: 'shared-busy', args: { id: a.id, files: 'a/tax.mjs' } };
+      const revert = await call(b, `/api/runs/${d.id}/revert`, { shared: ['a/tax.mjs'] });
+      expect(revert.status).toBe(409);
+      expect(revert.body).toMatchObject(busy);
+      const commit = await call(b, `/api/runs/${d.id}/commit`, { message: 'Summary', include: ['a/tax.mjs'] });
+      expect(commit.status).toBe(409);
+      expect(commit.body).toMatchObject(busy);
+      // Nothing was touched, and nothing recorded.
+      expect(read(repo, 'a/tax.mjs')).toBe(both2);
+      expect((await runOf(b, d.id)).reverted).toBe(false);
+      expect(git(repo, 'log', '--oneline').trim().split('\n')).toHaveLength(1);
+      // Left as it is, the revert goes through, and says on the run what it left.
+      const left = await call(b, `/api/runs/${d.id}/revert`, {});
+      expect([left.status, left.body]).toEqual([200, { ok: true, left: ['a/tax.mjs'] }]);
+      expect((await runOf(b, d.id)).left).toEqual(['a/tax.mjs']);
+      // Claude Code's session ends with the file still its own, and nothing is left for a run by none of them.
+      go(repo, 'a');
+      await until(b, a.id, 'done');
+      expect(paths(await runOf(b, a.id))).toEqual(['a/tax.mjs']);
+      expect((await state(b)).runs.map(r => r.agent)).toEqual(['claude', 'cursor', 'cursor']);
+      // Now that both have ended it can be chosen: back to the file as Claude Code's session found it.
+      const chosen = await call(b, `/api/runs/${a.id}/revert`, { shared: ['a/tax.mjs'] });
+      expect([chosen.status, chosen.body]).toEqual([200, { ok: true }]);
+      expect(read(repo, 'a/tax.mjs')).toBe(seed);
+    }));
+
+  test('a shared file a revert left is no leftover when a third session ends later', () =>
+    twoAgents(async (b, repo) => {
+      const { a, c } = await both(b, repo, 'want:a/tax.mjs', 'edit:b/invoice.mjs');
+      await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+      // A third session, on a file of its own, works until the end.
+      const third = await start(b, 'claude', ['README.md'], 'want:README.md wait:z');
+      go(repo, 'c');
+      await until(b, c.id, 'done');
+      const d = await start(b, 'cursor', ['b/'], 'edit:b/cart.mjs edit:a/tax.mjs');
+      await until(b, d.id, 'done');
+      go(repo, 'a');
+      await until(b, a.id, 'done');
+      const both2 = read(repo, 'a/tax.mjs');
+      // Both sharers have ended. Cursor's session is reverted with the shared file left as it is.
+      const left = await call(b, `/api/runs/${d.id}/revert`, {});
+      expect(left.body).toEqual({ ok: true, left: ['a/tax.mjs'] });
+      go(repo, 'z');
+      await until(b, third.id, 'done');
+      // The file is as both left it, and no run "by none of them" holds it: reverting one would undo what was left.
+      expect(read(repo, 'a/tax.mjs')).toBe(both2);
+      await expect.poll(async () => (await state(b)).working).toEqual([]);
+      expect((await state(b)).runs.map(r => r.agent)).toEqual(['claude', 'cursor', 'claude', 'cursor']);
+    }));
+
+  test("a session reverted before another edits its file doesn't share that file", () =>
+    twoAgents(async (b, repo) => {
+      const seed = read(repo, 'a/tax.mjs');
+      const a = await start(b, 'claude', ['a/'], 'want:a/tax.mjs wait:a');
+      const d = await start(b, 'cursor', ['b/'], 'edit:b/cart.mjs wait:c edit:a/tax.mjs');
+      await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+      go(repo, 'a');
+      await until(b, a.id, 'done');
+      // Reverted while Cursor's session still works, and before that session touches the file.
+      expect((await call(b, `/api/runs/${a.id}/revert`, {})).body).toEqual({ ok: true });
+      expect(read(repo, 'a/tax.mjs')).toBe(seed);
+      go(repo, 'c');
+      await until(b, d.id, 'done');
+      const [ra, rd] = [await runOf(b, a.id), await runOf(b, d.id)];
+      // Only Cursor's edit is in the file: it is Cursor's alone, to revert and commit unasked.
+      expect(read(repo, 'a/tax.mjs')).toBe(seed + '// edited by cursor in ' + rd.sessionId + '\n');
+      expect(paths(rd)).toContain('a/tax.mjs');
+      expect([ra.shared, rd.shared]).toEqual([undefined, undefined]);
+    }));
+
+  test('a run that edits a very long file still ends, and the next one starts', async () => {
+    const repo = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'loa-e2e-')), 'two-sections');
+    execFileSync(process.execPath, [TWO_SECTIONS, repo]);
+    // 130,000 lines: past what one call can take as arguments.
+    fs.writeFileSync(
+      path.join(repo, 'b/table.mjs'),
+      Array.from({ length: 130_000 }, (_, i) => `// row ${i}\n`).join(''),
+    );
+    git(repo, 'add', '-A');
+    git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'a long file');
+    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_CURSOR_BIN: FAKE_CURSOR });
+    try {
+      const d = await start(b, 'cursor', ['b/'], 'edit:b/table.mjs');
+      await expect.poll(async () => (await runOf(b, d.id)).status, { timeout: 30_000 }).toBe('done');
+      expect(paths(await runOf(b, d.id))).toEqual(['b/table.mjs']);
+      expect((await state(b)).working).toEqual([]);
+      const next = await start(b, 'claude', [], 'want:a/rounding.mjs');
+      await until(b, next.id, 'done');
+    } finally {
+      b.stop();
+      fs.rmSync(path.dirname(repo), { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+    }
+  });
+
+  test("while its other session still works, a shared file's box is off in Revert, with the reason", ({ page }) =>
+    twoAgents(async (b, repo) => {
+      const { a, c } = await both(b, repo, 'want:a/tax.mjs', 'edit:b/invoice.mjs');
+      await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+      go(repo, 'c');
+      await until(b, c.id, 'done');
+      const d = await start(b, 'cursor', ['b/'], 'edit:b/cart.mjs edit:a/tax.mjs');
+      await until(b, d.id, 'done');
+      await page.goto(linkFor(b));
+      await expect(page.locator('#conn')).toHaveText('Live');
+      await page.locator(`#sideList [data-run="${d.id}"]`).click();
+      await page.locator('#insp [data-act="revert"]').click();
+      const tick = page.locator('#revertDlg [data-include="a/tax.mjs"]');
+      await expect(tick).toBeDisabled();
+      await expect(page.locator('#revertFiles li').last()).toContainText(
+        `Run ${a.id} is still working. Choose once it ends.`,
+      );
+      await expect(page.locator('#revertConfirm')).toHaveText('Revert 1 file');
+      // Once that session ends, the box can be ticked.
+      go(repo, 'a');
+      await until(b, a.id, 'done');
+      await expect(tick).toBeEnabled();
+      await page.keyboard.press('Escape');
+    }));
+
   /**
    * Three runs, as the app shows them: Claude Code (run 1, a/) rewrote a/tax.mjs and made a/rounding.mjs; Cursor
    * (run 3, b/) edited b/cart.mjs, a/discount.mjs and, after Claude Code, a/tax.mjs. Both have ended.
@@ -6540,7 +6684,7 @@ test.describe('two agents, one checkout', () => {
         const rows = page.locator('#insp .flist li');
         await expect(rows).toHaveText(['discount.mjsOutside b/+1', 'tax.mjsShared with run 1+1', 'cart.mjs+1']);
         await expect(page.locator('#insp .acts .warn')).toHaveCount(0);
-        await expect(page.locator('#insp .warnbox')).toHaveCount(0);
+        await expect(page.locator('#insp .offlist')).toHaveCount(0);
         // The counts are what each button does: Revert puts back the run's own two files, Keep keeps all three.
         const revert = page.locator('#insp [data-act="revert"]');
         await expect(revert).toHaveText('Revert 2 files');
@@ -6593,6 +6737,8 @@ test.describe('two agents, one checkout', () => {
       await page.locator('#insp [data-act="revert"]').click();
       await page.locator('#revertConfirm').click();
       await expect(page.locator(TOAST)).toHaveText(`Reverted run ${d.id}, except a/tax.mjs`);
+      // The run says so too, for as long as it is kept: not that its changes are gone.
+      await expect(page.locator('#insp .outcome')).toHaveText('Reverted, except a/tax.mjs.');
       expect(read(repo, 'a/tax.mjs')).toBe(both2);
       expect(read(repo, 'b/cart.mjs')).toBe(cart);
     }));
@@ -6663,6 +6809,22 @@ test.describe('two agents, one checkout', () => {
       // What the hook wrote in b/ is the commit's, not the session's that was working there.
       expect(paths(await runOf(b, c.id))).toEqual(['b/cart.mjs']);
       expect((await state(b)).runs.map(r => r.agent)).toEqual(['claude', 'cursor']);
+    }));
+
+  test("a commit hook's file the person had staged their own change to keeps what they staged", () =>
+    twoAgents(async (b, repo) => {
+      const a = await start(b, 'claude', ['a/'], 'want:a/rounding.mjs');
+      await until(b, a.id, 'done');
+      // Their own line in the list the hook keeps: staged, not committed.
+      fs.appendFileSync(path.join(repo, 'b/MODULES.md'), 'mine, staged\n');
+      git(repo, 'add', 'b/MODULES.md');
+      const staged = git(repo, 'show', ':b/MODULES.md');
+      const made = await call(b, `/api/runs/${a.id}/commit`, { message: 'Rounding' });
+      expect(made.status).toBe(200);
+      expect(made.body).toMatchObject({ files: ['a/rounding.mjs'], hook: ['b/MODULES.md'] });
+      // The hook's list went into the commit; what the person staged is still staged, as they staged it.
+      expect(git(repo, 'show', 'HEAD:b/MODULES.md')).not.toContain('mine, staged');
+      expect(git(repo, 'show', ':b/MODULES.md')).toBe(staged);
     }));
 
   test('both sessions committed at once: two commits, one after the other, each with its own files', () =>
