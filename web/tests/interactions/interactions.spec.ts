@@ -11,24 +11,20 @@ async function view(page: Page) {
     return { x: +m[1]!, y: +m[2]!, s: +m[3]! };
   });
 }
-/** The view once a flight has ended: the same twice running. With reduced motion a flight ends at once. */
-async function rested(page: Page) {
-  for (let a = await view(page); ;) {
-    await page.waitForTimeout(60);
-    const b = await view(page);
-    if (a.x === b.x && a.y === b.y && a.s === b.s) return b;
-    a = b;
-  }
-}
 /**
- * Stops the demo's sessions and goes back to the Files tab. While a session works, or the Runs tab shows, the
- * sidebar stays at every zoom (panels.ts sideVisibleAt): the tests of how it steps aside start from here.
+ * The view once a flight has ended: the same on three reads running, 60 ms apart, so one late frame isn't taken
+ * for rest. With reduced motion a flight ends at once. A map that never rests fails here, not at the test's limit.
  */
-async function stopDemoSessions(page: Page) {
-  await page.locator('[data-tab="runs"]').click();
-  await page.locator('#stopAll').click();
-  await expect(page.locator('#sideList .run.running')).toHaveCount(0);
-  await page.locator('[data-tab="files"]').click();
+async function rested(page: Page) {
+  const same = (a: { x: number; y: number; s: number }, b: typeof a) => a.x === b.x && a.y === b.y && a.s === b.s;
+  let [a, b] = [await view(page), await view(page)];
+  for (const t0 = Date.now(); Date.now() - t0 < 5000;) {
+    await page.waitForTimeout(60);
+    const c = await view(page);
+    if (same(a, b) && same(b, c)) return c;
+    [a, b] = [b, c];
+  }
+  throw new Error('the map was still moving after 5 s');
 }
 const stageBox = async (page: Page) => (await page.locator('#stage').boundingBox())!;
 /** A point on the stage where nothing on the canvas is hit, so clicks land on empty canvas. */
@@ -527,9 +523,6 @@ test('[, ] and 0 work by key position on layouts that type something else there'
   const side = page.locator('#side'),
     insp = page.locator('#insp');
   const AWAY = /(^|\s)away(\s|$)/;
-  await stopDemoSessions(page);
-  await page.keyboard.press('0');
-  await expect(side).toHaveClass(AWAY);
   // Stepping into a file zooms in, and the sidebar comes back.
   await page.keyboard.press('j');
   await expect(side).not.toHaveClass(AWAY);
@@ -556,7 +549,6 @@ test('sidebar steps aside below code zoom; pin, [ and ] and the inspector handle
   await page.locator('#insp section').first().waitFor();
   // On first load the sidebar shows, whatever the zoom; the first zoom out fades it.
   await expect(side).not.toHaveClass(AWAY);
-  await stopDemoSessions(page);
   await expect(page.locator('#sideBtn')).toHaveAttribute('aria-pressed', 'true');
   // The demo opens at code zoom (camera.ts openingView); fitting everything zooms out past it.
   await page.keyboard.press('0');
@@ -604,9 +596,14 @@ test('sidebar steps aside below code zoom; pin, [ and ] and the inspector handle
 test('the run list stays through a flight to the whole map', { tag: '@motion' }, async ({ page }) => {
   await page.reload();
   await page.locator('#insp section').first().waitFor();
+  // This project runs with motion on, every other with it reduced: the flight below is a real one only here.
+  expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(
+    test.info().project.name !== 'motion',
+  );
   await page.locator('[data-tab="runs"]').click();
   await page.keyboard.press('0');
-  await expect.poll(async () => (await view(page)).s).toBeLessThan(0.34);
+  // Once the flight has ended, below code zoom: the Files tab would have stepped aside here.
+  expect((await rested(page)).s).toBeLessThan(0.34);
   await expect(page.locator('#world')).not.toHaveClass(/near/);
   await expect(page.locator('#side')).not.toHaveClass(/(^|\s)away(\s|$)/);
   await expect(page.locator('#sideList .run').first()).toBeVisible();

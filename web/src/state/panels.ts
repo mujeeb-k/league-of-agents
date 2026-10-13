@@ -1,7 +1,7 @@
 // The sidebar and the inspector around the canvas. The sidebar floats over the canvas, so showing or
 // hiding it moves only opacity and position; the canvas never resizes for it. Choices are remembered.
 import { NEAR } from '../lib/constants';
-import { dom, st } from './app';
+import { S, dom, st } from './app';
 import { bump } from './render';
 import { workingRuns } from './sessions';
 
@@ -35,16 +35,26 @@ function save() {
 }
 
 const narrow = () => matchMedia('(width < 860px)').matches;
-/** In auto mode the sidebar shows on first load, whatever the zoom, until the first zoom, so a first-time visitor sees the files. */
+/**
+ * In auto mode the sidebar shows whatever the zoom until the next zoom: on first load, so a first-time visitor sees
+ * the files, and after the person picks one of its tabs, so it doesn't go from under the pointer.
+ */
 let firstLoad = true;
 export function endFirstLoad() {
   if (!firstLoad) return;
   firstLoad = false;
   applyPanels();
 }
+/** A tab was picked by hand: the sidebar stays as it is until the next zoom. */
+export function holdSide() {
+  firstLoad = true;
+}
 
-/** The map shows the tree at every zoom, never the run list: the Runs tab stays, and so does a session at work. */
-const wanted = () => st.tab === 'runs' || workingRuns().length > 0;
+/**
+ * The map shows the tree at every zoom, never the run list: the Runs tab stays, and in a connected repo so does a
+ * session at work. In the demo, whose sessions are scripted, the Files tab steps aside as it always has.
+ */
+const wanted = () => st.tab === 'runs' || (!!S.CONN && workingRuns().length > 0);
 
 export const sideVisibleAt = (s: number) =>
   !narrow() &&

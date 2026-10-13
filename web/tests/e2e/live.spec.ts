@@ -5941,8 +5941,10 @@ test('in auto mode the sidebar stays at every zoom while the Runs tab shows or a
     await zoomTo(page, 20);
     await expect(side).not.toHaveClass(AWAY);
     await expect(page.locator('#sideBtn')).toHaveAttribute('aria-pressed', 'true');
-    // Back on Files it steps aside at once, and comes back with the code.
+    // Back on Files it stays under the pointer, steps aside with the next zoom, and comes back with the code.
     await page.locator('[data-tab="files"]').click();
+    await expect(side).not.toHaveClass(AWAY);
+    await zoomTo(page, 18);
     await expect(side).toHaveClass(AWAY);
     await zoomTo(page, 60);
     await expect(side).not.toHaveClass(AWAY);
