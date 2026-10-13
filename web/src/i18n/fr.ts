@@ -162,7 +162,6 @@ const catalogue: Catalogue = {
     'Remet ces fichiers comme ils étaient avant l’exécution {id}. Rien d’autre n’est touché.',
   'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.':
     'Coché, il revient tel que l’exécution {id} l’a trouvé. Ce que l’autre session y a modifié depuis est perdu.',
-  'Revert {n} files': { one: 'Annuler {n} fichier', other: 'Annuler {n} fichiers' },
   'Commit {n} files': { one: 'Committer {n} fichier', other: 'Committer {n} fichiers' },
   'Keep {n} files': { one: 'Garder {n} fichier', other: 'Garder {n} fichiers' },
   'Changed since this run ended, so it can’t go in with it.':
@@ -331,8 +330,6 @@ const catalogue: Catalogue = {
   'Add a file and commit it, or describe what to build in the prompt below. New files appear here as they are made.':
     'Ajoutez un fichier et committez-le, ou décrivez ce qu’il faut construire dans le prompt ci-dessous. Les nouveaux fichiers apparaissent ici au fur et à mesure.',
   'Latest state, colored by who wrote each line.': 'Dernier état, coloré selon qui a écrit chaque ligne.',
-  'Latest state. Open a run to compare before and after.':
-    'Dernier état. Ouvrez une exécution pour comparer avant et après.',
   'By author': 'Par auteur',
   Compare: 'Comparer',
   'The bridge stopped answering. The last state stays on screen.':

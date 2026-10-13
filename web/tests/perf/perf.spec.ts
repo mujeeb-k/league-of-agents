@@ -288,7 +288,7 @@ for (const lang of ['en', 'fr'] as const)
     await add('step to the next file (J)', { key: 'j', until: '.flist li.cur' });
     await add('mark reviewed (R)', { key: 'r', until: '.flist .chk.on' });
     await add('keep the run', { click: '[data-act="keep"]', until: '#insp .outcome', text: word('Kept') });
-    await add('close the run (Esc)', { key: 'Escape', until: '#runbar .quiet' });
+    await add('close the run (Esc)', { key: 'Escape', until: '#runbar:not(:has(b))' });
     if (await page.locator('#side').evaluate(el => el.hasAttribute('inert'))) await page.keyboard.press('[');
     await page.locator('[data-tab="runs"]').click();
     await add('open a run from its card', {

@@ -152,7 +152,6 @@ const catalogue: Catalogue = {
     '将这些文件恢复到运行 {id} 之前的样子。其他内容不受影响。',
   'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.':
     '勾选后，它会恢复到运行 {id} 开始时的样子，另一个会话此后对它的改动将丢失。',
-  'Revert {n} files': { other: '撤销 {n} 个文件' },
   'Commit {n} files': { other: '提交 {n} 个文件' },
   'Keep {n} files': { other: '保留 {n} 个文件' },
   'Changed since this run ended, so it can’t go in with it.': '这次运行结束后它又有改动，因此不能随这次运行提交。',
@@ -310,7 +309,6 @@ const catalogue: Catalogue = {
   'Add a file and commit it, or describe what to build in the prompt below. New files appear here as they are made.':
     '添加一个文件并提交，或在下方的提示词中描述要构建的内容。新文件创建后会出现在这里。',
   'Latest state, colored by who wrote each line.': '最新状态，按每行的作者着色。',
-  'Latest state. Open a run to compare before and after.': '最新状态。打开一次运行来比较之前和之后。',
   'By author': '按作者',
   Compare: '比较',
   'The bridge stopped answering. The last state stays on screen.': '桥接程序停止响应。屏幕上保留最后的状态。',

@@ -43,11 +43,11 @@ function RunBar() {
         id="runbar"
         className="flex min-w-0 flex-1 items-center justify-center gap-3 max-[700px]:order-last max-[700px]:basis-full"
       >
-        <span className="quiet truncate text-muted-foreground">
-          {st.byAuthor
-            ? t('Latest state, colored by who wrote each line.')
-            : t('Latest state. Open a run to compare before and after.')}
-        </span>
+        {st.byAuthor ? (
+          <span className="quiet truncate text-muted-foreground">
+            {t('Latest state, colored by who wrote each line.')}
+          </span>
+        ) : null}
         <Tip label={st.byAuthor ? t('Stop coloring by author') : t('Color by author')} keys="C">
           <Button
             variant={st.byAuthor ? 'secondary' : 'ghost'}

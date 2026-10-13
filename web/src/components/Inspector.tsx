@@ -19,18 +19,7 @@ import { flyFile } from '../lib/camera';
 import { shareOf, type Author, type Owner } from '../lib/attribution';
 import { runsRepoCode } from '../lib/checks';
 import { agentOf, modelOf } from '../lib/constants';
-import {
-  allFiles,
-  existsNow,
-  fileStat,
-  linesAt,
-  needsYou,
-  outsideOf,
-  ownFiles,
-  runStats,
-  sharedOf,
-  viewOf,
-} from '../lib/model';
+import { allFiles, existsNow, fileStat, linesAt, needsYou, outsideOf, runStats, sharedOf, viewOf } from '../lib/model';
 import type { Run } from '../lib/types';
 import { money } from '../lib/util';
 import { said } from '../lib/said';
@@ -159,9 +148,6 @@ const outsideText = (run: Run, lines: string | null) =>
       ? t('Outside {section}', { section: run.scope[0]! })
       : t('Outside its sections');
 
-/** Revert with its count: the run's own files. One whose files are all shared has none until the dialog's ticks. */
-const revertText = (own: number) => (own ? tn(own, 'Revert {n} file', 'Revert {n} files') : t('Revert'));
-
 /** A run action button: disabled while the bridge works on any action, with a spinner on the one in progress. */
 function ActButton({ run, act, children, ...props }: React.ComponentProps<typeof Button> & { run: Run; act: string }) {
   const mine = st.busy === `${act}:${run.id}`;
@@ -223,8 +209,7 @@ function RunView({ run }: { run: Run }) {
   const done = files.filter(p => run.reviewed.has(p)).length,
     running = run.status === 'running';
   const shared = sharedOf(run),
-    outside = outsideOf(run),
-    own = ownFiles(run).length;
+    outside = outsideOf(run);
   // What a row would say, for files the list has no row for (the map doesn't show them).
   const offList = [...new Set([...shared.keys(), ...outside.keys()])].filter(p => !run.changes.has(p));
   const reply =
@@ -460,8 +445,8 @@ function RunView({ run }: { run: Run }) {
                         {shared.has(p) ? (
                           <SharedTag runs={shared.get(p)!} />
                         ) : outside.has(p) ? (
-                          <span className="outside flex shrink-0 items-center gap-1 font-sans text-ink2">
-                            <TriangleAlert className="size-3.5 text-mod" />
+                          // Words only: the triangle means an agent that isn't held to its section, nothing else.
+                          <span className="outside shrink-0 font-sans text-ink2">
                             {outsideText(run, outside.get(p)!)}
                           </span>
                         ) : null}
@@ -496,10 +481,7 @@ function RunView({ run }: { run: Run }) {
               {shared.has(p) ? (
                 <SharedTag runs={shared.get(p)!} />
               ) : (
-                <>
-                  <TriangleAlert className="size-4 shrink-0 text-mod" />
-                  <span className="shrink-0 text-ink2">{outsideText(run, outside.get(p)!)}</span>
-                </>
+                <span className="shrink-0 text-ink2">{outsideText(run, outside.get(p)!)}</span>
               )}
               <span className="min-w-0 truncate font-mono text-xs" title={p}>
                 {p}
@@ -533,7 +515,7 @@ function RunView({ run }: { run: Run }) {
                   </div>
                   <div className="actions mt-3 flex gap-2">
                     <ActButton run={run} act="revert" variant="outline" className="flex-1 tabular-nums">
-                      {revertText(own)}
+                      {t('Revert')}
                     </ActButton>
                     <Button
                       id="commitBtn"
@@ -553,7 +535,7 @@ function RunView({ run }: { run: Run }) {
                   <span className="font-medium">{t('Kept')}</span>
                   <span className="text-muted-foreground">{t('Changes stay in your working tree.')}</span>
                   <ActButton run={run} act="revert" variant="outline" size="sm" className="ml-auto tabular-nums">
-                    {revertText(own)}
+                    {t('Revert')}
                   </ActButton>
                 </div>
               ) : (
@@ -565,7 +547,7 @@ function RunView({ run }: { run: Run }) {
                     variant={checksFailed ? 'default' : 'outline'}
                     className="flex-1 tabular-nums"
                   >
-                    {revertText(own)}
+                    {t('Revert')}
                   </ActButton>
                   <ActButton
                     run={run}

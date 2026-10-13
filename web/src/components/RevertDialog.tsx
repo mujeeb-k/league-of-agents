@@ -8,7 +8,7 @@ import { bump, useRegion } from '../state/render';
 import { Button } from './ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';
 import { SharedTag } from './bits';
-import { t, tn } from '../i18n';
+import { t } from '../i18n';
 
 let returnFocus: HTMLElement | null = null;
 
@@ -100,7 +100,7 @@ export function RevertDialog() {
                 className="text-del tabular-nums hover:text-del"
                 onClick={() => void revertChosen()}
               >
-                {tn(n, 'Revert {n} file', 'Revert {n} files')}
+                {t('Revert')}
               </Button>
             </DialogFooter>
           </>

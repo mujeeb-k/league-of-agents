@@ -938,7 +938,7 @@ test.describe('the app on the published 0.2.0 bridge', () => {
       await expect(page.locator('#runAgent')).toHaveText('Claude Code · claude-sonnet-5-5');
       // The review list, with nothing on a row but its file, and each button's count.
       await expect(page.locator('#insp .flist li')).toHaveText(['allowlist.ts+5 −1', 'policy-cache.ts+3']);
-      await expect(page.locator('[data-act="revert"]')).toHaveText('Revert 2 files');
+      await expect(page.locator('[data-act="revert"]')).toHaveText('Revert');
       await expect(page.locator('[data-act="keep"]')).toHaveText('Keep 2 files');
       for (const f of ['shared/allowlist.ts', 'shared/policy-cache.ts'])
         expect(await cardRows(page, f)).toEqual(gitRows(repo, f));
@@ -987,7 +987,7 @@ test.describe('the app on the published 0.2.0 bridge', () => {
       await expect(page.locator('#sideList [data-run="3"]')).toContainText('Edited allowlist.ts', { timeout: 15_000 });
       await page.locator('[data-act="revert"]').click();
       await expect(page.locator('#conflictFiles')).toContainText('shared/allowlist.ts');
-      await expect(page.locator('#conflictRevert')).toHaveText('Revert 2 files');
+      await expect(page.locator('#conflictRevert')).toHaveText('Revert');
       await page.locator('#conflictRevert').click();
       await expect(page.locator(TOAST)).toHaveText('Reverted run 2');
       expect(fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8')).toBe(SEED['shared/allowlist.ts']);
@@ -1031,7 +1031,7 @@ test.describe('the app on the published 0.2.0 bridge', () => {
       await page.keyboard.press('c');
       await page.locator(`#sideList [data-run="${c.id}"]`).click();
       // No file is known to be shared: Revert asks nothing.
-      await expect(page.locator('[data-act="revert"]')).toHaveText('Revert 1 file');
+      await expect(page.locator('[data-act="revert"]')).toHaveText('Revert');
       await page.locator('[data-act="revert"]').click();
       await expect(page.locator(TOAST)).toHaveText(`Reverted run ${c.id}`);
       await expect(page.locator('#revertDlg')).toHaveCount(0);
@@ -6688,7 +6688,7 @@ test.describe('two agents, one checkout', () => {
       await expect(page.locator('#revertFiles li').last()).toContainText(
         `Run ${a.id} is still working. Choose once it ends.`,
       );
-      await expect(page.locator('#revertConfirm')).toHaveText('Revert 1 file');
+      await expect(page.locator('#revertConfirm')).toHaveText('Revert');
       // Once that session ends, the box can be ticked.
       go(repo, 'a');
       await until(b, a.id, 'done');
@@ -6730,7 +6730,7 @@ test.describe('two agents, one checkout', () => {
         await expect(page.locator('#insp .offlist')).toHaveCount(0);
         // The counts are what each button does: Revert puts back the run's own two files, Keep keeps all three.
         const revert = page.locator('#insp [data-act="revert"]');
-        await expect(revert).toHaveText('Revert 2 files');
+        await expect(revert).toHaveText('Revert');
         await expect(page.locator('#insp [data-act="keep"]')).toHaveText('Keep 3 files');
         // Revert asks, since the run has a shared file: unticked, and the count follows the tick.
         await revert.click();
@@ -6743,9 +6743,9 @@ test.describe('two agents, one checkout', () => {
         ]);
         const tick = dlg.locator('[data-include="a/tax.mjs"]');
         await expect(tick).not.toBeChecked();
-        await expect(page.locator('#revertConfirm')).toHaveText('Revert 2 files');
+        await expect(page.locator('#revertConfirm')).toHaveText('Revert');
         await tick.check();
-        await expect(page.locator('#revertConfirm')).toHaveText('Revert 3 files');
+        await expect(page.locator('#revertConfirm')).toHaveText('Revert');
         // Cancel touches nothing and gives focus back to the button.
         await dlg.getByRole('button', { name: 'Cancel' }).click();
         await expect(dlg).toHaveCount(0);
@@ -6760,7 +6760,7 @@ test.describe('two agents, one checkout', () => {
         await page.locator('#revertConfirm').click();
         const conflict = page.locator('#conflictDlg');
         await expect(conflict.locator('#conflictFiles li')).toHaveText(['a/tax.mjs']);
-        await expect(page.locator('#conflictRevert')).toHaveText('Revert 3 files');
+        await expect(page.locator('#conflictRevert')).toHaveText('Revert');
         await page.locator('#conflictRevert').click();
         await expect(page.locator(TOAST)).toHaveText(`Reverted run ${d.id}`);
         expect(read(repo, 'a/tax.mjs')).toBe('// written by a session\n');

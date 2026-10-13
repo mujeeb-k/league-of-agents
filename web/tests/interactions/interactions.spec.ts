@@ -838,13 +838,15 @@ test('open a run, close it with the button and with Escape', { tag: '@motion' },
   await page.locator('#sideList [data-run="12"]').click();
   await expect(page.locator('#runbar b')).toHaveText('Run 12');
   await page.locator('[data-act="closeRun"]').click();
-  await expect(page.locator('#runbar .quiet')).toHaveText('Latest state. Open a run to compare before and after.');
+  // With no run open the bar says nothing: the hint that stood here is gone.
+  await expect(page.locator('#runbar b')).toHaveCount(0);
+  await expect(page.locator('#runbar .quiet')).toHaveCount(0);
   await page.locator('#sideList [data-run="13"]').click();
   await page.keyboard.press('Escape');
-  await expect(page.locator('#runbar .quiet')).toBeVisible();
+  await expect(page.locator('#runbar b')).toHaveCount(0);
   await page.locator('#sideList [data-run="13"]').click();
   await page.locator('#sideList [data-run="13"]').click();
-  await expect(page.locator('#runbar .quiet')).toBeVisible();
+  await expect(page.locator('#runbar b')).toHaveCount(0);
 });
 
 test('before, after and diff by click and by B, A, D', async ({ page }) => {
@@ -1012,7 +1014,7 @@ test('Escape closes the menu, then clears the selection, then closes the run', a
   await expect(page.locator('#scopeRow .chip:not(.all)')).toHaveCount(0);
   await expect(page.locator('#runbar b')).toHaveText('Run 14');
   await page.keyboard.press('Escape');
-  await expect(page.locator('#runbar .quiet')).toBeVisible();
+  await expect(page.locator('#runbar b')).toHaveCount(0);
 });
 
 test('minimap click and drag move the view', async ({ page }) => {
