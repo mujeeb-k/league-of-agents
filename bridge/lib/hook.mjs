@@ -29,7 +29,7 @@ export async function runHook(kind, agent = 'claude') {
   }
   // Cursor reads an answer from every hook; its run goes on either way.
   const done = () => {
-    if (agent === 'cursor') process.stdout.write(kind === 'start' ? '{"continue":true}\n' : '{}\n');
+    if (agent === 'cursor') say(kind === 'start' ? '{"continue":true}\n' : '{}\n');
     process.exit(0);
   };
   if (process.env.LOA_MANAGED) done();
@@ -123,11 +123,27 @@ const quoted = s => `'${String(s).replace(/'/g, "'\\''")}'`;
  * outside the sandbox. Any other tool that could reach a file or start a program is refused. Whatever goes wrong
  * here, the call is refused.
  */
+/**
+ * Writes the hook's answer whole. To a pipe, `process.stdout.write` returns before a long answer is written, and
+ * the `process.exit` that follows cuts it at what the pipe took at once: 8,192 bytes on some Macs, 65,536 on
+ * others. The answer that holds a command with the sandbox's rules is longer than the first.
+ */
+function say(text) {
+  const bytes = Buffer.from(text);
+  for (let at = 0; at < bytes.length;) {
+    try {
+      at += fs.writeSync(1, bytes, at);
+    } catch (e) {
+      // The pipe is full until its reader takes some: tried again.
+      if (e.code !== 'EAGAIN') throw e;
+    }
+  }
+}
 function hold(data, cwd) {
   // Said in so many words: the session runs in the mode where Claude Code does only what is allowed (registry.mjs),
   // so a call this hook never saw is left to Claude Code's own check, not run.
   const allow = updatedInput => {
-    process.stdout.write(
+    say(
       JSON.stringify({
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',

@@ -250,6 +250,20 @@ describe.runIf(process.platform === 'darwin')('a session on a section, in its sa
     });
   });
 
+  it("the hook's answer arrives whole, however long it is", () => {
+    // The answer is the command to run, with the sandbox's rules in it: 10 kB for one folder. Written and then cut
+    // off by the hook's own exit, it arrived short wherever a pipe took less at once than it held: at 8,192 bytes
+    // on GitHub's Mac. Here a selection of 300 files with long names makes it longer than a pipe holds on this one.
+    const scope = Array.from({ length: 300 }, (_, i) => `src/${'a-long-folder-name-'.repeat(8)}${i}/file.ts`);
+    withSession({ scope }, s => {
+      const hook = hooked(s, 'Bash', { command: 'echo hello' });
+      expect(hook.status, hook.stderr).toBe(0);
+      expect(hook.stdout.length).toBeGreaterThan(70_000);
+      const answer = JSON.parse(hook.stdout) as { hookSpecificOutput: { updatedInput: { command: string } } };
+      expect(answer.hookSpecificOutput.updatedInput.command).toMatch(/commands\/t1\.sh'$/);
+    });
+  });
+
   it('whatever its quotes, new lines and substitutions, a command runs inside and changes nothing outside', () => {
     // Each would write outside the section if any part of it were read by the shell that starts the sandbox.
     const out = 'echo x >> other.txt; touch "$HOME/escaped"';
