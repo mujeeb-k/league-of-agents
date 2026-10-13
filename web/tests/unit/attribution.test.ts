@@ -47,6 +47,25 @@ describe('authorsOf', () => {
     expect(labels(owners)).toEqual(['unknown', 'agent:1', 'unknown:1', 'human:2', 'unknown', 'unknown:3']);
   });
 
+  it("labels another session's edit inside a run's file as that session's line", () => {
+    id = 0;
+    // Run 1 rewrote line 1; while it worked, run 2's edit added line 2. The file is in both runs.
+    const first = run(
+      'claude',
+      { 'a.ts': change(BASE, [{ at: 1, del: 1, add: ['const a = fetchA();', '// by cursor'] }]) },
+      { agentLines: { 'a.ts': [[1, 1]] }, otherLines: { 'a.ts': [[2, 2, 2]] } },
+    );
+    const mid = ['import x', 'const a = fetchA();', 'const b = 2;', 'export {}'];
+    const second = run(
+      'cursor',
+      { 'a.ts': change(mid, [{ at: 2, del: 0, add: ['// by cursor'] }]) },
+      { agentLines: { 'a.ts': [[2, 2]] } },
+    );
+    const now = ['import x', 'const a = fetchA();', '// by cursor', 'const b = 2;', 'export {}'];
+    const owners = authorsOf([first, second], new Map([['a.ts', now]])).get('a.ts');
+    expect(labels(owners)).toEqual(['unknown', 'agent:1', 'agent:2', 'unknown', 'unknown']);
+  });
+
   it('labels an agent line someone else partly rewrote mixed', () => {
     id = 0;
     const claude = run(

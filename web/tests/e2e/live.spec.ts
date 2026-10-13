@@ -6166,10 +6166,10 @@ test("Cursor's command named `agent` is found, once its help says it is Cursor's
 // Two agents in one checkout, with no worktrees: Claude Code's stand-in on a/ and Cursor's on b/, in a generated repo
 // where b/ imports a/, a package.json is shared, and a pre-commit hook rewrites what is staged.
 test.describe('two agents, one checkout', () => {
-  async function twoAgents(fn: (b: Bridge, repo: string) => Promise<void>) {
+  async function twoAgents(fn: (b: Bridge, repo: string) => Promise<void>, env: Record<string, string> = {}) {
     const repo = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'loa-e2e-')), 'two-sections');
     execFileSync(process.execPath, [TWO_SECTIONS, repo]);
-    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_CURSOR_BIN: FAKE_CURSOR });
+    const b = await startBridge(repo, FAKE_CLAUDE, { LOA_CURSOR_BIN: FAKE_CURSOR, ...env });
     try {
       await fn(b, repo);
     } finally {
@@ -6273,6 +6273,70 @@ test.describe('two agents, one checkout', () => {
       expect(read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
       expect(seed).not.toBe('// written by a session\n');
     }));
+
+  test("each line is its agent's when it changed during an edit step that agent reported, for Cursor as for Claude Code", () =>
+    twoAgents(async (b, repo) => {
+      const lines = (f: string) => read(repo, f).trimEnd().split('\n');
+      // Cursor edits b/cart.mjs twice. Between its two edits a line is added by hand: not during a step of anyone's.
+      const c = await start(b, 'cursor', ['b/'], 'edit:b/cart.mjs wait:x edit:b/cart.mjs');
+      await expect.poll(() => lines('b/cart.mjs').at(-1)).toContain('// edited by cursor');
+      fs.appendFileSync(path.join(repo, 'b/cart.mjs'), '// added by hand\n');
+      go(repo, 'x');
+      await until(b, c.id, 'done');
+      const n = lines('b/cart.mjs').length;
+      expect(
+        lines('b/cart.mjs')
+          .slice(-3)
+          .map(l => l.slice(0, 19)),
+      ).toEqual(['// edited by cursor', '// added by hand', '// edited by cursor']);
+      // Cursor's two lines are Cursor's; the line between is in its run, and not its own.
+      const run = await runOf(b, c.id);
+      expect(paths(run)).toEqual(['b/cart.mjs']);
+      expect(run.agentLines).toEqual({
+        'b/cart.mjs': [
+          [n - 3, n - 3],
+          [n - 1, n - 1],
+        ],
+      });
+      expect(run.otherLines).toBeUndefined();
+    }));
+
+  test("another session's edit inside a run's file is that session's line, on both runs", () =>
+    twoAgents(async (b, repo) => {
+      // Claude Code writes a/tax.mjs; while it still works, a Cursor session adds a line to the same file.
+      const a = await start(b, 'claude', ['a/'], 'want:a/tax.mjs wait:a');
+      await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+      const c = await start(b, 'cursor', ['b/'], 'edit:a/tax.mjs');
+      await until(b, c.id, 'done');
+      go(repo, 'a');
+      await until(b, a.id, 'done');
+      const [ra, rc] = [await runOf(b, a.id), await runOf(b, c.id)];
+      // The file is in both runs: Claude Code's holds its rewrite, though Cursor's session ended with the file as it
+      // is now. Line 0 is Claude Code's, line 1 Cursor's: each run says so of its own, and Claude Code's of Cursor's.
+      expect([paths(ra), paths(rc)]).toEqual([['a/tax.mjs'], ['a/tax.mjs']]);
+      expect(ra.agentLines).toEqual({ 'a/tax.mjs': [[0, 0]] });
+      expect(ra.otherLines).toEqual({ 'a/tax.mjs': [[1, 1, c.id]] });
+      expect(rc.agentLines).toEqual({ 'a/tax.mjs': [[1, 1]] });
+    }));
+
+  test("an edit that landed before its step was heard of is still its agent's, and its step says its start was not seen", () =>
+    twoAgents(
+      async (b, repo) => {
+        const c = await start(b, 'cursor', ['b/'], 'edit:b/report.mjs');
+        await until(b, c.id, 'done');
+        const n = read(repo, 'b/report.mjs').trimEnd().split('\n').length;
+        const run = await runOf(b, c.id);
+        expect(run.agentLines).toEqual({ 'b/report.mjs': [[n - 1, n - 1]] });
+        const steps = fs
+          .readFileSync(path.join(repo, `.loa/runs/${c.id}.steps.jsonl`), 'utf8')
+          .trim()
+          .split('\n')
+          .map(l => JSON.parse(l) as { act: string; late?: boolean; blob?: string });
+        expect(steps.filter(s => s.act === 'edit' && s.blob).map(s => s.late)).toEqual([true]);
+      },
+      // The stand-in writes the file first, then says it is about to.
+      { FAKE_CURSOR_WRITES_FIRST: '1' },
+    ));
 
   test("a commit hook that changes a file in the other session's section: the commit says so, and it is neither session's", () =>
     twoAgents(async (b, repo) => {

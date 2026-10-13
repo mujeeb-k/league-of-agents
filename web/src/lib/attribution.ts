@@ -2,11 +2,13 @@
 // last wrote it. Built by walking the runs in order, each from the file as the run found it to the file it left.
 //
 // What the labels mean:
-// - agent: Claude Code wrote the line through its edit tools (the run's agentLines, from the bridge).
+// - agent, with its run: the line changed during an edit step that run's agent reported (the run's agentLines, from
+//   the bridge: bridge/lib/agents/lines.mjs). In a run's own file this may be another session's run (otherLines).
 // - human: saved from the map's editor (a run by "you").
 // - mixed: someone else rewrote part of a line an agent had written.
-// - unknown: everything else: lines from before the first run kept, edits outside a run, lines a Codex or Cursor
-//   run changed, lines a Claude Code run changed some other way (a shell command), and lines whose run was pruned.
+// - unknown, with a run: changed during that run, but not by an agent's edit: a command, a hand, watch mode.
+// - unknown, with no run: before League of Agents started or while it was off, lines whose run was pruned; what git
+//   records for such a line is used where git has a record.
 import type { RecordedLine } from '../api/types';
 import type { Run } from './types';
 
@@ -70,6 +72,9 @@ function align(t: Tracked | undefined, lines: string[]): Tracked {
 function authorOf(run: Run, path: string, at: number, text: string, replaced: Tracked): Owner {
   const tool = run.agentLines?.[path]?.some(([from, to]) => at >= from && at <= to);
   if (tool) return { author: 'agent', run: run.id };
+  // Another session's edit step wrote it while this run worked: that session's line.
+  const other = run.otherLines?.[path]?.find(([from, to]) => at >= from && at <= to);
+  if (other) return { author: 'agent', run: other[2] };
   const wasAgent = replaced.owners.some(
     (o, i) => (o.author === 'agent' || o.author === 'mixed') && overlap(replaced.lines[i]!, text) >= 0.5,
   );

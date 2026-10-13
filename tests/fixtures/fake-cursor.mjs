@@ -61,8 +61,11 @@ const say = text =>
     model_call_id: `${request}-${turns++}`,
     timestamp_ms: now(),
   });
-/** A tool call, started, done by `work`, then completed with what it returned. */
-function call(kind, callArgs, work) {
+/**
+ * A tool call, started, done by `work`, then completed with what it returned. An edit lands a moment after it is
+ * announced: in the recorded run, 238 to 1,874 ms passed between an edit's started and completed events.
+ */
+async function call(kind, callArgs, work) {
   const id = `call-${request}-${calls++}`;
   const event = (subtype, toolCall) =>
     out({
@@ -76,6 +79,7 @@ function call(kind, callArgs, work) {
     });
   const startedAtMs = String(now());
   event('started', { [kind]: { args: callArgs }, hookAdditionalContexts: [], toolCallId: id, startedAtMs });
+  if (kind === 'editToolCall') await new Promise(r => setTimeout(r, 150));
   const success = work();
   event('completed', {
     [kind]: { args: callArgs, result: { success } },
@@ -100,18 +104,24 @@ const said = [];
 for (const [what, arg] of steps) {
   if (what === 'wait') await wait(arg);
   else if (what === 'read')
-    call('readToolCall', { path: abs(arg), limit: 400 }, () => {
+    await call('readToolCall', { path: abs(arg), limit: 400 }, () => {
       const content = fs.existsSync(arg) ? fs.readFileSync(arg, 'utf8') : '';
       return { content, isEmpty: !content, exceededLimit: false, totalLines: content.split('\n').length };
     });
-  else if (what === 'edit')
-    call('editToolCall', { path: abs(arg), streamContent: '' }, () => {
+  else if (what === 'edit') {
+    const write = () => {
       fs.mkdirSync(path.dirname(arg), { recursive: true });
       fs.appendFileSync(arg, `// edited by cursor in ${session_id}\n`);
+    };
+    // With FAKE_CURSOR_WRITES_FIRST the file changes before the call is announced, as it may for a reader that
+    // hears of a call only after it was made.
+    if (process.env.FAKE_CURSOR_WRITES_FIRST) write();
+    await call('editToolCall', { path: abs(arg), streamContent: '' }, () => {
+      if (!process.env.FAKE_CURSOR_WRITES_FIRST) write();
       return { path: abs(arg), linesAdded: 1, linesRemoved: 0 };
     });
-  else
-    call('shellToolCall', { command: arg }, () => {
+  } else
+    await call('shellToolCall', { command: arg }, () => {
       const r = spawnSync(arg, { shell: '/bin/bash', encoding: 'utf8' });
       said.push(`${arg}: exit ${r.status}\n${r.stdout}${r.stderr}`.trim());
       return { command: arg, exitCode: r.status, stdout: r.stdout, stderr: r.stderr };

@@ -2,7 +2,8 @@
 // file it names, and when. The map shows where each session is from them, and its timeline lists them. They are kept
 // whole in .loa/runs/<id>.steps.jsonl, past the activity's last 400 lines and any restart. An edit's file, as the edit
 // left it, is kept as a git blob, so the map can show it at that moment; at the run's end the blobs are pinned under
-// refs/loa/runs/<id>/steps.
+// refs/loa/runs/<id>/steps. The file as the edit found it is kept too (`from`): what changed between the two is what
+// that agent wrote, whatever else changed the file before or after (agents/lines.mjs).
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT, RUNS_DIR, gitAsync } from './repo.mjs';
@@ -12,7 +13,9 @@ import { emit } from './events.mjs';
 
 /**
  * @typedef {{ i: number; at: number; act: 'read' | 'edit' | 'run' | 'other'; file?: string; tool: string;
- *   refused?: true; blob?: string }} Step
+ *   refused?: true; blob?: string; from?: string | null; late?: true }} Step
+ * `from`: the file as the edit found it, a blob, or null for a file that wasn't there. `late`: the edit had landed
+ * before the bridge heard of the call, so its start wasn't seen: it is taken to start from the file as last known.
  */
 
 /** The steps of each run at work, by run. A finished run's are read from its file. */
@@ -53,7 +56,19 @@ export function takeSteps(run) {
 }
 
 /** A step as the app gets it: whether its file's text is kept, not where. */
-export const publicStep = ({ blob, ...s }) => (blob ? { ...s, text: true } : s);
+export const publicStep = ({ blob, from, late, ...s }) => (blob ? { ...s, text: true } : s);
+
+/** Each edit step's file as the bridge first heard of the call: read at once, before the edit can land. */
+const found = new Map();
+const read = file => {
+  try {
+    const abs = path.join(ROOT, file);
+    return fs.statSync(abs).size > MAX_BYTES ? undefined : fs.readFileSync(abs);
+  } catch {
+    // Not there yet: a file the edit creates.
+    return null;
+  }
+};
 
 /**
  * A tool call the agent just made: a new step, its index returned. `file` is repo-relative, for a call that names
@@ -65,6 +80,7 @@ export function step(run, act, tool, file) {
   const steps = live.get(run.id);
   /** @type {Step} */
   const s = { i: steps.length, at: Date.now(), act, tool, ...(file ? { file } : {}) };
+  if (act === 'edit' && file) found.set(`${run.id} ${s.i}`, read(file));
   steps.push(s);
   record(run, s);
   return s.i;
@@ -98,9 +114,20 @@ export function stepDone(run, i) {
     return;
   }
   const key = `${run.id} ${s.file}`;
+  const start = found.get(`${run.id} ${i}`);
+  found.delete(`${run.id} ${i}`);
   const kept = (keeping.get(key) ?? Promise.resolve()).then(async () => {
     if (!(await keepable(s.file))) return;
-    s.blob = (await gitAsync(['hash-object', '-w', '--stdin'], { input: text })).trim();
+    const hash = async bytes => (await gitAsync(['hash-object', '-w', '--stdin'], { input: bytes })).trim();
+    s.blob = await hash(text);
+    // The file as the edit found it. Read the same as it left it, the edit had landed before the call was heard
+    // of (or changed nothing): its start wasn't seen.
+    if (start === null) s.from = null;
+    else if (start !== undefined) {
+      const from = await hash(start);
+      if (from === s.blob) s.late = true;
+      else s.from = from;
+    }
     record(run, s);
   });
   keeping.set(
@@ -123,6 +150,10 @@ export async function stepText(run, i) {
   const s = stepsOf(run)[i];
   return s?.blob ? gitAsync(['cat-file', 'blob', s.blob]) : null;
 }
+
+/** Every edit of a run so far has its file kept: awaited before its lines are worked out. */
+export const stepsKept = run =>
+  Promise.all([...keeping.entries()].filter(([k]) => k.startsWith(`${run.id} `)).map(([, p]) => p));
 
 /**
  * The run ended: once every edit's file is kept, the blobs are pinned under refs/loa/runs/<id>/steps (a tree of

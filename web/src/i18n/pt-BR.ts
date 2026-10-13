@@ -173,8 +173,8 @@ const catalogue: Catalogue = {
     'O commit {commit} cita um agente como coautor ({who}). Isso vale para o commit inteiro, não para linhas, então esta linha é no máximo em parte do agente.',
   '{agent} wrote it with its edit tools.': '{agent} a escreveu com suas ferramentas de edição.',
   'Rewritten in part after an agent wrote it.': 'Reescrita em parte depois que um agente a escreveu.',
-  "Changed in run {id}, by {agent}. Who typed it isn't known: the agent didn't write it with its edit tools.":
-    'Mudada na execução {id}, por {agent}. Não se sabe quem a digitou: o agente não a escreveu com suas ferramentas de edição.',
+  "Changed during run {id}, but not by an agent's edit: by a command, or some other way.":
+    'Mudada durante a execução {id}, mas não por uma edição de um agente: por um comando, ou de outra forma.',
   "No run kept on this computer changed it, so who wrote it isn't known.":
     'Nenhuma execução guardada neste computador a mudou, então não se sabe quem a escreveu.',
   Authors: 'Autores',

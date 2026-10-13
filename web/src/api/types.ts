@@ -101,6 +101,8 @@ export interface RunDTO {
    * run. Claude Code only; bridges before 0.2.0 don't send it.
    */
   agentLines?: Record<string, [number, number][]>;
+  /** Lines of its files that another session's edit steps wrote while it worked: [from, to, that run], in the file it left. */
+  otherLines?: Record<string, [number, number, number][]>;
   /** The model the agent reported (bridges before 0.2.0 don't send it). */
   model?: string | null;
   status: RunStatus;

@@ -558,10 +558,7 @@ function authorText(o: Owner, run: Run | null): string {
   if (author === 'human') return t('Saved in the editor on the map.');
   if (author === 'mixed') return t('Rewritten in part after an agent wrote it.');
   return run
-    ? t("Changed in run {id}, by {agent}. Who typed it isn't known: the agent didn't write it with its edit tools.", {
-        id: run.id,
-        agent: who,
-      })
+    ? t("Changed during run {id}, but not by an agent's edit: by a command, or some other way.", { id: run.id })
     : t("No run kept on this computer changed it, so who wrote it isn't known.");
 }
 

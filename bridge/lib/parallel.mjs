@@ -17,8 +17,10 @@ import { stepsOf } from './steps.mjs';
 
 /**
  * The epoch under way: its baseline, whether runs overlapped in it, its runs, what each file should hold at its end
- * (by the commit that has it: a run's after, or a reverted run's before), and runs whose checks wait for its end.
- * @type {{ base: any; overlapped: boolean; runs: any[]; expected: Map<string, string>; checks: any[] } | null}
+ * (`expected`, by the commit that has it: a run's after, a reverted run's before, a commit), what the bridge itself
+ * wrote meanwhile (`written`: a revert's files, a commit's), and runs whose checks wait for its end.
+ * @type {{ base: any; overlapped: boolean; runs: any[]; expected: Map<string, string>; written: Map<string, string>;
+ *   checks: any[] } | null}
  */
 let epoch = null;
 
@@ -53,13 +55,16 @@ export async function startingPoint() {
 /** A run started: alone, it opens an epoch; with others at work, it joins theirs and every run in it overlaps. */
 export function joinEpoch(run) {
   if (!working.size) {
-    epoch = { base, overlapped: false, runs: [run], expected: new Map(), checks: [] };
+    epoch = { base, overlapped: false, runs: [run], expected: new Map(), written: new Map(), checks: [] };
     return;
   }
   epoch.overlapped = true;
   epoch.runs.push(run);
   for (const r of epoch.runs) r.overlapped = true;
 }
+
+/** The other sessions of the epoch a run is in: those at work beside it, and those that were. */
+export const peersOf = run => (epoch?.runs.includes(run) ? epoch.runs.filter(r => r !== run) : []);
 
 /** Sessions that overlap leave the baseline where it was until the last one ends. */
 export const keepsBaseline = run => !!run.overlapped;
@@ -78,9 +83,11 @@ const holder = (run, file) => epoch.runs.find(r => r !== run && r.scope?.length 
  */
 export async function ownChanges(run, changes) {
   if (!epoch) return changes;
+  // A file still as a revert or a commit left it is the bridge's own write, not the run's. Not so a file as another
+  // session left it: two sessions that edited one file each hold it.
   const reverted = async c =>
-    epoch.expected.has(c.path) &&
-    (await blobAt(epoch.expected.get(c.path), c.path)) === (await blobAt(run.after, c.path));
+    epoch.written.has(c.path) &&
+    (await blobAt(epoch.written.get(c.path), c.path)) === (await blobAt(run.after, c.path));
   if (!run.overlapped) {
     const own = [];
     for (const c of changes) if (!(await reverted(c))) own.push(c);
@@ -159,7 +166,11 @@ function share(run, other, file) {
 
 /** A revert while runs work: what it wrote is the revert's, not theirs, and not left over at the epoch's end. */
 export function noteRevert(run) {
-  if (epoch) for (const c of [...run.changes, ...(run.unseen ?? [])]) epoch.expected.set(c.path, run.before);
+  if (epoch)
+    for (const c of [...run.changes, ...(run.unseen ?? [])]) {
+      epoch.expected.set(c.path, run.before);
+      epoch.written.set(c.path, run.before);
+    }
 }
 
 /**
@@ -167,7 +178,11 @@ export function noteRevert(run) {
  * whose section a hook wrote, and isn't left over at the epoch's end.
  */
 export function noteCommit(sha, files) {
-  if (epoch) for (const p of files) epoch.expected.set(p, sha);
+  if (epoch)
+    for (const p of files) {
+      epoch.expected.set(p, sha);
+      epoch.written.set(p, sha);
+    }
 }
 
 /** A run's checks: now, or once the epoch ends when it overlapped others still at work. */

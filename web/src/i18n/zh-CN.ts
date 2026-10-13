@@ -162,8 +162,8 @@ const catalogue: Catalogue = {
     '提交 {commit} 把一个代理列为共同作者（{who}）。这适用于整个提交而非具体的行，所以这一行最多只部分属于该代理。',
   '{agent} wrote it with its edit tools.': '{agent} 用它的编辑工具写了这一行。',
   'Rewritten in part after an agent wrote it.': '在代理写完之后被部分改写。',
-  "Changed in run {id}, by {agent}. Who typed it isn't known: the agent didn't write it with its edit tools.":
-    '在运行 {id} 中由 {agent} 改动。不知道是谁输入的：代理没有用它的编辑工具写这一行。',
+  "Changed during run {id}, but not by an agent's edit: by a command, or some other way.":
+    '在运行 {id} 期间改动，但不是代理的编辑：是某条命令，或其他方式。',
   "No run kept on this computer changed it, so who wrote it isn't known.":
     '此电脑上保留的运行都没有改动过它，所以不知道是谁写的。',
   Authors: '作者',

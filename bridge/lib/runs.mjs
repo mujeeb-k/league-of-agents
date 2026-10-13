@@ -5,7 +5,7 @@ import path from 'node:path';
 import { line, readJson, splitLines, serial } from './util.mjs';
 import { inScope, rangeKept, scopeEntry } from './scope.mjs';
 import { ROOT, RUNS_DIR, git } from './repo.mjs';
-import { agentLinesOf } from './agents/lines.mjs';
+import { linesOf } from './agents/lines.mjs';
 import { blobAt, blobNow, pin, restoreFrom, showAt, computeChanges, snapshotNow } from './snapshots.mjs';
 import {
   checksFor,
@@ -15,12 +15,13 @@ import {
   leaveEpoch,
   noteRevert,
   ownChanges,
+  peersOf,
   startingPoint,
 } from './parallel.mjs';
 import { base, setBase, rebase } from './watch.mjs';
 import { NO_SANDBOX, lockOfRun, saidHeld } from './sandbox.mjs';
 import { emit, emitRun } from './events.mjs';
-import { pinSteps } from './steps.mjs';
+import { pinSteps, stepsKept, stepsOf } from './steps.mjs';
 
 export const runs = new Map();
 /** The runs recorded before, from .loa/runs/. */
@@ -153,7 +154,11 @@ export async function finishRun(run, status = 'done', { checks = true } = {}) {
         files: run.unseen.map(c => c.path).join(', '),
       }),
     );
-  run.agentLines = agentLinesOf(run);
+  const peers = peersOf(run);
+  await Promise.all([run, ...peers].map(stepsKept));
+  const wrote = await linesOf(run, peers, { stepsOf, blobAt });
+  run.agentLines = wrote.agent;
+  if (wrote.other) run.otherLines = wrote.other;
   if ((run.agent === 'detected' || run.agent === 'you') && run.changes.length) {
     run.title = editedTitle(run.changes);
     // The same title for the app to word: the first file's name, and how many more.
