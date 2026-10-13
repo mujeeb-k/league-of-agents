@@ -9,7 +9,7 @@ import { dirStat, existsNow, fileStat, needsYou, runStats } from '../lib/model';
 import type { DirNode, Run, Tab } from '../lib/types';
 import { S, dom, st } from '../state/app';
 import { drafts, openEditor } from '../state/editing';
-import { applyPanels, holdSide, panels, setPinned, sideVisibleAt } from '../state/panels';
+import { applyPanels, panels, setPinned, sideVisibleAt } from '../state/panels';
 import { isOffline, runAction, selectRun, stopSessions, toggleSel } from '../state/actions';
 import { renderSel, renderSide, useRegion } from '../state/render';
 import { asking, endedAs, holderOf, reachOf, sessionColour, sessionsCost, workingRuns } from '../state/sessions';
@@ -606,7 +606,6 @@ export function Sidebar() {
         value={st.tab}
         onValueChange={v => {
           st.tab = v as Tab;
-          holdSide();
           renderSide();
         }}
         className="flex min-h-0 flex-1 flex-col gap-0"

@@ -5950,13 +5950,8 @@ test('in auto mode the sidebar stays at every zoom while the Runs tab shows; the
     await zoomTo(page, 20);
     await expect(side).not.toHaveClass(AWAY);
     await expect(page.locator('#sideBtn')).toHaveAttribute('aria-pressed', 'true');
-    // Back on Files it stays under the pointer, steps aside with the next zoom, and comes back with the code.
-    // The tab has changed before the sidebar is looked at: it would have left in the same render.
+    // Back on Files it steps aside at once, with no zoom, and comes back with the code: only the Runs tab holds it.
     await page.locator('[data-tab="files"]').click();
-    await expect(page.locator('[data-tab="files"]')).toHaveAttribute('data-state', 'active');
-    await expect(page.locator('#sideList .ti').first()).toBeVisible();
-    await expect(side).not.toHaveClass(AWAY);
-    await zoomTo(page, 18);
     await expect(side).toHaveClass(AWAY);
     await zoomTo(page, 60);
     await expect(side).not.toHaveClass(AWAY);
@@ -5970,10 +5965,13 @@ test('in auto mode the sidebar stays at every zoom while the Runs tab shows; the
     await expect(page.locator('[data-tab="files"]')).toHaveAttribute('data-state', 'active');
     await zoomTo(page, 18);
     await expect(side).toHaveClass(AWAY);
+    // And the session was at work all the while.
+    expect((await runsOf(b))[0]!.status).toBe('running');
     await call(b, '/api/runs/1/cancel', {});
   } finally {
     b.stop();
-    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+    // The stopped session's last writes may still be landing.
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 });
 
