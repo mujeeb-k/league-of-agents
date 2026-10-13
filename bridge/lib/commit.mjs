@@ -103,8 +103,9 @@ export function commitRun(run, { message = '', include = [] } = {}) {
     const id = async args => (await gitAsync(args)).trim().split(/\s+/)[args[0] === 'ls-tree' ? 2 : 1] ?? null;
     entries.length = 0;
     for (const p of [...chosen, ...hook]) {
-      if (hook.includes(p) && (await id(['ls-files', '-s', '--', p])) !== (await id(['ls-tree', head.commit, '--', p])))
-        continue;
+      // A branch's first commit has no commit before it: anything in their staging area then is their own.
+      const before = head.commit ? await id(['ls-tree', head.commit, '--', p]) : null;
+      if (hook.includes(p) && (await id(['ls-files', '-s', '--', p])) !== before) continue;
       const entry = (await gitAsync(['ls-tree', sha, '--', p])).trim();
       entries.push([p, entry ? entry.split(/\s+/).slice(0, 3) : null]);
     }

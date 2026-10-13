@@ -2056,6 +2056,38 @@ onMac(
   },
 );
 
+test("a branch's first commit whose hook adds a file: made, and said with the file the hook added", async () => {
+  const repo = makeRepo();
+  git(repo, 'update-ref', '-d', 'HEAD');
+  fs.writeFileSync(
+    path.join(repo, '.git/hooks/pre-commit'),
+    '#!/bin/sh\necho hooked > HOOKED.md\ngit add HOOKED.md\n',
+    {
+      mode: 0o755,
+    },
+  );
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP });
+  try {
+    await expect
+      .poll(async () => ((await call(b, '/api/state')).body as unknown as StateResponse).agents.hermes?.available)
+      .toBe(true);
+    const run = await runToEnd(b, {
+      agent: 'hermes',
+      prompt: 'edit:shared/log.ts',
+      scope: ['shared/'],
+      resumeFrom: null,
+    });
+    // There is no commit before it to hold the person's staging area against.
+    const made = await call(b, `/api/runs/${run.id}/commit`, { message: 'First' });
+    expect(made.status).toBe(200);
+    expect(made.body).toMatchObject({ files: ['shared/log.ts'], hook: ['HOOKED.md'] });
+    expect(git(repo, 'show', '--name-only', '--format=%s', 'HEAD').trim()).toBe('First\n\nHOOKED.md\nshared/log.ts');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test("commits a session as a branch's first commit", async () => {
   const repo = makeRepo();
   // A branch with no commits yet: its files are there, staged.
