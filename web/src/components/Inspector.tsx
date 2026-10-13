@@ -19,7 +19,7 @@ import { flyFile } from '../lib/camera';
 import { shareOf, type Author, type Owner } from '../lib/attribution';
 import { runsRepoCode } from '../lib/checks';
 import { agentOf, modelOf } from '../lib/constants';
-import { existsNow, fileStat, linesAt, needsYou, runStats, viewOf } from '../lib/model';
+import { existsNow, fileStat, linesAt, needsYou, ownFiles, runStats, sharedOf, viewOf } from '../lib/model';
 import type { Run } from '../lib/types';
 import { money } from '../lib/util';
 import { said } from '../lib/said';
@@ -35,7 +35,7 @@ import { CopyCommand, SETUP_PROMPT, setConnectOpen } from './ConnectDialog';
 import { Kbd, KbdGroup } from './ui/kbd';
 import { Markdown } from './Markdown';
 import { ScopeChip } from './ScopeChip';
-import { BetaTag, commandBlockedText, Dot, Label, Spinner, Stat, StepText } from './bits';
+import { BetaTag, commandBlockedText, Dot, Label, SharedTag, Spinner, Stat, StepText } from './bits';
 import { IntroSection } from './Intro';
 import { locale, t, tn } from '../i18n';
 import { Timeline } from './Timeline';
@@ -131,8 +131,18 @@ const ACT: Record<string, { label: () => string; tone: string }> = {
   text: { label: () => t('Note'), tone: 'bg-muted text-ink2' },
 };
 
+/** The activity lines a file's row in the review list says instead: the file is shared, or outside the section. */
+const ON_ROW = new Set(['shared-file', 'in-section-of', 'outside-scope']);
+
 const linkClass =
   'flex h-7 w-full min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 -mx-2 text-left font-mono text-xs text-foreground transition-colors hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring';
+
+/** Where a file outside the run's section is: "Outside b/", by the section's name when it has one. */
+const outsideText = (run: Run) =>
+  run.scope?.length === 1 ? t('Outside {section}', { section: run.scope[0]! }) : t('Outside its sections');
+
+/** Revert with its count: the run's own files. One whose files are all shared has none until the dialog's ticks. */
+const revertText = (own: number) => (own ? tn(own, 'Revert {n} file', 'Revert {n} files') : t('Revert'));
 
 /** A run action button: disabled while the bridge works on any action, with a spinner on the one in progress. */
 function ActButton({ run, act, children, ...props }: React.ComponentProps<typeof Button> & { run: Run; act: string }) {
@@ -194,13 +204,19 @@ function RunView({ run }: { run: Run }) {
     files = [...run.changes.keys()];
   const done = files.filter(p => run.reviewed.has(p)).length,
     running = run.status === 'running';
+  const shared = sharedOf(run),
+    outside = new Set(run.outOfScope),
+    own = ownFiles(run).length,
+    offList = (run.outOfScope ?? []).filter(p => !run.changes.has(p));
   const reply =
     run.summary ||
     [...(run.stream || [])].reverse().find(e => e.t === 'text')?.text ||
     (running ? t('Working…') : t('No reply recorded.'));
   // While running, notes show progress; a note that is already the reply above is not repeated.
+  // Once the review list shows, what it says on a file's row (shared, outside the section) is not said again here.
   const acts = (run.stream || [])
     .filter(e => (e.t !== 'text' || running) && !(e.t === 'text' && e.text === reply))
+    .filter(e => running || !files.length || !ON_ROW.has(e.say ?? ''))
     .slice(-10);
   const checksFailed = !!run.checks?.some(c => c.ok === false);
   // Watch mode's runs and saves from the editor have no prompt, reply or scope.
@@ -422,6 +438,14 @@ function RunView({ run }: { run: Run }) {
                           className={cn('kind size-1.5 shrink-0 rounded-full', fs.kind === 'add' ? 'bg-add' : 'bg-mod')}
                         />
                         <span className="p min-w-0 truncate">{p.split('/').pop()}</span>
+                        {shared.has(p) ? (
+                          <SharedTag runs={shared.get(p)!} />
+                        ) : outside.has(p) ? (
+                          <span className="outside flex shrink-0 items-center gap-1 font-sans text-ink2">
+                            <TriangleAlert className="size-3.5 text-mod" />
+                            {outsideText(run)}
+                          </span>
+                        ) : null}
                         <span className="ml-auto pl-2">
                           <Stat a={fs.a} d={fs.d} />
                         </span>
@@ -447,15 +471,16 @@ function RunView({ run }: { run: Run }) {
               {t('No changes. No files were edited in this run.')}
             </div>
           )}
-          {run.outOfScope?.length ? (
-            // Warnings: a neutral surface with an amber icon and a thin amber edge, never an amber fill.
-            <div className="warnbox mt-3 flex gap-2 rounded-lg border border-l-2 border-l-mod bg-card px-3 py-2 text-pretty">
+          {offList.length ? (
+            // A file outside the section that the list has no row for (the map doesn't show it): one icon, one line.
+            <div className="outside mt-3 flex gap-2 text-pretty">
               <span className="flex h-5 shrink-0 items-center">
                 <TriangleAlert className="size-4 text-mod" />
               </span>
               <span>
-                {t('Changed outside the scope:')}{' '}
-                <span className="font-mono text-xs [overflow-wrap:anywhere]">{run.outOfScope.join(', ')}</span>
+                {outsideText(run)}
+                {': '}
+                <span className="font-mono text-xs [overflow-wrap:anywhere]">{offList.join(', ')}</span>
               </span>
             </div>
           ) : null}
@@ -483,8 +508,8 @@ function RunView({ run }: { run: Run }) {
                     <span className="text-muted-foreground">{t('Changes stay in your working tree.')}</span>
                   </div>
                   <div className="actions mt-3 flex gap-2">
-                    <ActButton run={run} act="revert" variant="outline" className="flex-1">
-                      {t('Revert run')}
+                    <ActButton run={run} act="revert" variant="outline" className="flex-1 tabular-nums">
+                      {revertText(own)}
                     </ActButton>
                     <Button
                       id="commitBtn"
@@ -503,18 +528,28 @@ function RunView({ run }: { run: Run }) {
                   <CircleCheck className="size-4 text-add" />
                   <span className="font-medium">{t('Kept')}</span>
                   <span className="text-muted-foreground">{t('Changes stay in your working tree.')}</span>
-                  <ActButton run={run} act="revert" variant="outline" size="sm" className="ml-auto">
-                    {t('Revert')}
+                  <ActButton run={run} act="revert" variant="outline" size="sm" className="ml-auto tabular-nums">
+                    {revertText(own)}
                   </ActButton>
                 </div>
               ) : (
                 <div className="actions mt-4 flex gap-2">
                   {/* The evidence picks the primary action: failed checks make Revert primary, Keep secondary. */}
-                  <ActButton run={run} act="revert" variant={checksFailed ? 'default' : 'outline'} className="flex-1">
-                    {t('Revert run')}
+                  <ActButton
+                    run={run}
+                    act="revert"
+                    variant={checksFailed ? 'default' : 'outline'}
+                    className="flex-1 tabular-nums"
+                  >
+                    {revertText(own)}
                   </ActButton>
-                  <ActButton run={run} act="keep" variant={checksFailed ? 'outline' : 'default'} className="flex-1">
-                    {done === files.length ? t('Keep changes') : t('Keep anyway')}
+                  <ActButton
+                    run={run}
+                    act="keep"
+                    variant={checksFailed ? 'outline' : 'default'}
+                    className="flex-1 tabular-nums"
+                  >
+                    {tn(files.length, 'Keep {n} file', 'Keep {n} files')}
                   </ActButton>
                 </div>
               )}

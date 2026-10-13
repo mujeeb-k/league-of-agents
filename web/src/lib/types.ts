@@ -179,4 +179,6 @@ export interface Conflict {
   run: Run;
   files: string[];
   later?: Run;
+  /** The files another session edited too that the person chose to revert with the run. */
+  shared?: string[];
 }

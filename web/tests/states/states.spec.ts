@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { linkFor, makeRepo, startBridge } from '../support/live';
+import { linkFor, makeRepo, sharedFileBridge, startBridge } from '../support/live';
 import { APP } from '../support/targets';
 
 const OUT = path.resolve('test-results/states');
@@ -116,7 +116,7 @@ const DEMO: Element[] = [
     at: '.flist li:nth-child(2) [data-rev]',
     states: { ...auto, selected: p => p.locator('.flist li:nth-child(2) [data-rev]').click() },
   },
-  { name: 'Revert run', at: '[data-act="revert"]', states: auto },
+  { name: 'Revert', at: '[data-act="revert"]', states: auto },
   { name: 'Keep', at: '[data-act="keep"]', states: auto },
   {
     name: 'Kept outcome',
@@ -326,7 +326,7 @@ for (const theme of ['light', 'dark'] as const)
       await page.locator('[data-act="keep"]').click();
       await expect(page.locator('[data-act="keep"]')).toHaveAttribute('aria-busy', 'true');
       rows.get('Keep')!.loading = await shot(page, page.locator('[data-act="keep"]'));
-      rows.get('Revert run')!.disabled = await shot(page, page.locator('[data-act="revert"]'));
+      rows.get('Revert')!.disabled = await shot(page, page.locator('[data-act="revert"]'));
       release();
       // The live conflict dialog: files changed again after the run.
       await expect(page.locator('#insp .outcome')).toContainText('Kept');
@@ -338,7 +338,7 @@ for (const theme of ['light', 'dark'] as const)
       await expect(page.locator('#conflictDlg')).toBeVisible();
       for (const [name, at] of [
         ['Conflict: Keep my later edits', '#conflictKeep'],
-        ['Conflict: Revert anyway', '#conflictRevert'],
+        ['Conflict: Revert', '#conflictRevert'],
       ] as const)
         rows.set(name, await live(page, page.locator(at)));
       await page.keyboard.press('Escape');
@@ -362,6 +362,34 @@ for (const theme of ['light', 'dark'] as const)
     } finally {
       b.stop();
       fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+    }
+    // A file two sessions both edited: its tick in Revert and in Commit, and Revert with its count.
+    const two = await sharedFileBridge();
+    try {
+      const page = await ctx.newPage();
+      await page.goto(linkFor(two.b));
+      await expect(page.locator('#conn')).toHaveText('Live');
+      await page.locator(`#sideList [data-run="${two.cursor}"]`).click();
+      await page.locator('#insp [data-act="revert"]').click();
+      const tick = page.locator('#revertDlg [data-include="a/tax.mjs"]');
+      rows.set('Revert: a shared file', await live(page, tick));
+      await tick.check();
+      rows.get('Revert: a shared file')!.selected = await shot(page, tick);
+      rows.set('Revert: Revert files', await live(page, page.locator('#revertConfirm')));
+      await page.keyboard.press('Escape');
+      await page.locator('#insp [data-act="keep"]').click();
+      await page.locator('#commitBtn').click();
+      const include = page.locator('#commitDlg [data-include="a/tax.mjs"]');
+      rows.set('Commit: a shared file', await live(page, include));
+      await page.keyboard.press('Escape');
+      fs.appendFileSync(path.join(two.repo, 'a/tax.mjs'), '// by hand, later\n');
+      await page.locator('#commitBtn').click();
+      await expect(include).toBeDisabled();
+      rows.get('Commit: a shared file')!.disabled = await shot(page, include);
+      await page.close();
+    } finally {
+      two.b.stop();
+      fs.rmSync(path.dirname(two.repo), { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
     }
     const page = await ctx.newPage();
     await page.setContent(sheet(theme, rows));

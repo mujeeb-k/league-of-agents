@@ -96,6 +96,8 @@ export const st = {
   busy: null as string | null,
   /** A revert that would undo later edits, shown as a dialog (ConflictDialog.tsx). */
   conflict: null as Conflict | null,
+  /** A revert of a run with files another session edited too: which of them go back with it (RevertDialog.tsx). */
+  revert: null as { run: Run; include: Set<string> } | null,
   /** The folder picker is open: which folder of the repository the map is of (MapPicker.tsx). */
   mapPicker: false,
   /** The folders it offers, with their code files; null while they load. */

@@ -6354,6 +6354,138 @@ test.describe('two agents, one checkout', () => {
       { FAKE_CURSOR_WRITES_FIRST: '1' },
     ));
 
+  /**
+   * Three runs, as the app shows them: Claude Code (run 1, a/) rewrote a/tax.mjs and made a/rounding.mjs; Cursor
+   * (run 3, b/) edited b/cart.mjs, a/discount.mjs and, after Claude Code, a/tax.mjs. Both have ended.
+   */
+  async function sharedFile(b: Bridge, repo: string) {
+    const { a, c } = await both(b, repo, 'want:a/tax.mjs want:a/rounding.mjs', 'edit:b/invoice.mjs');
+    await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+    go(repo, 'c');
+    await until(b, c.id, 'done');
+    const d = await start(b, 'cursor', ['b/'], 'edit:b/cart.mjs edit:a/discount.mjs edit:a/tax.mjs');
+    await until(b, d.id, 'done');
+    go(repo, 'a');
+    await until(b, a.id, 'done');
+    return { a, d, both: read(repo, 'a/tax.mjs') };
+  }
+
+  test(
+    'a shared file in the review list and in Revert: said on its row, left unless ticked, and the choice kept through a conflict',
+    { tag: '@motion' },
+    ({ page }) =>
+      twoAgents(async (b, repo) => {
+        const cart = read(repo, 'b/cart.mjs'),
+          discount = read(repo, 'a/discount.mjs');
+        const { d, both: both2 } = await sharedFile(b, repo);
+        await page.goto(linkFor(b));
+        await expect(page.locator('#conn')).toHaveText('Live');
+        await page.locator(`#sideList [data-run="${d.id}"]`).click();
+        // Each fact once, on the file's row: shared with run 1, or outside the section. No scope lines, no box.
+        const rows = page.locator('#insp .flist li');
+        await expect(rows).toHaveText(['discount.mjsOutside b/+1', 'tax.mjsShared with run 1+1', 'cart.mjs+1']);
+        await expect(page.locator('#insp .acts .warn')).toHaveCount(0);
+        await expect(page.locator('#insp .warnbox')).toHaveCount(0);
+        // The counts are what each button does: Revert puts back the run's own two files, Keep keeps all three.
+        const revert = page.locator('#insp [data-act="revert"]');
+        await expect(revert).toHaveText('Revert 2 files');
+        await expect(page.locator('#insp [data-act="keep"]')).toHaveText('Keep 3 files');
+        // Revert asks, since the run has a shared file: unticked, and the count follows the tick.
+        await revert.click();
+        const dlg = page.locator('#revertDlg');
+        await expect(dlg.locator('h2')).toHaveText(`Revert run ${d.id}?`);
+        await expect(dlg.locator('#revertFiles li')).toHaveText([
+          'a/discount.mjs',
+          'b/cart.mjs',
+          `a/tax.mjsShared with run 1Ticked, it goes back as run ${d.id} found it. What the other session changed in it since is lost.`,
+        ]);
+        const tick = dlg.locator('[data-include="a/tax.mjs"]');
+        await expect(tick).not.toBeChecked();
+        await expect(page.locator('#revertConfirm')).toHaveText('Revert 2 files');
+        await tick.check();
+        await expect(page.locator('#revertConfirm')).toHaveText('Revert 3 files');
+        // Cancel touches nothing and gives focus back to the button.
+        await dlg.getByRole('button', { name: 'Cancel' }).click();
+        await expect(dlg).toHaveCount(0);
+        await expect(revert).toBeFocused();
+        expect(read(repo, 'b/cart.mjs')).not.toBe(cart);
+        // The shared file changes again, by hand. Ticked, the revert meets a conflict, and what was chosen is still
+        // chosen when the person reverts all the same: the shared file goes back as run 3 found it.
+        fs.appendFileSync(path.join(repo, 'a/tax.mjs'), '// by hand, later\n');
+        await revert.click();
+        await expect(tick).not.toBeChecked();
+        await tick.check();
+        await page.locator('#revertConfirm').click();
+        const conflict = page.locator('#conflictDlg');
+        await expect(conflict.locator('#conflictFiles li')).toHaveText(['a/tax.mjs']);
+        await expect(page.locator('#conflictRevert')).toHaveText('Revert 3 files');
+        await page.locator('#conflictRevert').click();
+        await expect(page.locator(TOAST)).toHaveText(`Reverted run ${d.id}`);
+        expect(read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+        expect(read(repo, 'b/cart.mjs')).toBe(cart);
+        expect(read(repo, 'a/discount.mjs')).toBe(discount);
+        expect(both2).toContain('// edited by cursor');
+      }),
+  );
+
+  test('a shared file left unticked stays exactly as it is, and the toast says which', ({ page }) =>
+    twoAgents(async (b, repo) => {
+      const cart = read(repo, 'b/cart.mjs');
+      const { d, both: both2 } = await sharedFile(b, repo);
+      await page.goto(linkFor(b));
+      await expect(page.locator('#conn')).toHaveText('Live');
+      await page.locator(`#sideList [data-run="${d.id}"]`).click();
+      await page.locator('#insp [data-act="revert"]').click();
+      await page.locator('#revertConfirm').click();
+      await expect(page.locator(TOAST)).toHaveText(`Reverted run ${d.id}, except a/tax.mjs`);
+      expect(read(repo, 'a/tax.mjs')).toBe(both2);
+      expect(read(repo, 'b/cart.mjs')).toBe(cart);
+    }));
+
+  test('a shared file in Commit: left out unless ticked, and not offered once it changed after the run', ({ page }) =>
+    twoAgents(async (b, repo) => {
+      const { a, d, both: both2 } = await sharedFile(b, repo);
+      await page.goto(linkFor(b));
+      await expect(page.locator('#conn')).toHaveText('Live');
+      await page.locator(`#sideList [data-run="${a.id}"]`).click();
+      await expect(page.locator('#insp .flist li')).toHaveText([
+        'rounding.mjs+1',
+        `tax.mjsShared with run ${d.id}+2 −4`,
+      ]);
+      await page.locator('#insp [data-act="keep"]').click();
+      // Changed by hand since the run: the shared file can't go in with it, and its box says why.
+      fs.appendFileSync(path.join(repo, 'a/tax.mjs'), '// by hand, later\n');
+      await page.locator('#commitBtn').click();
+      const dlg = page.locator('#commitDlg'),
+        tick = dlg.locator('[data-include="a/tax.mjs"]');
+      await expect(dlg.locator('#commitFiles li')).toHaveText([
+        'a/rounding.mjs',
+        `a/tax.mjsShared with run ${d.id}Changed since this run ended, so it can’t go in with it.`,
+      ]);
+      await expect(tick).toBeDisabled();
+      await expect(page.locator('#commitConfirm')).toHaveText('Commit 1 file');
+      await dlg.getByRole('button', { name: 'Cancel' }).click();
+      // As the run left it again: offered, unticked, and the count follows the tick.
+      fs.writeFileSync(path.join(repo, 'a/tax.mjs'), both2);
+      await page.locator('#commitBtn').click();
+      await expect(dlg.locator('#commitFiles li')).toHaveText([
+        'a/rounding.mjs',
+        `a/tax.mjsShared with run ${d.id}Ticked, the whole file goes in, the other session’s lines too.`,
+      ]);
+      await expect(tick).not.toBeChecked();
+      await expect(page.locator('#commitConfirm')).toHaveText('Commit 1 file');
+      await tick.check();
+      await expect(page.locator('#commitConfirm')).toHaveText('Commit 2 files');
+      await page.locator('#commitMessage').fill('Rounding, and the tax rewrite');
+      await page.locator('#commitConfirm').click();
+      await expect(page.locator(TOAST)).toHaveText(/^Committed [0-9a-f]{7} to main$/);
+      // The whole file went in, the other session's line with it. The hook's own file is the fixture's.
+      expect(git(repo, 'show', 'HEAD:a/tax.mjs')).toBe(both2);
+      expect(git(repo, 'show', '--name-only', '--format=', 'HEAD').trim().split('\n')).toEqual(
+        expect.arrayContaining(['a/rounding.mjs', 'a/tax.mjs']),
+      );
+    }));
+
   test("a commit hook that changes a file in the other session's section: the commit says so, and it is neither session's", () =>
     twoAgents(async (b, repo) => {
       // A new module in a/: the repo's pre-commit hook lists every module in b/MODULES.md, and stages it.

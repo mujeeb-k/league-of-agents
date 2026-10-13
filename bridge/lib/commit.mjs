@@ -17,8 +17,9 @@ import { noteCommit } from './parallel.mjs';
 /**
  * What committing the run would hold. `files`: its own. `yours`: files it changed that the person had changed too
  * before it started (left out unless ticked). `shared`: files another session edited too (left out unless ticked;
- * `include` names the ones that are). `changed`: files changed since it ended (nothing commits until they are
- * reviewed again); a shared file left out isn't asked.
+ * `include` names the ones that are). `later`: the shared files changed since it ended, which can't go in with it
+ * (the other session's commit has them whole). `changed`: files changed since it ended (nothing commits until they
+ * are reviewed again); a shared file left out isn't asked.
  */
 export async function commitPreview(run, include = []) {
   const head = await headNow();
@@ -26,19 +27,22 @@ export async function commitPreview(run, include = []) {
   const files = [],
     yours = [],
     shared = [],
+    later = [],
     changed = [];
   for (const { path: p } of [...run.changes, ...(run.unseen ?? [])]) {
+    const since = (await blobNow(p)) !== (await blobAt(run.after, p));
     if (both.includes(p)) {
       shared.push(p);
-      if (!include.includes(p)) continue;
+      if (since) later.push(p);
+      if (since && include.includes(p)) changed.push(p);
+      continue;
     }
-    if ((await blobNow(p)) !== (await blobAt(run.after, p))) changed.push(p);
-    if (both.includes(p)) continue;
+    if (since) changed.push(p);
     if (head.commit && (await blobAt(run.before, p)) !== (await blobAt(head.commit, p))) yours.push(p);
     else files.push(p);
   }
   const branch = head.ref.startsWith('refs/heads/') ? head.ref.slice('refs/heads/'.length) : null;
-  return { files, yours, shared, changed, branch };
+  return { files, yours, shared, later, changed, branch };
 }
 
 /** Commits the run's files with the person's message, and the files of theirs they ticked. */

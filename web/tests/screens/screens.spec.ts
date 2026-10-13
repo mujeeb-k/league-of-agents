@@ -13,10 +13,11 @@ import {
   git,
   linkFor,
   makeRepo,
+  sharedFileBridge,
   startBridge,
   type Bridge,
 } from '../support/live';
-import { APP } from '../support/targets';
+import { APP, TOAST } from '../support/targets';
 
 const OUT = path.resolve('test-results/screens');
 const SIZES = [
@@ -24,12 +25,16 @@ const SIZES = [
   { width: 1280, height: 800 },
 ];
 const WIDE = [...SIZES, { width: 1024, height: 768 }, { width: 1920, height: 1080 }];
+/** With the width under 860 px, where the sidebar goes and the inspector sits under the map. */
+const NARROW = [SIZES[0]!, { width: 760, height: 900 }];
 
-async function shoot(page: Page, name: string, sizes = SIZES) {
+/** `ready` runs at each size before its picture, to bring what the picture is of into view. */
+async function shoot(page: Page, name: string, sizes = SIZES, ready?: () => Promise<unknown>) {
   for (const size of sizes)
     for (const theme of ['light', 'dark'] as const) {
       await page.setViewportSize(size);
       await page.emulateMedia({ colorScheme: theme });
+      await ready?.();
       await page.mouse.move(size.width - 2, 22);
       await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
       await page.screenshot({ path: path.join(OUT, `${name}-${size.width}x${size.height}-${theme}.png`) });
@@ -230,5 +235,41 @@ test('live screens', async ({ page }) => {
       b.stop();
       fs.rmSync(path.dirname(b.repo), { recursive: true, force: true });
     }
+  }
+});
+
+// Two sessions in one checkout, and a file both edited: on its row in the review list, and in Revert and Commit.
+test('a shared file', async ({ page }) => {
+  test.setTimeout(120_000);
+  const { b, repo, cursor } = await sharedFileBridge();
+  try {
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.locator(`#sideList [data-run="${cursor}"]`).click();
+    await expect(page.locator('#insp .flist .shared')).toBeVisible();
+    await expect(page.locator(TOAST)).toHaveCount(0, { timeout: 10_000 });
+    // The review list is at the end of the inspector, which sits under the map at the narrow width.
+    await shoot(page, 'shared-file-review', NARROW, () =>
+      page.locator('#insp [data-act="keep"]').scrollIntoViewIfNeeded(),
+    );
+    await page.locator('#insp [data-act="revert"]').click();
+    await expect(page.locator('#revertDlg')).toBeVisible();
+    await shoot(page, 'shared-file-revert', NARROW);
+    await page.locator('#revertDlg [data-include="a/tax.mjs"]').check();
+    await shoot(page, 'shared-file-revert-ticked', [SIZES[0]!]);
+    await page.keyboard.press('Escape');
+    await page.locator('#insp [data-act="keep"]').click();
+    await page.locator('#commitBtn').click();
+    await expect(page.locator('#commitDlg')).toBeVisible();
+    await shoot(page, 'shared-file-commit', NARROW);
+    await page.keyboard.press('Escape');
+    // Changed by hand after the run: the shared file is no longer offered.
+    fs.appendFileSync(path.join(repo, 'a/tax.mjs'), '// by hand, later\n');
+    await page.locator('#commitBtn').click();
+    await expect(page.locator('#commitDlg [data-include="a/tax.mjs"]')).toBeDisabled();
+    await shoot(page, 'shared-file-commit-changed-since', [SIZES[0]!]);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 });

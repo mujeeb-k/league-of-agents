@@ -160,12 +160,15 @@ export const bridge = {
       throw e;
     }
   },
-  /** A 409 comes back as `{ conflict }` instead of throwing. */
-  async revert(c: Conn, id: number, force: boolean): Promise<RevertResponse> {
+  /**
+   * A 409 comes back as `{ conflict }` instead of throwing. `shared`: the files another session edited too that go
+   * back with this run; the rest of those are left as they are.
+   */
+  async revert(c: Conn, id: number, force: boolean, shared: string[] = []): Promise<RevertResponse> {
     try {
       return await request<RevertResponse>(c, `/api/runs/${id}/revert`, {
         method: 'POST',
-        body: force ? { force: true } : {},
+        body: { ...(force ? { force: true } : {}), ...(shared.length ? { shared } : {}) },
       });
     } catch (e) {
       if (e instanceof BridgeError && e.status === 409) return { conflict: e.data.conflict ?? [] };

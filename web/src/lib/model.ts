@@ -224,6 +224,15 @@ export function viewOf(f: FileNode): FileView {
   return { exists: true, kind, a, d: dl, rows, lines: afterRows.map(r => r.t) };
 }
 
+/** The run's files another session edited too, each with those sessions' runs. */
+export const sharedOf = (run: Run) => new Map((run.shared ?? []).map(s => [s.path, s.with]));
+
+/** The run's own files: what a revert puts back unasked, and a commit holds before anything is ticked. */
+export const ownFiles = (run: Run) => {
+  const shared = sharedOf(run);
+  return [...run.changes.keys()].filter(p => !shared.has(p));
+};
+
 export function fileStat(run: Run, p: string): Stat | null {
   const ch = run.changes.get(p);
   if (!ch) return null;

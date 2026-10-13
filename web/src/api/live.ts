@@ -678,14 +678,49 @@ export function disconnect() {
   toast(t('Disconnected'));
 }
 
+/**
+ * Reverts a run on the bridge, with the files another session edited too that the person chose. Files changed again
+ * since the run go to the conflict dialog, which may force it, with the same choice.
+ */
+async function revertOn(run: Run, shared: string[], force = false) {
+  const r = await bridge.revert(conn(), run.id, force, shared);
+  if ('conflict' in r) showConflict({ run, files: r.conflict, shared });
+  else if (r.left?.length) toast(t('Reverted run {id}, except {files}', { id: run.id, files: r.left.join(', ') }));
+  else toast(t('Reverted run {id}', { id: run.id }));
+}
+
 /** Revert even though the files changed again since the run; their later edits are lost. */
-export async function forceRevert(run: Run) {
+export async function forceRevert(run: Run, shared: string[] = []) {
   if (st.busy) return;
   st.busy = `revert:${run.id}`;
   renderInspector();
   try {
-    await bridge.revert(conn(), run.id, true);
-    toast(t('Reverted run {id}', { id: run.id }));
+    await revertOn(run, shared, true);
+    queueRefresh();
+  } catch (e) {
+    toast(explain(e));
+  } finally {
+    st.busy = null;
+    renderInspector();
+  }
+}
+
+/** Opens the revert dialog for a run with files another session edited too, none of them ticked; null closes it. */
+export function openRevert(run: Run | null) {
+  st.revert = run ? { run, include: new Set() } : null;
+  bump('dialog');
+}
+
+/** Reverts what the revert dialog holds: the run's own files, and the shared ones ticked. */
+export async function revertChosen() {
+  const r = st.revert;
+  if (!r || st.busy) return;
+  st.busy = `revert:${r.run.id}`;
+  st.revert = null;
+  bump('dialog');
+  renderInspector();
+  try {
+    await revertOn(r.run, [...r.include]);
     queueRefresh();
   } catch (e) {
     toast(explain(e));
@@ -735,6 +770,8 @@ export async function turnOffCheck(name: string) {
 
 export async function liveAction(act: string, run: Run) {
   if (st.busy) return;
+  // A file another session edited too never goes back unasked: the dialog asks which.
+  if (act === 'revert' && run.shared?.length) return openRevert(run);
   st.busy = `${act}:${run.id}`;
   renderInspector();
   try {
@@ -743,12 +780,7 @@ export async function liveAction(act: string, run: Run) {
     else if (act === 'keep') {
       await bridge.keep(c, run.id);
       toast(t('Kept run {id}', { id: run.id }));
-    } else if (act === 'revert') {
-      const r = await bridge.revert(c, run.id, false);
-      // Files changed again since the run: ask in the conflict dialog, which may call forceRevert.
-      if ('conflict' in r) showConflict({ run, files: r.conflict });
-      else toast(t('Reverted run {id}', { id: run.id }));
-    }
+    } else if (act === 'revert') await revertOn(run, []);
     queueRefresh();
   } catch (e) {
     toast(explain(e));

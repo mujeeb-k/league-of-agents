@@ -2,6 +2,7 @@ import { useLayoutEffect } from 'react';
 import { CommitDialog } from './components/CommitDialog';
 import { MapPicker } from './components/MapPicker';
 import { ConflictDialog } from './components/ConflictDialog';
+import { RevertDialog } from './components/RevertDialog';
 import { ExportDialog } from './components/ExportDialog';
 import { ConnectDialog } from './components/ConnectDialog';
 import { IconSprite } from './components/FileIcon';
@@ -30,6 +31,7 @@ export function App() {
       <IconSprite />
       <ConnectDialog />
       <ConflictDialog />
+      <RevertDialog />
       <CommitDialog />
       <MapPicker />
       <ExportDialog />

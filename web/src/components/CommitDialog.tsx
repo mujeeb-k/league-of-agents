@@ -1,5 +1,6 @@
 // Commit a run's files, after review: the message to edit, the files that go in, and any the person had changed
-// before the run, left out unless ticked. The bridge commits only these (bridge/lib/commit.mjs), never on its own.
+// before the run or another session edited too, left out unless ticked. The bridge commits only these
+// (bridge/lib/commit.mjs), never on its own.
 import { TriangleAlert } from 'lucide-react';
 import { commitDraft, openCommit } from '../api/live';
 import { st } from '../state/app';
@@ -7,13 +8,17 @@ import { bump, useRegion } from '../state/render';
 import { Button } from './ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';
 import { Textarea } from './ui/textarea';
-import { Spinner } from './bits';
-import { t } from '../i18n';
+import { SharedTag, Spinner } from './bits';
+import { sharedOf } from '../lib/model';
+import { cn } from '../lib/utils';
+import { t, tn } from '../i18n';
 
 export function CommitDialog() {
   useRegion('dialog');
   const c = st.commit;
-  const blocked = !c || c.changed.length > 0 || !c.branch || !c.message.trim() || st.busy === 'commit';
+  const shared = c ? sharedOf(c.run) : new Map<string, number[]>(),
+    n = c ? c.files.length + c.include.size : 0;
+  const blocked = !c || !n || c.changed.length > 0 || !c.branch || !c.message.trim() || st.busy === 'commit';
   return (
     <Dialog open={c !== null} onOpenChange={open => (open ? null : openCommit(null))}>
       <DialogContent id="commitDlg" className="gap-0 rounded-2xl p-6 shadow-[var(--e2)] sm:max-w-120">
@@ -73,6 +78,43 @@ export function CommitDialog() {
                   </label>
                 </li>
               ))}
+              {(c.shared ?? []).map(f => {
+                const later = !!c.later?.includes(f);
+                return (
+                  <li key={f}>
+                    <label className={cn('flex items-start gap-2', !later && 'cursor-pointer')}>
+                      <input
+                        type="checkbox"
+                        data-include={f}
+                        disabled={later}
+                        checked={c.include.has(f)}
+                        onChange={e => {
+                          if (e.target.checked) c.include.add(f);
+                          else c.include.delete(f);
+                          bump('dialog');
+                        }}
+                        className="mt-px size-3.5 shrink-0 cursor-pointer accent-[var(--sel)] disabled:cursor-default"
+                      />
+                      <span className="min-w-0">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span
+                            className={cn('min-w-0 truncate font-mono', later && 'text-muted-foreground')}
+                            title={f}
+                          >
+                            {f}
+                          </span>
+                          <SharedTag runs={shared.get(f) ?? []} />
+                        </span>
+                        <span className="mt-0.5 block text-muted-foreground text-pretty">
+                          {later
+                            ? t('Changed since this run ended, so it can’t go in with it.')
+                            : t('Ticked, the whole file goes in, the other session’s lines too.')}
+                        </span>
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
             </ul>
             {c.changed.length ? (
               <p className="mb-4 flex gap-2 text-ink2 text-pretty">
@@ -105,9 +147,9 @@ export function CommitDialog() {
               <DialogClose asChild>
                 <Button variant="outline">{t('Cancel')}</Button>
               </DialogClose>
-              <Button id="commitConfirm" disabled={blocked} onClick={() => void commitDraft()}>
+              <Button id="commitConfirm" disabled={blocked} className="tabular-nums" onClick={() => void commitDraft()}>
                 {st.busy === 'commit' ? <Spinner className="text-current" /> : null}
-                {t('Commit')}
+                {tn(n, 'Commit {n} file', 'Commit {n} files')}
               </Button>
             </DialogFooter>
           </>

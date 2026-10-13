@@ -945,7 +945,7 @@ test('toasts never cover other UI, and follow the sidebar', async ({ page }) => 
 });
 
 test('keep and revert in demo mode work as in live mode (findings 1 and 31)', async ({ page }) => {
-  await expect(page.locator('[data-act="keep"]')).toHaveText('Keep anyway');
+  await expect(page.locator('[data-act="keep"]')).toHaveText(/^Keep \d+ files$/);
   await page.locator('[data-act="keep"]').click();
   await expect(page.locator(TOAST)).toHaveText('Kept run 14');
   // Kept shows as an outcome, not as a button label; revert stays available.

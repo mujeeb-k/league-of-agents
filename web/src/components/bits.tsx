@@ -76,6 +76,15 @@ export const BetaTag = () => (
   </span>
 );
 
+/** A file another session edited too: left out of the run's revert and commit unless the person chooses it. */
+export const SharedTag = ({ runs }: { runs: number[] }) => (
+  <span className="shared shrink-0 rounded bg-mod/12 px-1 font-sans text-[11px] leading-[18px] font-medium whitespace-nowrap text-mod">
+    {runs.length === 1
+      ? t('Shared with run {id}', { id: runs[0]! })
+      : t('Shared with runs {ids}', { ids: runs.join(', ') })}
+  </span>
+);
+
 /** A translated sentence with elements in it: each `{name}` in the text becomes `nodes.name`, in the language's order. */
 export function Phrase({ text, nodes }: { text: string; nodes: Record<string, React.ReactNode> }) {
   return (

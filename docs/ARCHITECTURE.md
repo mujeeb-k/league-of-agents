@@ -75,7 +75,7 @@ CORS echoes only allowed origins and sends `Access-Control-Allow-Private-Network
 | `POST /api/save` | `{ path, text, base }`. Writes the file as a run by `you`. 409 with the current `text` and `hash` if the file changed on disk since `base` |
 | `POST /api/runs/:id/cancel` | Kills the agent |
 | `POST /api/runs/:id/keep` | Marks kept |
-| `POST /api/runs/:id/revert` | `{ force }`. 409 with `conflict[]` if files changed after the run |
+| `POST /api/runs/:id/revert` | `{ force, shared[] }`. 409 with `conflict[]` if files changed after the run. `shared` names the files another session edited too that go back with it; the rest of those are left, and named in `left[]` |
 | `POST /api/capture/start` and `/stop` | Used by the terminal hooks. They open and close only runs by `claude-terminal`; a new prompt closes a turn that never sent Stop (interrupted), and so does `SessionEnd` |
 
 The file routes serve and write only files the map shows (`listFiles()`: no `.env*`, `.git`, `.loa` or skip-list paths), whose real path is inside the repo, and that are text under 400 KB.
@@ -100,7 +100,8 @@ Every change becomes a run: an agent's, a save in the map's editor (`you`), or e
 
 **Sessions at once** (`parallel.mjs`):
 - From the first run starting to the last ending, the baseline stays where it was (an epoch). A run that starts beside others begins on a snapshot of that moment (`startingPoint()`).
-- `ownChanges(run, changes)` gives a run that overlapped others whatever changed in its own section while it worked, by its edit tools or its commands. What changed outside every section is said on the run and left for the epoch's end.
+- `ownChanges(run, changes)` gives a run that overlapped others every file its edit tools named, wherever the file is, and whatever else changed in its own section while it worked (its commands name no file). A file it edited inside another session's section is said on both runs. What changed outside every section that no edit tool named is said on the run and left for the epoch's end.
+- A file two sessions' edit tools both named is shared (`share()`): `shared: [{ path, with[] }]` on both runs, each naming the other. `revertRun()` leaves it exactly as it is and `commitPreview()` leaves it out, unless the request names it. The preview lists such files in `shared`, and in `later` the ones changed since the run ended, which can't go in with it. The app asks in its Revert and Commit dialogs. A file one session changed only by a command names no file, so it is never seen as shared.
 - `closeEpoch()` records whatever no run owns (an edit by hand, an agent outside its section) as a run of its own, by none of them.
 - Checks wait for the last session (`checksFor()`), run once, and every run of the epoch gets the same results.
 - `commitRun()` (`commit.mjs`) commits one run's files with the person's message: built in a private index from HEAD plus those files, by git itself so hooks run, and only if the branch is still where it was. Commits are made one at a time.

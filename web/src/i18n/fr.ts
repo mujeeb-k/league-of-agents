@@ -79,7 +79,6 @@ const catalogue: Catalogue = {
   Close: 'Fermer',
   'Open run {id}': 'Ouvrir l’exécution {id}',
   'Keep my later edits': 'Garder mes modifications ultérieures',
-  'Revert anyway': 'Annuler quand même',
   'Copy the command': 'Copier la commande',
   'Copy the line': 'Copier la ligne',
   Share: 'Partager',
@@ -150,15 +149,29 @@ const catalogue: Catalogue = {
   'mark reviewed': 'marquer comme relu',
   'No changes. No files were edited in this run.':
     'Aucun changement. Aucun fichier n’a été modifié pendant cette exécution.',
-  'Changed outside the scope:': 'Modifié hors de la portée :',
   'Reverted. Its changes are gone from your working tree.':
     'Annulée. Ses changements ne sont plus dans votre arbre de travail.',
   Kept: 'Conservée',
   'Changes stay in your working tree.': 'Les changements restent dans votre arbre de travail.',
-  'Revert run': 'Annuler l’exécution',
-  'Keep changes': 'Garder les changements',
-  'Keep anyway': 'Garder quand même',
   'across {n} files': { one: 'sur {n} fichier', other: 'sur {n} fichiers' },
+  'Revert run': 'Annuler l’exécution',
+  'Shared with run {id}': 'Partagé avec l’exécution {id}',
+  'Shared with runs {ids}': 'Partagé avec les exécutions {ids}',
+  'Revert run {id}?': 'Annuler l’exécution {id} ?',
+  'Puts these files back as they were before run {id}. Nothing else is touched.':
+    'Remet ces fichiers comme ils étaient avant l’exécution {id}. Rien d’autre n’est touché.',
+  'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.':
+    'Coché, il revient tel que l’exécution {id} l’a trouvé. Ce que l’autre session y a modifié depuis est perdu.',
+  'Revert {n} files': { one: 'Annuler {n} fichier', other: 'Annuler {n} fichiers' },
+  'Commit {n} files': { one: 'Committer {n} fichier', other: 'Committer {n} fichiers' },
+  'Keep {n} files': { one: 'Garder {n} fichier', other: 'Garder {n} fichiers' },
+  'Changed since this run ended, so it can’t go in with it.':
+    'Modifié depuis la fin de cette exécution : il ne peut pas partir avec elle.',
+  'Ticked, the whole file goes in, the other session’s lines too.':
+    'Coché, le fichier entier est inclus, avec les lignes de l’autre session.',
+  'Outside {section}': 'Hors de {section}',
+  'Outside its sections': 'Hors de ses sections',
+  'Reverted run {id}, except {files}': 'Exécution {id} annulée, sauf {files}',
   Agent: 'Agent',
   Human: 'Humain',
   Mixed: 'Mixte',

@@ -2,13 +2,14 @@
 // can revert anyway; in the demo, the later run has to be reverted first.
 import { TriangleAlert } from 'lucide-react';
 import { forceRevert } from '../api/live';
+import { ownFiles } from '../lib/model';
 import type { Conflict } from '../lib/types';
 import { st } from '../state/app';
 import { selectRun } from '../state/actions';
 import { bump, useRegion } from '../state/render';
 import { Button } from './ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogTitle } from './ui/dialog';
-import { t } from '../i18n';
+import { t, tn } from '../i18n';
 
 let returnFocus: HTMLElement | null = null;
 export function showConflict(c: Conflict | null) {
@@ -20,6 +21,8 @@ export function showConflict(c: Conflict | null) {
 export function ConflictDialog() {
   useRegion('dialog');
   const c = st.conflict;
+  // What the revert puts back: the run's own files, and the shared ones chosen with it.
+  const reverts = c ? ownFiles(c.run).length + (c.shared?.length ?? 0) : 0;
   return (
     <Dialog open={c !== null} onOpenChange={open => (open ? null : showConflict(null))}>
       <DialogContent
@@ -90,13 +93,13 @@ export function ConflictDialog() {
                   <Button
                     variant="outline"
                     id="conflictRevert"
-                    className="text-del hover:text-del"
+                    className="text-del tabular-nums hover:text-del"
                     onClick={() => {
                       showConflict(null);
-                      void forceRevert(c.run);
+                      void forceRevert(c.run, c.shared);
                     }}
                   >
-                    {t('Revert anyway')}
+                    {tn(reverts, 'Revert {n} file', 'Revert {n} files')}
                   </Button>
                 </>
               )}

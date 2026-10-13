@@ -248,3 +248,32 @@ export async function call(b: Bridge, route: string, body?: object) {
   });
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 }
+
+/**
+ * Two sessions in one checkout (the two-sections repo) that both edited a/tax.mjs, both ended: Claude Code, on a/,
+ * rewrote it and made a/rounding.mjs; Cursor's stand-in, on b/, then edited b/cart.mjs, a/discount.mjs and it.
+ */
+export async function sharedFileBridge() {
+  const repo = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'loa-e2e-')), 'two-sections');
+  execFileSync(process.execPath, [TWO_SECTIONS, repo]);
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_CURSOR_BIN: FAKE_CURSOR });
+  const start = async (agent: string, scope: string[], prompt: string) =>
+    (await call(b, '/api/runs', { agent, prompt, scope, resumeFrom: null })).body.id as number;
+  const until = async (what: () => boolean | Promise<boolean>) => {
+    for (let i = 0; i < 300 && !(await what()); i++) await new Promise(r => setTimeout(r, 50));
+    if (!(await what())) throw new Error('The two sessions did not finish.');
+  };
+  const done = (id: number) => until(async () => (await call(b, `/api/runs/${id}`)).body.status === 'done');
+  const tax = () => fs.readFileSync(path.join(repo, 'a/tax.mjs'), 'utf8');
+  const claude = await start('claude', ['a/'], 'Round every price. want:a/tax.mjs want:a/rounding.mjs wait:a');
+  await until(() => tax() === '// written by a session\n');
+  const cursor = await start(
+    'cursor',
+    ['b/'],
+    'Add a daily summary. edit:b/cart.mjs edit:a/discount.mjs edit:a/tax.mjs',
+  );
+  await done(cursor);
+  fs.writeFileSync(path.join(repo, '.loa/go-a'), '');
+  await done(claude);
+  return { b, repo, claude, cursor };
+}

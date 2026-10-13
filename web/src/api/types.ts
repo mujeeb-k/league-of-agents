@@ -273,7 +273,8 @@ export interface StartRunBody {
 }
 
 /** POST /api/runs/:id/revert. 409 carries `conflict`. */
-export type RevertResponse = { ok: true } | { conflict: string[] };
+/** `left`: the files another session edited too, left as they are because they weren't chosen (bridges after 0.2.0). */
+export type RevertResponse = { ok: true; left?: string[] } | { conflict: string[] };
 
 export interface OkResponse {
   ok: true;
@@ -317,6 +318,10 @@ export interface CommitPreview {
   files: string[];
   /** Files it changed that the person had changed too before it started: left out unless ticked. */
   yours: string[];
+  /** Files another session edited too: left out unless ticked (bridges after 0.2.0). */
+  shared?: string[];
+  /** The shared files changed since the run ended: they can't go in with this run. */
+  later?: string[];
   /** Files changed since the run ended: nothing commits until they are reviewed again. */
   changed: string[];
   /** The branch HEAD is on, or null when detached. */
