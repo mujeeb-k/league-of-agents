@@ -73,6 +73,8 @@ export const onCameraMove = (fn: () => void) => void (moved = fn);
 export function zoomAt(px: number, py: number, f: number) {
   endFirstLoad();
   moved();
+  // A flight under way would write over the zoom at its next frame: the person's zoom ends it.
+  cancelAnimationFrame(anim);
   const { x, y, s } = st.v,
     ns = clamp(s * f, minZoom(), 2.5);
   const wx = (px - x) / s,
@@ -102,8 +104,11 @@ export function viewCenter(): [number, number] {
 }
 let anim = 0;
 export function flyTo(t: View, following = false) {
-  endFirstLoad();
-  if (!following) moved();
+  // A followed session's step moves the map by itself: it isn't the person's zoom, so the sidebar's hold stays.
+  if (!following) {
+    endFirstLoad();
+    moved();
+  }
   cancelAnimationFrame(anim);
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
     st.v = t;

@@ -3756,6 +3756,37 @@ test.describe('sessions at once, in the app', () => {
       }),
   );
 
+  test(
+    "a followed session's step leaves the sidebar where a picked tab put it; the person's zoom still steps it aside",
+    { tag: '@motion' },
+    async ({ page }) =>
+      withHermes(page, async (repo, b) => {
+        const side = page.locator('#side'),
+          AWAY = /(^|\s)away(\s|$)/;
+        // Auto, as a first visit has it: this suite pins the sidebar.
+        await page.locator('#pinSide').click();
+        await folder(page, 'shared').click();
+        await run(page, 'hold:a edit:shared/log.ts wait:b');
+        const marker = page.locator('#markers .marker[data-run="1"]');
+        await expect(marker).toHaveAttribute('data-path', 'shared/allowlist.ts', { timeout: 15_000 });
+        // Below code zoom, on the Runs tab, following the session; then Files is picked, and holds the sidebar.
+        await zoomTo(page, 20);
+        await page.locator('#sideList [data-run="1"] [data-follow]').click();
+        await page.locator('[data-tab="files"]').click();
+        await expect(side).not.toHaveClass(AWAY);
+        // The session turns to another file and the map goes there by itself: nobody zoomed.
+        const before = await page.locator('#world').evaluate(el => getComputedStyle(el).transform);
+        go(repo, 'a');
+        await expect(marker).toHaveAttribute('data-path', 'shared/log.ts', { timeout: 15_000 });
+        await expect.poll(() => page.locator('#world').evaluate(el => getComputedStyle(el).transform)).not.toBe(before);
+        await expect(side).not.toHaveClass(AWAY);
+        await zoomTo(page, 22);
+        await expect(side).toHaveClass(AWAY);
+        go(repo, 'b');
+        await expect.poll(async () => (await runsOf(b))[0]!.status, { timeout: 15_000 }).toBe('done');
+      }),
+  );
+
   test('one session ending leaves what the others reported since as it was: their cost, their activity', async ({
     page,
   }) =>
