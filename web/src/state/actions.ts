@@ -49,6 +49,8 @@ function openRun(run: Run | null, fly: boolean) {
   // An ended session's mark on the map goes once its run is looked at: opened, or left after being open.
   if (st.run && st.run !== run && st.run.status !== 'running') seen(st.run.id);
   if (run) seen(run.id);
+  // A run picked from the follow-up menu is followed while it stays open.
+  if (st.follow !== run?.id) st.follow = null;
   st.run = run;
   st.cur = null;
   setMoment(null);

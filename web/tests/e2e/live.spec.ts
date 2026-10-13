@@ -5978,34 +5978,56 @@ test("a selection outside the open run's section starts a new session; the menu 
     await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
     const chip = page.locator('#followChip'),
       scope = page.locator('#scopeRow .chip:not(.all):not(.fu):not(.new) > span');
-    // Its own section selected: a follow-up, as before.
+    // A file or a folder picked on the whole map, where every one of them is on screen.
+    const pick = async (key: string) => {
+      await page.keyboard.press('0');
+      await page
+        .locator(key.startsWith('data-dir') ? `.frame[${key}] > .flabel b` : `#nodes [${key}]`)
+        .first()
+        .click({ position: { x: 12, y: 8 } });
+    };
+    // Its own section selected: a follow-up, as before. A file inside it too.
     await expect(scope).toHaveText(['shared/']);
     await expect(chip).toHaveText('Follow-up to run 1');
-    // A folder outside its section selected instead: a new session. The whole map first, so its label is on screen.
-    await page.keyboard.press('0');
-    await page.locator('.frame[data-dir="apps/console"] > .flabel b').click();
+    await pick('data-path="shared/log.ts"');
+    await expect(scope).toHaveText(['log.ts']);
+    await expect(chip).toHaveText('Follow-up to run 1');
+    // A file outside its section, then a folder: a new session.
+    await pick('data-path="apps/console/main.ts"');
+    await expect(scope).toHaveText(['main.ts']);
+    await expect(chip).toHaveText('New session');
+    await pick('data-dir="apps/console"');
     await expect(scope).toHaveText(['apps/console/']);
     await expect(chip).toHaveText('New session');
-    // Back inside the section: a follow-up again.
-    await page.locator('.frame[data-dir="shared"] > .flabel b').click();
-    await expect(scope).toHaveText(['shared/']);
-    await expect(chip).toHaveText('Follow-up to run 1');
-    await page.locator('.frame[data-dir="apps/console"] > .flabel b').click();
-    await expect(chip).toHaveText('New session');
-    // Picked from the menu, the follow-up stands, with that selection; and can be dropped again.
-    await chip.click();
-    await page.locator('#followMenu [data-follow="1"]').click();
-    await expect(chip).toHaveText('Follow-up to run 1');
-    await expect(scope).toHaveText(['apps/console/']);
-    await chip.click();
-    await page.locator('#followMenu [data-follow="new"]').click();
-    await expect(chip).toHaveText('New session');
+    // Sent as it stands, with no menu: a session of its own, on what was selected.
     await page.locator('#prompt').fill('Same change again');
     await page.locator('#prompt').press('Enter');
     await expect(page.locator('#runbar b')).toHaveText('Run 2', { timeout: 15_000 });
     const run2 = JSON.parse(fs.readFileSync(path.join(repo, '.loa/runs/2.json'), 'utf8')) as RunDTO;
     expect(run2.resumeFrom).toBeNull();
     expect(run2.scope).toEqual(['apps/console/']);
+    await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
+    // Run 2 is open now, on apps/console/. shared/ is outside it; picked from the menu, the follow-up stands.
+    await pick('data-dir="shared"');
+    await expect(chip).toHaveText('New session');
+    await chip.click();
+    await page.locator('#followMenu [data-follow="2"]').click();
+    await expect(chip).toHaveText('Follow-up to run 2');
+    await expect(scope).toHaveText(['shared/']);
+    // Only while that run stays open: closed and opened again, the selection decides once more.
+    await page.locator('[data-act="closeRun"]').click();
+    await page.locator('[data-tab="runs"]').click();
+    await page.locator('#sideList [data-run="2"]').click();
+    await expect(page.locator('#runbar b')).toHaveText('Run 2');
+    await expect(scope).toHaveText(['shared/']);
+    await expect(chip).toHaveText('New session');
+    // And the menu's own way back to a new session still works.
+    await chip.click();
+    await page.locator('#followMenu [data-follow="2"]').click();
+    await expect(chip).toHaveText('Follow-up to run 2');
+    await chip.click();
+    await page.locator('#followMenu [data-follow="new"]').click();
+    await expect(chip).toHaveText('New session');
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });

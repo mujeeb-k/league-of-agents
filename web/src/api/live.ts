@@ -629,6 +629,7 @@ export async function connect(c: Conn, quiet = false): Promise<string | null> {
     st.unreachable = null;
     saveConn(c);
     st.run = null;
+    st.follow = null;
     st.sel.clear();
     st.mode = 'after';
     st.tab = 'runs';
