@@ -14,6 +14,8 @@ describe('olderThan (the update banner)', () => {
     expect(olderThan('0.3.0-next.0', '0.2.0')).toBe(false);
     expect(olderThan('0.2.0-next.4', '0.2.0')).toBe(false);
     expect(olderThan('0.1.9-next.0', '0.2.0')).toBe(true);
+    // What told the old reading apart: its third number was not a number, and nothing was older than anything.
+    expect(olderThan('0.3.0-next.0', '0.3.1')).toBe(true);
   });
   it('treats a bridge that sends no version as old', () => {
     expect(olderThan(null, '0.1.0')).toBe(true);

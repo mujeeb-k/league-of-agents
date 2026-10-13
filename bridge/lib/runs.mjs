@@ -157,10 +157,12 @@ export async function finishRun(run, status = 'done', { checks = true } = {}) {
     );
   const peers = peersOf(run);
   await Promise.all([run, ...peers].map(stepsKept));
-  // Who wrote each line is worked out last, and a run ends whether or not it can be: left unsaid, never stuck.
+  // Who wrote each line is worked out last, and a run ends whether or not it can be: left unsaid for the whole
+  // run then, never stuck.
   try {
     const wrote = await linesOf(run, peers, { stepsOf, blobAt });
-    run.agentLines = wrote.agent;
+    // Said even when it is none of them: left out, the app reads it as not worked out (an older bridge's run).
+    run.agentLines = wrote.agent ?? {};
     if (wrote.other) run.otherLines = wrote.other;
   } catch (e) {
     logError(e);

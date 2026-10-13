@@ -1747,6 +1747,12 @@ test('colored by author: agent lines marked, the rest unknown, and a line shows 
     await expect(page.locator('#authorLine')).toContainText('Agent');
     await expect(page.locator('#authorLine')).toContainText('Claude Code wrote it with its edit tools.');
     await expect(page.locator('#authorLine')).toContainText('Claude Code · claude-sonnet-5-5 · Run 1');
+    // The line no edit tool wrote: this bridge worked that out, and says so.
+    await card.locator('.ln', { hasText: 'isEmpty' }).click();
+    await expect(page.locator('#authorLine')).toContainText(
+      "Changed during run 1, but not by an agent's edit: by a command, or some other way.",
+    );
+    await agent.click();
     await expect(page.locator('#authorLine')).toContainText('Name the action and origin in allowlist errors');
     await page.screenshot({ path: test.info().outputPath('by-author.png') });
     // Zoomed out, the tile's bar shows the agent's share.
@@ -2082,6 +2088,8 @@ test("a branch's first commit whose hook adds a file: made, and said with the fi
     expect(made.status).toBe(200);
     expect(made.body).toMatchObject({ files: ['shared/log.ts'], hook: ['HOOKED.md'] });
     expect(git(repo, 'show', '--name-only', '--format=%s', 'HEAD').trim()).toBe('First\n\nHOOKED.md\nshared/log.ts');
+    // And their staging area holds both as committed: neither shows as staged or changed.
+    expect(git(repo, 'status', '--porcelain', '--', 'HOOKED.md', 'shared/log.ts')).toBe('');
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
