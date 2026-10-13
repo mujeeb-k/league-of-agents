@@ -4623,7 +4623,7 @@ test('lines selected in the editor scope a live run; changes outside them are fl
       ...(SANDBOX ? [] : ['shared/policy-cache.ts']),
     ]);
     // On the file's row in the review list, by the lines it was held to.
-    await expect(page.locator('#insp .flist li', { hasText: 'allowlist.ts' })).toContainText('Outside lines 3–5');
+    await expect(page.locator('#insp .flist li[title="shared/allowlist.ts"]')).toContainText('Outside lines 3–5');
     await expect(page.locator('#editor .cm-added').first()).toBeVisible();
     await expect(page.locator('#editor .cm-removed')).toContainText(["    throw new Error('ALLOWLIST_VIOLATION');"]);
     await page.locator('#rejectChange').click();
