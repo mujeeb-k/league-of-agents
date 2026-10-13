@@ -3,16 +3,22 @@
   position: relative;
   /* Clipped, never scrolled: the map moves by its transform alone. With `hidden`, the browser scrolled the stage to
      bring a focused control into view (the agent menu, opened while the composer was still moving into place), and
-     the whole map stayed that far off. `hidden` stays for a browser without `clip` (Safari before 16). A clipped
-     box isn't a scroll container, so its smallest size is said: the grid cell sizes it, never its content. */
+     the whole map stayed that far off. A clipped box isn't a scroll container, so its smallest size is said: the
+     grid cell sizes it, never its content. */
   overflow: hidden;
-  overflow: clip;
   min-width: 0;
   min-height: 0;
   background-color: var(--canvas);
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+}
+/* `hidden` stays for a browser without `clip` (Safari before 16). A rule of its own: two `overflow` lines in one
+   rule are merged into the last one when the stylesheet is built. */
+@supports (overflow: clip) {
+  #stage {
+    overflow: clip;
+  }
 }
 #stage.grid {
   background-image: radial-gradient(circle, var(--dot) 1px, transparent 1.2px);

@@ -250,6 +250,25 @@ test('the mark and wordmark reload the page, by click and by keyboard', async ({
   }
 });
 
+test('the stage is clipped where the browser can clip, and hidden where it cannot', async ({ page }) => {
+  // The stylesheet as built: written as two lines of one rule, the build keeps `clip` alone.
+  const rules = await page.evaluate(() => {
+    const found: string[] = [];
+    const walk = (list: CSSRuleList, inside: string) => {
+      for (const r of list) {
+        if (r instanceof CSSStyleRule) {
+          if (r.selectorText === '#stage' && r.style.overflow) found.push(inside + r.style.overflow);
+        } else if (r instanceof CSSSupportsRule) walk(r.cssRules, `@supports ${r.conditionText}: `);
+        else if (r instanceof CSSGroupingRule) walk(r.cssRules, inside);
+      }
+    };
+    for (const s of document.styleSheets) walk(s.cssRules, '');
+    return found;
+  });
+  expect(rules).toEqual(['hidden', '@supports (overflow: clip): clip']);
+  expect(await page.locator('#stage').evaluate(e => getComputedStyle(e).overflow)).toBe('clip');
+});
+
 test('drag pans the canvas and hides the tip', async ({ page }) => {
   const a = await view(page),
     p = await emptyPoint(page);
