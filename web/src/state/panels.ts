@@ -58,8 +58,11 @@ export function applyPanels() {
   const vis = sideVisibleAt(st.v.s);
   if (vis !== shown) {
     shown = vis;
+    // Focus inside a sidebar that steps aside would be lost: it goes to the button that brings the sidebar back.
+    const held = !vis && dom.side.contains(document.activeElement);
     dom.side.classList.toggle('away', !vis);
     dom.side.inert = !vis;
+    if (held) document.getElementById('sideBtn')?.focus();
     bump('top');
   }
   // Only the layers that move get the variable; setting it on the canvas would restyle every row.

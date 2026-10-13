@@ -614,6 +614,33 @@ test('sidebar steps aside below code zoom; pin, [ and ] and the inspector handle
   await expect(side).toHaveClass(AWAY);
 });
 
+test('focus inside a sidebar that steps aside goes to the button that brings it back', async ({ page }) => {
+  const side = page.locator('#side'),
+    AWAY = /(^|\s)away(\s|$)/;
+  // Auto, as a first visit has it.
+  await page.addInitScript(() => localStorage.removeItem('loa.panels'));
+  await page.reload();
+  await page.locator('#insp section').first().waitFor();
+  // By the arrow keys from the Runs tab to Files, below code zoom.
+  await page.locator('[data-tab="runs"]').click();
+  await page.keyboard.press('0');
+  await expect(side).not.toHaveClass(AWAY);
+  await page.locator('[data-tab="runs"]').focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(side).toHaveClass(AWAY);
+  await expect(page.locator('#sideBtn')).toBeFocused();
+  // And by zooming out with the keys while focus is in the sidebar, on the Files tab at code zoom.
+  await page.reload();
+  await page.locator('#insp section').first().waitFor();
+  for (let i = 0; i < 8; i++) await page.keyboard.press('=');
+  await expect(page.locator('#world')).toHaveClass(/near/);
+  await expect(side).not.toHaveClass(AWAY);
+  await page.locator('[data-tab="files"]').focus();
+  for (let i = 0; i < 12; i++) await page.keyboard.press('-');
+  await expect(side).toHaveClass(AWAY);
+  await expect(page.locator('#sideBtn')).toBeFocused();
+});
+
 test('the run list stays through a flight to the whole map', { tag: '@motion' }, async ({ page }) => {
   await page.reload();
   await page.locator('#insp section').first().waitFor();
