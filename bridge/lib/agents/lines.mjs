@@ -35,6 +35,8 @@ export function noteLines(run, file, texts) {
   if (!files.has(rel)) files.set(rel, []);
   for (const t of texts) if (typeof t === 'string') files.set(rel, [...(files.get(rel) || []), ...t.split('\n')]);
 }
+/** Above every run id: a line an unseen-start edit of run (o - MAYBE) may have written. */
+const MAYBE = 1e9;
 /** git's empty blob, standing for a file that isn't there. */
 const EMPTY = 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391';
 /** The hunks from one blob to another, as [old start, old count, new count], 0-based. None for binary files. */
@@ -112,25 +114,51 @@ export async function linesOf(run, peers, { stepsOf, blobAt }) {
           .filter(w => w.file === c.path && w.at >= run.startedAt)
           .map(w => ({ start: w.start ?? w.at, end: w.at, from: w.from, to: w.to, run: r.id, edit: false })),
       ])
-      .sort((x, y) => x.start - y.start || x.run - y.run);
+      // A save from the map's editor is a write seen too, and no session's.
+      .concat(
+        await Promise.all(
+          peers
+            .filter(r => r.agent === 'you' && r.endedAt && r.changes?.some(x => x.path === c.path))
+            .map(async r => ({
+              start: r.startedAt,
+              end: r.endedAt,
+              from: await blobAt(r.before, c.path),
+              to: await blobAt(r.after, c.path),
+              run: 0,
+              edit: false,
+            })),
+        ),
+      )
+      // In the order each left the file: a command's end is after any write made while it ran.
+      .sort((x, y) => x.end - y.end || x.run - y.run);
     /**
      * Who was writing the file between two moments, where no write of it was seen: the one session at work then, or
      * 0. A section says nothing of who wrote a file: in the owner's run Cursor wrote into Claude Code's.
      */
     const writer = (t0, t1) => {
+      // Inside a bracketed command of one session's, what changed is that command's, as everything it changed but
+      // others' seen writes (parallel.mjs ownWrites).
+      const running = new Set(writes.filter(w => !w.edit && w.run && w.start < t1 && w.end >= t1).map(w => w.run));
+      if (running.size === 1) return [...running][0];
       const at = sessions.filter(r => r.startedAt <= t1 && (r.endedAt ?? Infinity) >= t0);
-      return at.length === 1 ? at[0].id : 0;
+      return !running.size && at.length === 1 ? at[0].id : 0;
     };
-    // A line's writer: the run's id, negative where not by an edit tool, or 0.
+    // A line's writer: the run's id, negative where not by an edit tool, or 0; MAYBE above a run's id where an edit of
+    // its wasn't seen start while another session could have written too.
     let state = (await blobAt(run.before, c.path)) ?? EMPTY,
       t = run.startedAt;
     let owners = Array(await linesIn(state)).fill(0);
     for (const w of writes) {
       const to = w.to ?? EMPTY;
       if (w.from === undefined) {
-        // An edit whose start wasn't seen: its session's only if no one else could have been writing the file.
+        // An edit whose start wasn't seen: its session's if no one else could have been writing the file; otherwise
+        // only its edit tool's own text is (below).
         const who = writer(t, w.end);
-        owners = await carry(owners, state, to, who === w.run ? w.run : 0);
+        owners = await carry(owners, state, to, who === w.run ? w.run : MAYBE + w.run);
+      } else if (t > w.start) {
+        // A command that other writes seen landed in while it ran: its own is what changed from the file as they left
+        // it to its end.
+        owners = await carry(owners, state, to, w.edit ? w.run : -w.run);
       } else {
         owners = await carry(owners, state, w.from ?? EMPTY, -writer(t, w.start));
         owners = await carry(owners, w.from ?? EMPTY, to, w.edit ? w.run : -w.run);
@@ -143,7 +171,9 @@ export async function linesOf(run, peers, { stepsOf, blobAt }) {
     const said = new Set(
       (texts?.[c.path] ?? []).flatMap(([a, b]) => Array.from({ length: b - a + 1 }, (_, k) => a + k)),
     );
-    owners = owners.map((o, i) => (o === -run.id && said.has(i) ? run.id : o || 0));
+    owners = owners.map((o, i) =>
+      (o === -run.id || o === MAYBE + run.id) && said.has(i) ? run.id : o >= MAYBE ? 0 : o || 0,
+    );
     // Runs of lines `who` takes, each [from, to, writer]; `same` says when two neighbours are one range.
     const ranges = (who, same = (x, y) => x === y) => {
       const out = [];

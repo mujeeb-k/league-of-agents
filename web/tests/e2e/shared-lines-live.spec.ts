@@ -474,6 +474,73 @@ test("an edit with no start seen, inside another session's command on the file: 
   }
 });
 
+// An edit whose start wasn't seen, while another session works: its file may hold the other's writes too, so only
+// the lines its edit's own text holds are its; before, none were.
+test('an edit with no start seen while another session works keeps the lines its own text holds', async () => {
+  const { repo, b, start, go } = await twoSessions(FAKE_CURSOR, { FAKE_CURSOR_WRITES_FIRST: '1' }, ['--no-hooks']);
+  try {
+    const claude = await start('claude', ['a/'], CLAUDE_PROMPT);
+    const cursor = await start('cursor', ['b/'], 'Add a daily summary. edit:b/report.mjs');
+    const two = await ended(b, cursor);
+    const lines = onDisk(repo, 'b/report.mjs').trimEnd().split('\n');
+    const at = lines.findIndex(l => l.startsWith('// edited by cursor'));
+    expect.soft(at).toBeGreaterThan(0);
+    expect.soft(two.agentLines).toEqual({ 'b/report.mjs': [[at, at]] });
+    go('one');
+    await ended(b, claude);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// A bracketed command of Claude Code's runs; meanwhile Cursor edits a/tax.mjs, and then the command writes it. The
+// command's line is Claude Code's, Cursor's line Cursor's: neither is lost to "not from a session".
+test("a command another session's edit lands in: each keeps its own line", async () => {
+  const { repo, b, start, go } = await twoSessions();
+  const SHELL = '// written by a shell command';
+  try {
+    const claude = await start('claude', ['a/'], 'Run the tests. shell:a/tax.mjs:d:late');
+    const cursor = await start('cursor', ['b/'], 'Add a daily summary. insert:a/tax.mjs:1:comment');
+    const two = await ended(b, cursor);
+    go('d');
+    const one = await ended(b, claude);
+    const both = onDisk(repo, 'a/tax.mjs').trimEnd().split('\n');
+    expect.soft(both).toEqual([ORIGINAL[0], COMMENT, ...ORIGINAL.slice(1), SHELL]);
+    expect.soft(one.agentLines).toEqual({ 'a/tax.mjs': [[5, 5]] });
+    expect.soft(one.commandLines).toEqual({ 'a/tax.mjs': [[5, 5]] });
+    expect.soft(two.agentLines).toEqual({ 'a/tax.mjs': [[1, 1]] });
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// A save from the map's editor while one session works on the file: the person's line, never the session's.
+test("a line saved from the map's editor while one session works is not that session's", async () => {
+  const { repo, b, start, go } = await twoSessions(FAKE_CURSOR, {}, ['--no-hooks']);
+  try {
+    const cursor = await start('cursor', ['b/'], 'Note where tax is used. edit:a/tax.mjs wait:x');
+    await expect.poll(() => onDisk(repo, 'a/tax.mjs')).toContain('// edited by cursor');
+    const now = (await call(b, '/api/file?path=a/tax.mjs')).body as { hash: string };
+    const saved = await call(b, '/api/save', {
+      path: 'a/tax.mjs',
+      text: onDisk(repo, 'a/tax.mjs') + '// saved by hand\n',
+      base: now.hash,
+    });
+    expect.soft(saved.status).toBe(200);
+    go('x');
+    const run = await ended(b, cursor);
+    const lines = onDisk(repo, 'a/tax.mjs').trimEnd().split('\n');
+    const at = lines.findIndex(l => l.startsWith('// edited by cursor'));
+    expect.soft(lines.at(-1)).toBe('// saved by hand');
+    expect.soft(run.agentLines?.['a/tax.mjs']).toEqual([[at, at]]);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 // The order turned round: Cursor's run is committed first. Its file is outside its section and Claude Code wrote it
 // by a command no hook brackets, so the commit holds Cursor's line alone, not Claude Code's uncommitted one.
 test("a run's commit of a file outside its section holds its lines alone, not another's uncommitted ones", async () => {
