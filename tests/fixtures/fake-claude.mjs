@@ -184,8 +184,12 @@ if (inserts.some(([what]) => what === 'insert')) {
 const shells = [...prompt.matchAll(/\bshell:(\S+)/g)].map(m => m[1]);
 if (shells.length) {
   const results = [];
-  for (const [i, file] of shells.entries()) {
-    const command = `printf '// written by a shell command\\n' >> ${file}`;
+  for (const [i, arg] of shells.entries()) {
+    // "shell:<path>:<name>": the command then holds until .loa/go-<name> exists, as a long one (a test run) would.
+    const [file, until] = arg.split(':');
+    const command =
+      `printf '// written by a shell command\\n' >> ${file}` +
+      (until ? ` && until [ -f .loa/go-${until} ]; do sleep 0.05; done` : '');
     const payload = { tool_name: 'Bash', tool_input: { command }, tool_use_id: `toolu_shell_${i}`, cwd: process.cwd() };
     out({
       type: 'assistant',

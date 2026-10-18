@@ -376,3 +376,32 @@ test('a later edit that touches the run’s lines: Revert leaves that file as it
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
 });
+
+// An edit whose start wasn't seen (the stand-in writes before it says so) lands inside a long shell command of the
+// other session's on the same file. Neither write can be told apart from the other: reverting either run leaves the
+// file as it is and says so, and no line of the other's is lost.
+test("an edit with no start seen, inside another session's command on the file: Revert loses no one's line", async () => {
+  const { repo, b, start, go } = await twoSessions(FAKE_CURSOR, { FAKE_CURSOR_WRITES_FIRST: '1' });
+  const SHELL = '// written by a shell command';
+  try {
+    const cursor = await start('cursor', ['b/'], 'Add a daily summary. wait:c edit:a/tax.mjs');
+    const claude = await start('claude', ['a/'], 'Run the tests. shell:a/tax.mjs:d');
+    await expect.poll(() => onDisk(repo, 'a/tax.mjs')).toContain(SHELL);
+    go('c');
+    await ended(b, cursor);
+    go('d');
+    await ended(b, claude);
+    const both = onDisk(repo, 'a/tax.mjs');
+    expect.soft(both).toContain(SHELL);
+    expect.soft(both).toContain('// edited by cursor');
+    const back = await call(b, `/api/runs/${cursor}/revert`, { force: false, shared: ['a/tax.mjs'] });
+    expect.soft([back.status, back.body]).toEqual([200, { ok: true, left: ['a/tax.mjs'] }]);
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(both);
+    const first = await call(b, `/api/runs/${claude}/revert`, { force: false, shared: ['a/tax.mjs'] });
+    expect.soft([first.status, first.body]).toEqual([200, { ok: true, left: ['a/tax.mjs'] }]);
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(both);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});

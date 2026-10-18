@@ -11,7 +11,7 @@ import { inScope, scopeEntry } from './scope.mjs';
 import { CONF } from './repo.mjs';
 import { runChecks } from './checks.mjs';
 import { blobAt, commitWith, computeChanges, pin, snapshotNow } from './snapshots.mjs';
-import { changeOf, takeOut } from './writes.mjs';
+import { UNSEEN, changeOf, takeOut } from './writes.mjs';
 import { runs, working, newRun, finishRun, saveRun } from './runs.mjs';
 import { base, setBase, settle } from './watch.mjs';
 import { emit, emitRun } from './events.mjs';
@@ -90,26 +90,25 @@ const seenWrites = (run, file) =>
     ...(run.wrote ?? []).filter(w => w.file === file).map(w => ({ at: w.at, from: w.from, to: w.to, start: w.start })),
   ].sort((a, b) => a.at - b.at);
 /**
- * A run's own writes to a file, as [from, to, at] (writes.mjs), from every write the epoch's sessions made to it in
- * order: an edit whose start wasn't seen starts from the file as the write before it left it.
+ * A run's own writes to a file, as [from, to, at] (writes.mjs). An edit whose start wasn't seen keeps it unseen
+ * (UNSEEN): what it found is not guessed, so it is never taken out over another's lines.
  */
 async function ownWrites(run, file) {
-  const all = epoch.runs.flatMap(r => seenWrites(r, file).map(w => ({ ...w, run: r }))).sort((a, b) => a.at - b.at);
-  let last = await blobAt(epoch.base.commit, file);
+  const all = epoch.runs
+    .flatMap(r => seenWrites(r, file).map(w => ({ ...w, from: w.from === undefined ? UNSEEN : w.from, run: r })))
+    .sort((a, b) => a.at - b.at);
   /** @type {import('./writes.mjs').Write[]} */
   const own = [];
   for (const w of all) {
-    const from = w.from === undefined ? last : w.from;
-    last = w.to;
     if (w.run !== run) continue;
     // A shell command's write holds whatever changed while it ran (a test run, a build): another session's edits
-    // made meanwhile are taken out of it.
+    // made meanwhile are taken out of it. Where they can't be, what the command left isn't known apart from them.
     /** @type {import('./writes.mjs').Write[]} */
     const meanwhile = w.start
-      ? all.filter(o => o.run !== run && o.at > w.start && o.at <= w.at).map(o => [o.from ?? null, o.to, o.at])
+      ? all.filter(o => o.run !== run && o.at > w.start && o.at <= w.at).map(o => [o.from, o.to, o.at])
       : [];
     const to = meanwhile.length ? await takeOut(meanwhile, w.to) : { blob: w.to };
-    own.push([from, 'blob' in to ? to.blob : w.to, w.at]);
+    own.push([w.from, 'blob' in to ? to.blob : UNSEEN, w.at]);
   }
   return own;
 }
@@ -167,8 +166,15 @@ export async function ownChanges(run, changes) {
         (run.writes ??= {})[c.path] = writes;
         const after = await blobAt(run.after, c.path);
         const base = await takeOut(writes, after);
-        // Where a later write overlaps its own, it is drawn from the file as its first write found it.
-        const from = 'blob' in base ? base.blob : (writes[0]?.[0] ?? null);
+        // Where a later write overlaps its own, or one wasn't seen whole, it is drawn from the file as its first write
+        // found it, or as the run found it.
+        const first = writes[0]?.[0];
+        const from =
+          'blob' in base
+            ? base.blob
+            : first === UNSEEN || first === undefined
+              ? await blobAt(run.before, c.path)
+              : first;
         if (from === after) continue;
         own.push(await changeOf(c.path, from, after));
       } else own.push(c);

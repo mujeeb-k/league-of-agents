@@ -1,7 +1,8 @@
 // A run's own writes to a file, and taking them out again. Sessions at once change one file in turns: a run's change
 // is what its own writes did, on the file as the others left it, and a revert takes back only those writes, merged
 // out of the file as it is now (git merge-file), so another session's lines, committed or not, stay. A write is
-// [from, to, at]: the file's blob before and after it (null where there was no file), and when it ended.
+// [from, to, at]: the file's blob before and after it (null where there was no file, UNSEEN where that wasn't
+// seen), and when it ended.
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -60,10 +61,13 @@ async function merge(ours, base, theirs) {
   }
 }
 
+/** A file a write found or left that wasn't seen (an edit whose start landed before the bridge heard of it). */
+export const UNSEEN = '';
 /** @typedef {[string | null, string | null, number?]} Write  A write: the file before, after, and when it ended. */
 /**
  * The file `now` with these writes taken out, the last first: `{ blob }` (null: no file), or `{ conflict: true }`
- * where a later change overlaps one of them. A file the writes left as it is now goes straight back.
+ * where a later change overlaps one of them, or one of them wasn't seen whole. A file the writes left as it is now
+ * goes straight back.
  * @param {Write[]} writes
  * @param {string | null} now
  * @returns {Promise<{ blob: string | null } | { conflict: true }>}
@@ -71,6 +75,8 @@ async function merge(ours, base, theirs) {
 export async function takeOut(writes, now) {
   let cur = now;
   for (const [from, to] of [...writes].reverse()) {
+    // A guess at what it found could take another's lines out with it: not guessed.
+    if (from === UNSEEN || to === UNSEEN) return { conflict: true };
     if (cur === to) {
       cur = from;
       continue;
