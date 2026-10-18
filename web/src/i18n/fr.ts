@@ -629,6 +629,8 @@ const catalogue: Catalogue = {
   "{agent} can't resume a session: this run starts a new one":
     '{agent} ne peut pas reprendre une session : cette exécution en démarre une nouvelle',
   '{agent} refused the task': '{agent} a refusé la tâche',
+  "Git couldn't read the repo when the run ended: {why}":
+    'Git n’a pas pu lire le dépôt à la fin de l’exécution : {why}',
   '{agent} stopped at its limit before finishing': '{agent} s’est arrêté à sa limite avant d’avoir fini',
   '{agent} exited with code {code}': '{agent} s’est terminé avec le code {code}',
   '{agent} exited with code {code}: {why}': '{agent} s’est terminé avec le code {code} : {why}',

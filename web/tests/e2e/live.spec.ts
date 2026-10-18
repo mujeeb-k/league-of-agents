@@ -2951,6 +2951,28 @@ test.describe('sessions at once', () => {
       expect(fs.readFileSync(path.join(repo, '.git/config')).equals(config)).toBe(true);
     }));
 
+  // On the whole repository nothing is enforced (VISION 30): the harness may write git's folder as in a terminal.
+  // Here that breaks git's config, so git can't read the repo when the run ends: the run ends all the same, said why.
+  test('on the whole repository an ACP harness may edit the git folder; a run git then cannot read still ends, said why', () =>
+    twoSessions(async (b, repo) => {
+      const file = path.join(repo, '.git/config'),
+        config = fs.readFileSync(file);
+      const h = (await start(b, [], 'edit:.GIT/config')).body as unknown as RunDTO;
+      try {
+        await until(b, h.id, 'failed');
+        expect(fs.readFileSync(file).equals(config)).toBe(false);
+        const run = await runOf(b, h.id);
+        expect(run.stream?.map(e => e.t + ' ' + e.text)).toContainEqual(
+          expect.stringMatching(/^err Git couldn't read the repo when the run ended: .+/),
+        );
+        expect((await call(b, '/api/state')).body.runs).toEqual(
+          expect.arrayContaining([expect.objectContaining({ id: h.id, status: 'failed' })]),
+        );
+      } finally {
+        fs.writeFileSync(file, config);
+      }
+    }));
+
   test('revert puts back a file that is not UTF-8 byte for byte', () =>
     twoSessions(async (b, repo) => {
       // Latin-1 text: é is the single byte 0xe9, which UTF-8 can't decode.

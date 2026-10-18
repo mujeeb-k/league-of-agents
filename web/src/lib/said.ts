@@ -25,6 +25,7 @@ const SAID: Record<string, (a: Args) => string> = {
   'refused-task': a => t('{agent} refused the task', a),
   'hit-limit': a => t('{agent} stopped at its limit before finishing', a),
   'agent-error': a => `${a.agent}: ${a.why}`,
+  'repo-unreadable': a => t("Git couldn't read the repo when the run ended: {why}", a),
   exited: a => t('{agent} exited with code {code}', a),
   'exited-why': a => t('{agent} exited with code {code}: {why}', a),
   'refused-request': a => t('Refused: {what}', a),

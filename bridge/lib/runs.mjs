@@ -139,8 +139,33 @@ export function beginRun(opts) {
     return run;
   });
 }
-/** Ends a run with its changes. `checks: false` leaves its checks to the caller (parallel.mjs, an epoch's end). */
-export async function finishRun(run, status = 'done', { checks = true } = {}) {
+/**
+ * Ends a run with its changes. `checks: false` leaves its checks to the caller (parallel.mjs, an epoch's end). Where
+ * git can't read the repo (a session broke its config, say), the run still ends: failed, and said why.
+ */
+export async function finishRun(run, status = 'done', opts = {}) {
+  try {
+    await finish(run, status, opts);
+  } catch (e) {
+    logError(e);
+    if (!working.has(run.id)) return;
+    const why = String(e?.stderr || e?.message || e)
+      .trim()
+      .split('\n')
+      .at(-1)
+      .slice(0, 300);
+    run.stream.push(line('err', 'repo-unreadable', `Git couldn't read the repo when the run ended: ${why}`, { why }));
+    run.changes ??= [];
+    run.waiting = null;
+    working.delete(run.id);
+    await Promise.resolve(leaveEpoch()).catch(logError);
+    run.status = 'failed';
+    run.endedAt = Date.now();
+    saveRun(run);
+    emitRun(run);
+  }
+}
+async function finish(run, status, { checks = true }) {
   // Watch mode's runs arrive with their after snapshot; an agent's is taken now and, unless others overlapped it,
   // becomes the baseline.
   if (!run.after)
