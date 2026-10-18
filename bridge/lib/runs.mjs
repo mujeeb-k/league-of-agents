@@ -141,20 +141,24 @@ export function beginRun(opts) {
 }
 /**
  * Ends a run with its changes. `checks: false` leaves its checks to the caller (parallel.mjs, an epoch's end). Where
- * git can't read the repo (a session broke its config, say), the run still ends: failed, and said why.
+ * that fails (git can't read the repo, a session having broken its config, say), the run still ends: failed, and
+ * said why.
  */
 export async function finishRun(run, status = 'done', opts = {}) {
   try {
     await finish(run, status, opts);
   } catch (e) {
     logError(e);
-    if (!working.has(run.id)) return;
+    // Ended already, all but what failed after: nothing more to do. Otherwise it ends here, wherever it stopped.
+    if (run.endedAt) return;
     const why = String(e?.stderr || e?.message || e)
       .trim()
       .split('\n')
       .at(-1)
       .slice(0, 300);
-    run.stream.push(line('err', 'repo-unreadable', `Git couldn't read the repo when the run ended: ${why}`, { why }));
+    run.stream.push(
+      line('err', 'end-unreadable', `The run ended, but what it changed couldn't be read: ${why}`, { why }),
+    );
     run.changes ??= [];
     run.waiting = null;
     working.delete(run.id);

@@ -2963,7 +2963,7 @@ test.describe('sessions at once', () => {
         expect(fs.readFileSync(file).equals(config)).toBe(false);
         const run = await runOf(b, h.id);
         expect(run.stream?.map(e => e.t + ' ' + e.text)).toContainEqual(
-          expect.stringMatching(/^err Git couldn't read the repo when the run ended: .+/),
+          expect.stringMatching(/^err The run ended, but what it changed couldn't be read: .+/),
         );
         expect((await call(b, '/api/state')).body.runs).toEqual(
           expect.arrayContaining([expect.objectContaining({ id: h.id, status: 'failed' })]),

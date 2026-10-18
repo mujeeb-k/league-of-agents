@@ -584,7 +584,7 @@ const catalogue: Catalogue = {
   '{what} failed': '{what} 失败',
   "{agent} can't resume a session: this run starts a new one": '{agent} 无法继续之前的会话：这次运行会开始新会话',
   '{agent} refused the task': '{agent} 拒绝了这个任务',
-  "Git couldn't read the repo when the run ended: {why}": '运行结束时 Git 无法读取仓库：{why}',
+  "The run ended, but what it changed couldn't be read: {why}": '运行已结束，但无法读取它所做的更改：{why}',
   '{agent} stopped at its limit before finishing': '{agent} 在完成前因达到上限而停止',
   '{agent} exited with code {code}': '{agent} 已退出，退出码 {code}',
   '{agent} exited with code {code}: {why}': '{agent} 已退出，退出码 {code}：{why}',
