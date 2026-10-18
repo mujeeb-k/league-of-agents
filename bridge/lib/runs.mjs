@@ -287,14 +287,11 @@ export function revertRun(run, force, chosen = []) {
   return serial(async () => {
     // A file another session edited too is left as it is unless the person chose it (parallel.mjs share), and can't
     // be chosen while that session still works.
-    const busy =
-      sharedBusy(run, chosen) ??
-      heldBusy(
-        run,
-        [...run.changes, ...(run.unseen ?? [])].map(c => c.path),
-      );
-    if (busy) throw busy;
     const left = (run.shared ?? []).map(s => s.path).filter(p => !chosen.includes(p));
+    // Only the files it will touch: a shared file left as it is waits on nothing.
+    const touched = [...run.changes, ...(run.unseen ?? [])].map(c => c.path).filter(p => !left.includes(p));
+    const busy = sharedBusy(run, chosen) ?? heldBusy(run, touched);
+    if (busy) throw busy;
     // A run names only files inside the repo; anything else in a run file is never read or touched.
     const changes = [...run.changes, ...(run.unseen ?? [])].filter(
       c => path.resolve(ROOT, c.path).startsWith(ROOT + path.sep) && !left.includes(c.path),

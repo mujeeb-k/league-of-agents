@@ -123,12 +123,12 @@ export function commitRun(run, { message = '', include = [] } = {}) {
     if (!message.trim()) throw refused('no-message', 'Write a commit message first.');
     // An earlier commit's held files not yet put back go back first, before this one reads the files.
     await restoreHeld();
-    const busy =
-      sharedBusy(run, include) ??
-      heldBusy(
-        run,
-        [...run.changes, ...(run.unseen ?? [])].map(c => c.path),
-      );
+    // Only the files that go in: a shared file left out waits on nothing.
+    const both = (run.shared ?? []).map(s => s.path);
+    const going = [...run.changes, ...(run.unseen ?? [])]
+      .map(c => c.path)
+      .filter(p => !both.includes(p) || include.includes(p));
+    const busy = sharedBusy(run, include) ?? heldBusy(run, going);
     if (busy) throw busy;
     const { files, yours, shared, changed } = await commitPreview(run, include);
     if (changed.length)
