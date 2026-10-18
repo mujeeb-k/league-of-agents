@@ -136,8 +136,9 @@ const bracket = () =>
   HOOKS ? { pre: [hookFor('Bash', 'pre')], post: { PostToolUse: [hookFor('Bash', 'post')] } } : { pre: [], post: {} };
 /**
  * For a run nothing holds, on a selection: its edit tools are refused outside it (hook.mjs pre) and, with the hooks
- * on, each shell command is bracketed so what it changed outside is put back (shell.mjs). The repo's own hook files
- * aren't read by a session, so these come with the run.
+ * on, each shell command is bracketed so what it changed outside is put back (shell.mjs). These come with the run:
+ * the repo's own hook file may hold none of them (the hooks off, or the file in git). Where it does, the same check
+ * runs twice and a command's two brackets are one (shellStarts keeps the later, shellEnds the first).
  */
 const unheld = run =>
   run.scope?.length
@@ -164,10 +165,12 @@ const STREAMED = {
       '--output-format',
       'stream-json',
       '--verbose',
-      // Its settings load as in a terminal, the repo's own included. Held by the sandbox: the bridge's hook answers
-      // every call (hook.mjs hold), and one the hook never saw is refused, as the hook couldn't check it. Anywhere
-      // else nothing it would ask about is refused unasked: no one is there to answer, so it runs as allowed, held
-      // only to its section, where it has one, by the hook (hook.mjs pre).
+      // Held by the sandbox: the repo's own settings don't load, as their hooks and MCP servers would run outside
+      // it, on files the session may have just written; the bridge's hook answers every call (hook.mjs hold), and
+      // one the hook never saw is refused, as the hook couldn't check it. Anywhere else its settings load as in a
+      // terminal, and nothing it would ask about is refused unasked: no one is there to answer, so it runs as
+      // allowed, held only to its section, where it has one, by the hook (hook.mjs pre).
+      ...(sandboxed ? ['--setting-sources', 'user'] : []),
       '--permission-mode',
       sandboxed ? 'dontAsk' : 'bypassPermissions',
       '--settings',

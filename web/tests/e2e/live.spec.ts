@@ -3109,8 +3109,9 @@ test.describe('sessions at once', () => {
         held:
           !!hook && !hook.matcher && /hook hold$/.test(hook.hooks[0]!.command) && hook.hooks[0]!.onFailure === 'block',
         says: !!run.stays,
-        // The repo's own Claude Code settings and hooks load, as in a terminal.
-        sources: args.includes('--setting-sources'),
+        // Held, the repo's own Claude Code settings and hooks don't load: they would run outside the sandbox. Anywhere
+        // else they load, as in a terminal.
+        sources: args.includes('--setting-sources') ? args[args.indexOf('--setting-sources') + 1] : 'all',
       };
     } finally {
       b.stop();
@@ -3118,8 +3119,8 @@ test.describe('sessions at once', () => {
     }
   };
   // Held, it does only what the hook allows; its card says so only once that design has been reviewed.
-  const HELD = { mode: 'dontAsk', outside: true, held: true, says: false, sources: false },
-    FLAGGED = { mode: 'bypassPermissions', outside: true, held: false, says: false, sources: false };
+  const HELD = { mode: 'dontAsk', outside: true, held: true, says: false, sources: 'user' },
+    FLAGGED = { mode: 'bypassPermissions', outside: true, held: false, says: false, sources: 'all' };
   onMac(
     'held by the sandbox on a section, Claude Code runs outside it, with the hook; on the whole repository it is not held',
     async () => {
