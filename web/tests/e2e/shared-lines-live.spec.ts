@@ -336,9 +336,10 @@ test('a file one session wrote by a command and the other edited: each has its o
     const one = await ended(b, claude);
     expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text([...ORIGINAL, SHELL]));
     expect.soft(change(one, 'a/tax.mjs')?.hunks).toEqual([{ at: 4, del: 0, add: [SHELL] }]);
-    // Written by its command while it alone was writing in a/: Claude Code's, by a command (VISION 30).
-    expect.soft(one.agentLines).toEqual({ 'a/tax.mjs': [[4, 4]] });
-    expect.soft(one.commandLines).toEqual({ 'a/tax.mjs': [[4, 4]] });
+    // Written while both sessions worked, by a write no hook saw: either could have written it, so it is no one's.
+    // A section says nothing of who wrote a file (CLAUDE.md, 2026-10-18).
+    expect.soft(one.agentLines).toEqual({});
+    expect.soft(one.commandLines).toBeUndefined();
     go('two');
     const two = await ended(b, cursor);
     const both = [ORIGINAL[0]!, COMMENT, ...ORIGINAL.slice(1), SHELL];

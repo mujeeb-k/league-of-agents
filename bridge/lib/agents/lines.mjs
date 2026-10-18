@@ -4,7 +4,6 @@
 import path from 'node:path';
 import { ROOT, gitAsync } from '../repo.mjs';
 import { realish } from '../util.mjs';
-import { inScope } from '../scope.mjs';
 
 /**
  * The lines Claude Code wrote itself, per file, from its edit tools' input: what Edit, MultiEdit and Write put
@@ -84,8 +83,8 @@ async function carry(owners, a, b, who) {
  * Who wrote the lines of each file a run changed, in the file as the run left it, by what changed on disk while each
  * session worked, whatever the tool. Every write seen to the file is its session's: an edit step (from the file as it
  * found it to the file as it left it, steps.mjs) or a shell command the hooks bracketed (shell.mjs). What changed
- * where no write was seen is the session's that was writing the file then: the one session at work whose section
- * holds it, or the one session at work at all; otherwise nobody can say, and it is nobody's. Of a run's own lines,
+ * where no write was seen is the one session's at work then; with more than one at work nobody can say, and it is
+ * nobody's, whatever their sections. Of a run's own lines,
  * those its edit tools' text doesn't hold are marked as written by a command.
  * Returns `agent`, the run's lines as [from, to] ranges; `command`, those of them not by its edit tools; `other`,
  * another session's lines, as [from, to, run], with a fourth 1 where by a command. `stepsOf` gives a run's steps,
@@ -114,12 +113,13 @@ export async function linesOf(run, peers, { stepsOf, blobAt }) {
           .map(w => ({ start: w.start ?? w.at, end: w.at, from: w.from, to: w.to, run: r.id, edit: false })),
       ])
       .sort((x, y) => x.start - y.start || x.run - y.run);
-    /** Who was writing the file between two moments, where no write of it was seen: a run's id, or 0. */
+    /**
+     * Who was writing the file between two moments, where no write of it was seen: the one session at work then, or
+     * 0. A section says nothing of who wrote a file: in the owner's run Cursor wrote into Claude Code's.
+     */
     const writer = (t0, t1) => {
       const at = sessions.filter(r => r.startedAt <= t1 && (r.endedAt ?? Infinity) >= t0);
-      const holding = at.filter(r => r.scope?.length && inScope(r.scope, c.path));
-      if (holding.length === 1) return holding[0].id;
-      return !holding.length && at.length === 1 ? at[0].id : 0;
+      return at.length === 1 ? at[0].id : 0;
     };
     // A line's writer: the run's id, negative where not by an edit tool, or 0.
     let state = (await blobAt(run.before, c.path)) ?? EMPTY,
