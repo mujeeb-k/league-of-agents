@@ -42,6 +42,7 @@ export function streamConnector(bin, argsOf) {
         },
       });
       const done = closed.then(code => {
+        forgetInputs(run);
         if (code && run.status === 'running')
           push(
             run,
@@ -72,6 +73,10 @@ const callsOf = run => {
 };
 /** Each Claude Code tool call's run, name and input, by its id, until its result comes. */
 const inputs = new Map();
+/** A run's agent has exited: its calls that got no result never will. */
+const forgetInputs = run => {
+  for (const [id, c] of inputs) if (c.run === run.id) inputs.delete(id);
+};
 /**
  * A captured terminal turn keeps only the results that failed (hook.mjs lastTurn): its edit calls with none were
  * made, and what they put in is noted for its attribution.

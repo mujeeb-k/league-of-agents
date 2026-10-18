@@ -405,3 +405,50 @@ test("an edit with no start seen, inside another session's command on the file: 
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
 });
+
+// The order turned round: Cursor's run is committed first. Its file is outside its section and Claude Code wrote it
+// by a command no hook brackets, so the commit holds Cursor's line alone, not Claude Code's uncommitted one.
+test("a run's commit of a file outside its section holds its lines alone, not another's uncommitted ones", async () => {
+  const { repo, b, start, go } = await twoSessions(FAKE_CURSOR, {}, ['--no-hooks']);
+  const SHELL = '// written by a shell command';
+  try {
+    const cursor = await start('cursor', ['b/'], 'Add a daily summary. wait:two insert:a/tax.mjs:1:comment');
+    const claude = await start('claude', ['a/'], 'Add input checks. shell:a/tax.mjs');
+    await ended(b, claude);
+    go('two');
+    await ended(b, cursor);
+    const done = await call(b, `/api/runs/${cursor}/commit`, { message: 'Note where tax is used', include: [] });
+    expect.soft(done.status).toBe(200);
+    expect.soft(committed(repo, 'a/tax.mjs')).toBe(text([ORIGINAL[0]!, COMMENT, ...ORIGINAL.slice(1)]));
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text([ORIGINAL[0]!, COMMENT, ...ORIGINAL.slice(1), SHELL]));
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// As "a shared file committed while a third session works", in a repo with no pre-commit hook: nothing is held while
+// git commits, and still no run by none of them is made of the other run's lines.
+test('a shared file committed while a third session works, with no commit hook, leaves no run by none of them', async () => {
+  const { repo, b, start, go } = await twoSessions();
+  try {
+    fs.rmSync(path.join(repo, '.git/hooks/pre-commit'));
+    const claude = await start('claude', ['a/'], CLAUDE_PROMPT);
+    const cursor = await start('cursor', ['b/'], CURSOR_PROMPT);
+    const third = await start('cursor', ['package.json'], 'Look at the scripts. wait:three read:package.json');
+    go('one');
+    await ended(b, claude);
+    go('two');
+    await ended(b, cursor);
+    const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
+    expect.soft(done.status).toBe(200);
+    expect.soft(committed(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
+    go('three');
+    await ended(b, third);
+    const state = (await call(b, '/api/state')).body as unknown as { runs: RunDTO[] };
+    expect.soft(state.runs.map(r => r.agent)).toEqual(['claude', 'cursor', 'cursor']);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});

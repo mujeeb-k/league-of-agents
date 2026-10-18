@@ -157,12 +157,6 @@ export async function ownChanges(run, changes) {
       // its revert and its commit (runs.mjs, commit.mjs).
       if (named.has(c.path) && (byAnother(c.path) || !inScope(run.scope, c.path)) && !c.unseen) {
         const writes = await ownWrites(run, c.path);
-        if (!writes.length) {
-          // Its writes weren't kept (a file over the size the map opens, say): the change is the whole file.
-          own.push(c);
-          epoch.expected.set(c.path, run.after);
-          continue;
-        }
         (run.writes ??= {})[c.path] = writes;
         const after = await blobAt(run.after, c.path);
         const base = await takeOut(writes, after);

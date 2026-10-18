@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { logError, readJson, refused, serial } from './util.mjs';
 import { LOA, ROOT, gitAsync } from './repo.mjs';
-import { blobAt, blobNow, headNow, putBlobs } from './snapshots.mjs';
+import { blobAt, blobNow, commitBlobs, headNow, putBlobs } from './snapshots.mjs';
 import { takeOut } from './writes.mjs';
 import { emitRun } from './events.mjs';
 import { runs, saveRun } from './runs.mjs';
@@ -32,14 +32,22 @@ async function preCommitHook() {
     return false;
   }
 }
-/** A commit cut short by the bridge stopping: each file it still holds goes back as it was (commitRun). */
+/**
+ * Files a commit held and didn't put back (the bridge stopped, or the put-back failed): each gets the other session's
+ * lines back, merged into the file as it is now (a hook may have formatted it); where they no longer fit, the file
+ * as it was. The list goes only once that is done. At start, and before a commit holds files again (commitRun).
+ */
 export async function restoreHeld() {
   const held = readJson(heldFile(), null);
   if (!Array.isArray(held)) return;
-  const back = [];
-  for (const [p, was, put] of held) if ((await blobNow(p, true)) === put) back.push([p, was]);
   const head = await headNow();
-  if (back.length && head.commit) await putBlobs(back, 'files held by a commit, put back', head.commit);
+  if (!head.commit) return;
+  const back = [];
+  for (const [p, was, put] of held) {
+    const out = await takeOut([[was, put]], await blobNow(p, true));
+    back.push([p, 'blob' in out ? out.blob : was]);
+  }
+  await putBlobs(back, 'files held by a commit, put back', head.commit);
   fs.rmSync(heldFile(), { force: true });
 }
 /**
@@ -59,12 +67,12 @@ async function changedSince(run, p) {
   return !('blob' in back) || back.blob !== after;
 }
 /**
- * A shared file as the run's commit holds it: the run's own change (writes.mjs), from the file as its writes found
- * it to the file as they left it, applied to the file as HEAD has it. So none of the other session's lines go in,
- * and none already committed come out. Where its lines and the other's touch, they can't be told apart: the whole
- * file goes in, as the run left it (`whole`).
+ * A file another session wrote too, as the run's commit holds it: the run's own change (writes.mjs), from the file as
+ * its writes found it to the file as they left it, applied to the file as HEAD has it. So none of the other session's
+ * lines go in, and none already committed come out. Where its lines and the other's touch, they can't be told apart:
+ * the whole file goes in, as the run left it (`whole`).
  */
-async function sharedVersion(run, p) {
+async function ownVersion(run, p) {
   const head = await headNow();
   const after = await blobAt(run.after, p);
   const base = await takeOut(run.writes?.[p] ?? [[await blobAt(run.before, p), after]], after);
@@ -93,7 +101,7 @@ export async function commitPreview(run, include = []) {
     const since = await changedSince(run, p);
     if (both.includes(p)) {
       shared.push(p);
-      if ((await sharedVersion(run, p)).whole) whole.push(p);
+      if ((await ownVersion(run, p)).whole) whole.push(p);
       if (since) later.push(p);
       if (since && include.includes(p)) changed.push(p);
       continue;
@@ -129,7 +137,8 @@ export function commitRun(run, { message = '', include = [] } = {}) {
     for (const p of chosen) {
       const entry = (await gitAsync(['ls-tree', run.after, '--', p])).trim();
       const fields = entry ? entry.split(/\s+/).slice(0, 3) : null;
-      const own = shared.includes(p) ? (await sharedVersion(run, p)).blob : undefined;
+      // Its own lines only, where another session wrote the file too (shared, or its writes kept: parallel.mjs).
+      const own = shared.includes(p) || run.writes?.[p] ? (await ownVersion(run, p)).blob : undefined;
       if (own === null) entries.push([p, null]);
       else if (own) entries.push([p, [fields?.[0] ?? '100644', 'blob', own]]);
       else entries.push([p, fields]);
@@ -161,6 +170,8 @@ export function commitRun(run, { message = '', include = [] } = {}) {
           if (now !== entry[2]) held.push([p, now, entry[2]]);
         }
     if (held.length) {
+      // An earlier commit's list not yet put back is put back first, so this one never writes over it.
+      await restoreHeld();
       fs.writeFileSync(heldFile(), JSON.stringify(held));
       await putBlobs(
         held.map(([p, , put]) => [p, put]),
@@ -168,8 +179,7 @@ export function commitRun(run, { message = '', include = [] } = {}) {
         run.after,
       );
     }
-    let made = false,
-      restored = null;
+    let made = false;
     try {
       await gitAsync(['commit', '-q', '-F', '-'], { env, input: message });
       made = true;
@@ -189,7 +199,7 @@ export function commitRun(run, { message = '', include = [] } = {}) {
             const out = made ? await takeOut([[was, put]], await blobNow(p, true)) : { blob: was };
             back.push([p, 'blob' in out ? out.blob : was]);
           }
-          restored = await putBlobs(back, `run ${run.id} committed`, run.after);
+          await putBlobs(back, `run ${run.id} committed`, run.after);
           fs.rmSync(heldFile(), { force: true });
         } catch (e) {
           logError(e);
@@ -214,12 +224,20 @@ export function commitRun(run, { message = '', include = [] } = {}) {
       entries.push([p, entry ? entry.split(/\s+/).slice(0, 3) : null]);
     }
     await setEntries(process.env);
-    noteCommit(sha, committed);
-    // A held file holds the other session's lines again: the bridge's write, not a change of anyone's.
-    if (restored)
+    // What the commit left on disk is the bridge's write, not a change of anyone's: the commit's version, or where
+    // the file still holds another session's lines (held and put back, or never held), the file as it is.
+    const kept = [],
+      apart = [];
+    for (const p of committed) {
+      const now = await blobNow(p, true);
+      if (now === (await blobAt(sha, p))) kept.push(p);
+      else apart.push([p, now]);
+    }
+    noteCommit(sha, kept);
+    if (apart.length)
       noteCommit(
-        restored,
-        held.map(([p]) => p),
+        await commitBlobs(sha, apart, `run ${run.id} committed, as on disk`),
+        apart.map(([p]) => p),
       );
     run.committed = { sha, at: Date.now(), files: chosen, ...(hook.length ? { hook } : {}) };
     if (hook.length)
