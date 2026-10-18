@@ -45,6 +45,13 @@ export async function serve(hooks) {
       for (const run of left) run.status = 'interrupted';
       // A captured terminal turn has no agent the bridge started to stop: it ends here.
       if (!(await stopSessions())) for (const run of left) await finishRun(run, 'interrupted').catch(logError);
+      // Its hooks come off with it: nothing runs a stopped bridge's hooks.
+      if (hooks)
+        try {
+          removeHooks();
+        } catch (e) {
+          logError(e);
+        }
       process.exit(0);
     });
   const server = createBridgeServer(port);

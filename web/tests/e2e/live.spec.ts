@@ -4807,65 +4807,81 @@ test('open in Cursor or VS Code at the cursor line, from the editor and the insp
   }
 });
 
-// Hooks for Claude Code, Codex and Cursor, installed only with consent, removed exactly.
-test('hooks go in only with consent, and removing them restores every file byte for byte', async () => {
+// Hooks for Claude Code, Codex and Cursor, installed only with consent while the bridge runs, removed exactly when it
+// stops. Cursor's, shared by every repo on the computer, run a copy of the hook in League of Agents' own folder,
+// never one inside a repo that may be deleted (owner, 2026-10-18).
+test('hooks go in only with consent, point outside the repo for Cursor, and come off byte for byte on stop', async () => {
   const repo = makeRepo();
-  const files = {
-    '.claude/settings.local.json':
-      '{\n    "permissions": { "deny": ["Read(./.env)"] },\n    "hooks": { "Stop": [ { "hooks": [ { "type": "command", "command": "say done" } ] } ] }\n}',
-    '.codex/hooks.json':
-      '{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"python3 mine.py","timeout":5}]}]}}\n',
-  };
-  for (const [p, text] of Object.entries(files)) {
-    fs.mkdirSync(path.dirname(path.join(repo, p)), { recursive: true });
-    fs.writeFileSync(path.join(repo, p), text);
+  let b: Bridge | undefined;
+  try {
+    const files = {
+      '.claude/settings.local.json':
+        '{\n    "permissions": { "deny": ["Read(./.env)"] },\n    "hooks": { "Stop": [ { "hooks": [ { "type": "command", "command": "say done" } ] } ] }\n}',
+      '.codex/hooks.json':
+        '{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"python3 mine.py","timeout":5}]}]}}\n',
+    };
+    for (const [p, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(repo, p)), { recursive: true });
+      fs.writeFileSync(path.join(repo, p), text);
+    }
+    const restored = () => {
+      for (const [p, text] of Object.entries(files)) expect(fs.readFileSync(path.join(repo, p), 'utf8')).toBe(text);
+      expect(fs.existsSync(path.join(homeOf(repo), '.cursor/hooks.json'))).toBe(false);
+    };
+    // Without consent (no terminal to ask in, no --hooks), nothing is touched.
+    b = await startBridge(repo, undefined, {}, ['--ask']);
+    b.stop();
+    restored();
+    // With consent: ours are added next to theirs, in each agent's own file, while the bridge runs.
+    b = await startBridge(repo, undefined, {}, []);
+    type HookFile = {
+      version?: number;
+      permissions?: unknown;
+      hooks: Record<string, { command?: string; hooks?: { command: string }[] }[]>;
+    };
+    const read = (p: string, dir = repo) => JSON.parse(fs.readFileSync(path.join(dir, p), 'utf8')) as HookFile;
+    const claude = read('.claude/settings.local.json');
+    expect(claude.permissions).toEqual({ deny: ['Read(./.env)'] });
+    expect(claude.hooks.Stop![0]!.hooks![0]!.command).toBe('say done');
+    expect(Object.keys(claude.hooks).sort()).toEqual([
+      'PostToolUse',
+      'PreToolUse',
+      'SessionEnd',
+      'Stop',
+      'UserPromptSubmit',
+    ]);
+    const codex = read('.codex/hooks.json');
+    expect(codex.hooks.UserPromptSubmit![0]!.hooks![0]!.command).toBe('python3 mine.py');
+    expect(codex.hooks.UserPromptSubmit![1]!.hooks![0]!.command).toMatch(/\.loa\/bridge\.mjs" hook start codex$/);
+    expect(codex.hooks.Stop![0]!.hooks![0]!.command).toMatch(/hook stop codex$/);
+    // Cursor's go in the person's own Cursor settings, and run the copy in League of Agents' folder, not the repo's.
+    expect(fs.existsSync(path.join(repo, '.cursor'))).toBe(false);
+    const cursor = read('.cursor/hooks.json', homeOf(repo));
+    expect(cursor.version).toBe(1);
+    const shared = path.join(homeOf(repo), '.config/league-of-agents/hook/bridge.mjs');
+    expect(cursor.hooks.beforeSubmitPrompt![0]!.command).toBe(`"${process.execPath}" "${shared}" hook start cursor`);
+    expect(cursor.hooks.stop![0]!.command).toBe(`"${process.execPath}" "${shared}" hook stop cursor`);
+    expect(fs.existsSync(shared)).toBe(true);
+    expect(JSON.stringify(cursor)).not.toContain(repo);
+    // Stopped: every file is back exactly as it was; the file and folder we created are gone, and the copy Cursor's ran.
+    b.stop();
+    restored();
+    expect(fs.existsSync(path.dirname(shared))).toBe(false);
+    // The choice is remembered: a later start installs again without asking, and its stop takes them off again.
+    b = await startBridge(repo, undefined, {}, ['--ask']);
+    expect(read('.codex/hooks.json').hooks.Stop).toHaveLength(1);
+    b.stop();
+    restored();
+    // Removing by hand with nothing installed changes nothing.
+    execFileSync(process.execPath, [BRIDGE, 'hooks', 'remove'], {
+      cwd: repo,
+      env: { ...process.env, HOME: homeOf(repo) },
+    });
+    restored();
+  } finally {
+    b?.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
-  // Without consent (no terminal to ask in, no --hooks), nothing is touched.
-  let b = await startBridge(repo, undefined, {}, ['--ask']);
-  b.stop();
-  for (const [p, text] of Object.entries(files)) expect(fs.readFileSync(path.join(repo, p), 'utf8')).toBe(text);
-  expect(fs.existsSync(path.join(homeOf(repo), '.cursor'))).toBe(false);
-  // With consent: ours are added next to theirs, in each agent's own file.
-  b = await startBridge(repo, undefined, {}, []);
-  b.stop();
-  type HookFile = {
-    version?: number;
-    permissions?: unknown;
-    hooks: Record<string, { command?: string; hooks?: { command: string }[] }[]>;
-  };
-  const read = (p: string, dir = repo) => JSON.parse(fs.readFileSync(path.join(dir, p), 'utf8')) as HookFile;
-  const claude = read('.claude/settings.local.json');
-  expect(claude.permissions).toEqual({ deny: ['Read(./.env)'] });
-  expect(claude.hooks.Stop![0]!.hooks![0]!.command).toBe('say done');
-  expect(Object.keys(claude.hooks).sort()).toEqual([
-    'PostToolUse',
-    'PreToolUse',
-    'SessionEnd',
-    'Stop',
-    'UserPromptSubmit',
-  ]);
-  const codex = read('.codex/hooks.json');
-  expect(codex.hooks.UserPromptSubmit![0]!.hooks![0]!.command).toBe('python3 mine.py');
-  expect(codex.hooks.UserPromptSubmit![1]!.hooks![0]!.command).toMatch(/\.loa\/bridge\.mjs" hook start codex$/);
-  expect(codex.hooks.Stop![0]!.hooks![0]!.command).toMatch(/hook stop codex$/);
-  // Cursor's go in the person's own Cursor settings: it reads project hooks only from the workspace folder.
-  expect(fs.existsSync(path.join(repo, '.cursor'))).toBe(false);
-  const cursor = read('.cursor/hooks.json', homeOf(repo));
-  expect(cursor.version).toBe(1);
-  expect(cursor.hooks.beforeSubmitPrompt![0]!.command).toMatch(/hook start cursor$/);
-  expect(cursor.hooks.stop![0]!.command).toMatch(/hook stop cursor$/);
-  // The choice is remembered: a later start installs again without asking.
-  b = await startBridge(repo, undefined, {}, ['--ask']);
-  b.stop();
-  expect(read('.codex/hooks.json').hooks.Stop).toHaveLength(1);
-  // Removing: every file is back exactly as it was; the file and folder we created are gone.
-  execFileSync(process.execPath, [BRIDGE, 'hooks', 'remove'], {
-    cwd: repo,
-    env: { ...process.env, HOME: homeOf(repo) },
-  });
-  for (const [p, text] of Object.entries(files)) expect(fs.readFileSync(path.join(repo, p), 'utf8')).toBe(text);
-  expect(fs.existsSync(path.join(homeOf(repo), '.cursor'))).toBe(false);
-  fs.rmSync(path.dirname(repo), { recursive: true, force: true });
 });
 
 test('Codex and Cursor hook payloads become runs with the prompt as the title, labelled beta', ({ page }) =>
@@ -4952,28 +4968,36 @@ test('Codex and Cursor hook payloads become runs with the prompt as the title, l
     await expect(page.locator('#insp .meta .beta')).toHaveText('Beta');
   }));
 
-test("Cursor's hooks are shared: the repo that installed them last removes them", async () => {
+// Cursor's hooks are the person's own, shared by every repo: one bridge stopping leaves them to another still running,
+// and the last one takes them out, with the copy of the hook they ran.
+test("Cursor's hooks are shared: they stay while another bridge runs, and go with the last one", async () => {
   const a = makeRepo(),
     b = path.join(path.dirname(a), 'second-repo'),
     home = homeOf(a),
-    file = path.join(home, '.cursor/hooks.json');
+    file = path.join(home, '.cursor/hooks.json'),
+    copy = path.join(home, '.config/league-of-agents/hook');
   fs.cpSync(a, b, { recursive: true });
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const theirs = '{"version":1,"hooks":{"stop":[{"command":"say done"}]}}\n';
   fs.writeFileSync(file, theirs);
-  const loa = (repo: string, ...args: string[]) =>
-    execFileSync(process.execPath, [BRIDGE, ...args], { cwd: repo, env: { ...process.env, HOME: home } });
+  const ours = () =>
+    ((JSON.parse(fs.readFileSync(file, 'utf8')) as { hooks: Record<string, { command: string }[]> }).hooks.stop ?? [])
+      .map(e => e.command)
+      .filter(c => c.includes('league-of-agents/hook/bridge.mjs'));
   try {
-    for (const repo of [a, b]) (await startBridge(repo)).stop();
-    const commands = () => fs.readFileSync(file, 'utf8');
-    expect(commands()).toContain(path.join(b, '.loa/bridge.mjs'));
-    expect(commands()).not.toContain(path.join(a, '.loa/bridge.mjs'));
-    // The first repo no longer owns them: removing its hooks leaves Cursor's file to the second.
-    loa(a, 'hooks', 'remove');
-    expect(commands()).toContain(path.join(b, '.loa/bridge.mjs'));
-    // Back to the person's own hooks (as JSON: the file the second repo found already held the first's).
-    loa(b, 'hooks', 'remove');
-    expect(JSON.parse(commands())).toEqual(JSON.parse(theirs));
+    const first = await startBridge(a),
+      second = await startBridge(b);
+    // Both installed them: one set, not two.
+    expect(ours()).toHaveLength(1);
+    first.stop();
+    // Collected, so it is no process at all.
+    await expect.poll(() => first.proc.exitCode !== null || first.proc.signalCode !== null).toBe(true);
+    expect(ours()).toHaveLength(1);
+    expect(fs.existsSync(copy)).toBe(true);
+    second.stop();
+    // The person's own hooks, as JSON: the file the second bridge found already held the first's.
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual(JSON.parse(theirs));
+    expect(fs.existsSync(copy)).toBe(false);
   } finally {
     fs.rmSync(path.dirname(a), { recursive: true, force: true });
   }
@@ -5376,7 +5400,7 @@ test('uninstall: stops the bridge and leaves the repo and agent settings as befo
     await expect.poll(async () => (await runsOf(b)).length, { timeout: 10_000 }).toBe(1);
     fs.writeFileSync(log, text);
     expect(git(repo, 'for-each-ref', 'refs/loa/')).not.toBe('');
-    expect(fs.readFileSync(own.cursor, 'utf8')).toContain('.loa/bridge.mjs');
+    expect(fs.readFileSync(own.cursor, 'utf8')).toContain(path.join(home, '.config/league-of-agents/hook/bridge.mjs'));
     expect(fs.existsSync(path.join(repo, '.codex/hooks.json'))).toBe(true);
 
     const out = execFileSync(process.execPath, [BRIDGE, 'uninstall'], {
@@ -5394,6 +5418,7 @@ test('uninstall: stops the bridge and leaves the repo and agent settings as befo
     expect(out).toContain('- the checks you allowed for it');
     expect(fs.existsSync(allowedChecksFile(repo))).toBe(false);
     expect(fs.existsSync(path.join(repo, '.codex'))).toBe(false);
+    expect(fs.existsSync(path.join(home, '.config/league-of-agents/hook'))).toBe(false);
     expect({
       status: git(repo, 'status', '--porcelain'),
       exclude: fs.readFileSync(exclude, 'utf8'),

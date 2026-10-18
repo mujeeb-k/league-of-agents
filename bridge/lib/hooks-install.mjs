@@ -7,11 +7,13 @@ import { BRIDGE_DIR } from './paths.mjs';
 import { readJson } from './util.mjs';
 import { ROOT, LOA, excludeFromGit, git } from './repo.mjs';
 
-// Each agent's own hook file gets entries that run a copy of this bridge (.loa/bridge.mjs). Hooks that aren't
-// the bridge's are never changed; removing the bridge's puts each file back exactly as it was, or deletes a file it
-// created.
-// Cursor reads project hooks only from the folder opened as its workspace, which is often a parent of the
-// repo, so its hooks go in the user's own Cursor settings; the hook then finds the repo itself (runHook).
+// Each agent's own hook file gets entries that run a copy of this bridge. Hooks that aren't the bridge's are never
+// changed; removing the bridge's puts each file back exactly as it was, or deletes a file it created. They are
+// installed while a bridge runs and taken out when it stops.
+// The repo's own hook files run the copy in the repo (.loa/bridge.mjs), which goes with the repo. Cursor reads project
+// hooks only from the folder opened as its workspace, which is often a parent of the repo, so its hooks go in the
+// user's own Cursor settings, shared by every repo: those run a copy in League of Agents' own settings folder, never
+// one inside a repo that may be deleted, and the hook finds the repo itself (runHook).
 export const hookFiles = () => ({
   claude: path.join(ROOT, '.claude/settings.local.json'),
   codex: path.join(ROOT, '.codex/hooks.json'),
@@ -19,13 +21,40 @@ export const hookFiles = () => ({
 });
 /** A hook file as people know it: relative inside the repo, from ~ outside it. */
 export const shown = p => (p.startsWith(ROOT + path.sep) ? path.relative(ROOT, p) : p.replace(os.homedir(), '~'));
-const isOurs = command => /(loa\.mjs|\.loa[\\/]bridge\.mjs)" hook /.test(String(command));
+const OURS = /(loa\.mjs|\.loa[\\/]bridge\.mjs|league-of-agents[\\/]hook[\\/]bridge\.mjs)" hook /;
+const isOurs = command => OURS.test(String(command));
 const backupFile = () => path.join(LOA, 'hooks-backup.json');
 /** The original of each hook file, by absolute path (older backups keyed them relative to the repo). */
 const readBackup = () =>
   Object.fromEntries(Object.entries(readJson(backupFile(), {})).map(([p, v]) => [path.resolve(ROOT, p), v]));
-/** What the hooks run: a one-line file that loads the bridge's copy in .loa (copyForHooks). */
+/** League of Agents' own settings folder, outside every repo, where approved checks are kept too (checks.mjs). */
+const userDir = () => path.join(os.homedir(), '.config', 'league-of-agents');
+/** What the repo's hooks run: a one-line file that loads the bridge's copy in .loa (copyForHooks). */
 const hookFile = () => path.join(LOA, 'bridge.mjs');
+/** What Cursor's hooks run, shared by every repo: the copy in League of Agents' own folder. */
+const userHookFile = () => path.join(userDir(), 'hook', 'bridge.mjs');
+/** The bridges running on this computer, by process id, so one stopping leaves Cursor's hooks to the others. */
+const runningFile = () => path.join(userDir(), 'running.json');
+/** Whether a listed bridge still runs: its process, and its repo's bridge file still naming it. */
+const alive = (pid, root) => {
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return false;
+  }
+  return readJson(path.join(root, '.loa/bridge.json'), {}).pid === pid;
+};
+/** Marks this bridge as running (true) or stopped; returns how many others still run. */
+function registered(on) {
+  const all = readJson(runningFile(), {});
+  const live = Object.fromEntries(
+    Object.entries(all).filter(([pid, root]) => Number(pid) !== process.pid && alive(Number(pid), String(root))),
+  );
+  if (on) live[process.pid] = ROOT;
+  fs.mkdirSync(userDir(), { recursive: true });
+  fs.writeFileSync(runningFile(), JSON.stringify(live));
+  return Object.keys(live).filter(pid => Number(pid) !== process.pid).length;
+}
 /**
  * Hooks, the bridge's and the Claude Code plugin's, run a copy of the bridge inside the repo, so they keep working when the
  * bridge was started from a temporary place (npx's cache) that may later be cleared. Each copy is a folder named by
@@ -33,12 +62,17 @@ const hookFile = () => path.join(LOA, 'bridge.mjs');
  * new one, never half of one. Copies over a day old go; a hook still running from one has long since loaded it.
  */
 export function copyForHooks() {
+  copyTo(LOA, hookFile());
+}
+/** The same copy in a folder of its own, its entry file at `entry`. */
+function copyTo(home, entry) {
+  fs.mkdirSync(home, { recursive: true });
   const lib = /** @type {string[]} */ (fs.readdirSync(path.join(BRIDGE_DIR, 'lib'), { recursive: true }));
   const files = ['loa.mjs', ...lib.filter(f => f.endsWith('.mjs')).map(f => `lib/${f}`)];
   const hash = crypto.createHash('sha256');
   for (const f of files) hash.update(f).update(fs.readFileSync(path.join(BRIDGE_DIR, f)));
   const dir = `b-${hash.digest('hex').slice(0, 12)}`,
-    target = path.join(LOA, dir);
+    target = path.join(home, dir);
   if (!fs.existsSync(target)) {
     const tmp = `${target}.${process.pid}.tmp`;
     for (const f of files) {
@@ -47,11 +81,11 @@ export function copyForHooks() {
     }
     fs.renameSync(tmp, target);
   }
-  fs.writeFileSync(`${hookFile()}.tmp`, `import './${dir}/loa.mjs';\n`);
-  fs.renameSync(`${hookFile()}.tmp`, hookFile());
-  for (const old of fs.readdirSync(LOA))
-    if (/^b-[0-9a-f]{12}$/.test(old) && old !== dir && Date.now() - fs.statSync(path.join(LOA, old)).mtimeMs > 864e5)
-      fs.rmSync(path.join(LOA, old), { recursive: true, force: true });
+  fs.writeFileSync(`${entry}.tmp`, `import './${dir}/loa.mjs';\n`);
+  fs.renameSync(`${entry}.tmp`, entry);
+  for (const old of fs.readdirSync(home))
+    if (/^b-[0-9a-f]{12}$/.test(old) && old !== dir && Date.now() - fs.statSync(path.join(home, old)).mtimeMs > 864e5)
+      fs.rmSync(path.join(home, old), { recursive: true, force: true });
 }
 
 /** The hook entries for one agent's file, in that file's own shape. */
@@ -89,7 +123,8 @@ const hasOwnContent = json =>
   Object.keys(json).some(k => k !== 'hooks' && k !== 'version') || Object.keys(json.hooks || {}).length > 0;
 
 export function installHooks() {
-  const cmd = sub => `"${process.execPath}" "${hookFile()}" hook ${sub}`;
+  copyTo(path.dirname(userHookFile()), userHookFile());
+  registered(true);
   const backup = readBackup();
   for (const [agent, p] of Object.entries(hookFiles())) {
     const text = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null;
@@ -108,6 +143,8 @@ export function installHooks() {
     if (!(p in backup)) backup[p] = { text, dir: fs.existsSync(path.dirname(p)) };
     const next = withoutOurs(json);
     if (agent === 'cursor') next.version ??= 1;
+    const runs = agent === 'cursor' ? userHookFile() : hookFile();
+    const cmd = sub => `"${process.execPath}" "${runs}" hook ${sub}`;
     for (const [event, entries] of Object.entries(ourEntries(agent, cmd)))
       next.hooks[event] = [...(next.hooks[event] || []), ...entries];
     fs.mkdirSync(path.dirname(p), { recursive: true });
@@ -118,8 +155,13 @@ export function installHooks() {
   fs.writeFileSync(backupFile(), JSON.stringify(backup));
 }
 
-/** Takes the bridge's hooks out. A file untouched since is restored byte for byte; returns the files changed. */
+/**
+ * Takes the bridge's hooks out. A file untouched since is restored byte for byte; returns the files changed. Cursor's
+ * hooks, shared by every repo, stay while another bridge with hooks still runs; with the last one, the copy they run
+ * goes too.
+ */
 export function removeHooks() {
+  const others = registered(false);
   const backup = readBackup();
   const changed = [];
   for (const p of Object.values(hookFiles())) {
@@ -131,10 +173,10 @@ export function removeHooks() {
       continue;
     }
     const stripped = withoutOurs(json);
-    if (JSON.stringify(stripped) === JSON.stringify(json) && !(p in backup)) continue;
-    // Cursor's hooks are shared by every repo; the latest to install them owns them, and only it removes them.
-    if (!p.startsWith(ROOT + path.sep) && !JSON.stringify(json).includes(JSON.stringify(hookFile()).slice(1, -1)))
-      continue;
+    // A file holding none of the bridge's hooks is left as it is, unless the bridge put it there.
+    if (JSON.stringify(stripped.hooks) === JSON.stringify(json.hooks ?? {}) && !(p in backup)) continue;
+    // Cursor's hooks are shared by every repo: left to another bridge still running.
+    if (others && !p.startsWith(ROOT + path.sep)) continue;
     const before = backup[p];
     let original = null,
       clean = false;
@@ -142,7 +184,9 @@ export function removeHooks() {
       const parsed = before?.text == null ? null : JSON.parse(before.text);
       original = parsed && withoutOurs(parsed);
       // A file that already held another repo's hooks is not put back as it was.
-      clean = !/(loa\.mjs|\.loa[\\/]+bridge\.mjs)\\" hook /.test(before.text);
+      clean = !/(loa\.mjs|\.loa[\\/]+bridge\.mjs|league-of-agents[\\/]+hook[\\/]+bridge\.mjs)\\" hook /.test(
+        before.text,
+      );
     } catch {}
     if (before && before.text === null && !hasOwnContent(stripped)) {
       fs.rmSync(p);
@@ -153,5 +197,10 @@ export function removeHooks() {
     changed.push(shown(p));
   }
   fs.rmSync(backupFile(), { force: true });
+  if (!others) {
+    fs.rmSync(path.dirname(userHookFile()), { recursive: true, force: true });
+    fs.rmSync(runningFile(), { force: true });
+    if (fs.existsSync(userDir()) && !fs.readdirSync(userDir()).length) fs.rmdirSync(userDir());
+  }
   return changed;
 }
