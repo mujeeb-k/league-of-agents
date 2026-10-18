@@ -114,8 +114,8 @@ async function ownWrites(run, file) {
 const holder = (run, file) => epoch.runs.find(r => r !== run && r.scope?.length && inScope(r.scope, file));
 
 /**
- * The run's own changes, from all that changed while it worked. A run that worked alone owns them all,
- * except what a revert during it wrote. A run that overlapped owns the files it wrote (its edit steps, its bracketed
+ * The run's own changes, from all that changed while it worked. A run that worked alone owns them all: nothing
+ * else writes the files meanwhile, Commit and Revert waiting until no session works. A run that overlapped owns the files it wrote (its edit steps, its bracketed
  * shell commands), wherever they are, and whatever else changed in its own section while it worked, unless another
  * session wrote that file: then it is that session's. Where another session wrote the file too, or it is in another's
  * section, the run's change is its own writes alone (writes.mjs). A file of its own inside another session's section
