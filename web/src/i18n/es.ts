@@ -556,6 +556,8 @@ const catalogue: Catalogue = {
     'Algunos inquilinos configuran cientos de reintentos. Limítalos a 12, digan lo que digan los ajustes del inquilino.',
   "Retries are capped at **12** attempts per tenant, even when a tenant's settings ask for more.":
     'Los reintentos se limitan a **12** intentos por inquilino, aunque los ajustes del inquilino pidan más.',
+  'Asks before editing outside your selection; its commands can still change files there.':
+    'Pregunta antes de editar fuera de tu selección; sus comandos aún pueden cambiar archivos allí.',
   'Stays inside your selection': 'Se queda dentro de tu selección',
   "Can change files outside your selection. You'll see each one flagged.":
     'Puede cambiar archivos fuera de tu selección. Verás cada uno señalado.',

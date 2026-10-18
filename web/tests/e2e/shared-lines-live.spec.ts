@@ -264,6 +264,59 @@ test("a Cursor edit the hook refused is no edit: the file isn't its change, and 
   }
 });
 
+// What the person sees of that refusal, in the app: before the run and on its card, that Cursor asks before an edit
+// outside its section while the hooks it runs are in, its commands not held; then the edit it was refused, asked on
+// its card with Allow and Refuse (owner, VISION 29 item 5).
+test("Cursor's card says it asks before editing outside, and its refused edit is asked with Allow and Refuse", async ({
+  page,
+}) => {
+  const { repo, b, go } = await twoSessions(REPLAY_AGENT, {
+    LOA_FIXTURE: path.join(REPO_ROOT, 'tests/fixtures/agents/cursor/cursor-refused-edit.jsonl'),
+  });
+  const ASKS = 'Asks before editing outside your selection; its commands can still change files there.';
+  try {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.locator('.frame[data-dir="b"] > .flabel b').click();
+    await page.locator('#agentBtn').click();
+    await page.locator('#agentMenu [data-agent="cursor"]').click();
+    await expect(page.locator('#reach')).toHaveText(ASKS);
+    await page.locator('#prompt').fill('Add a daily summary.');
+    await page.locator('#prompt').press('Enter');
+    const card = page.locator('#sideList [data-run="1"]');
+    await expect(card.locator('.reach')).toHaveText(ASKS);
+    // The replay waits for this before its edit.
+    go('two');
+    const ask = card.locator('[data-want="a/tax.mjs"]');
+    await expect(ask).toContainText('Wants to change a/tax.mjs', { timeout: 15_000 });
+    await expect(ask.locator('[data-allow]')).toBeEnabled();
+    await expect(ask.locator('[data-refuse]')).toBeEnabled();
+    // On the map too, the file it was refused is said as blocked, not as an edit.
+    await expect(page.locator('.marker[data-run="1"] b')).toHaveText('Blocked');
+    for (const [width, theme] of [
+      [1440, 'light'],
+      [1440, 'dark'],
+      [760, 'light'],
+      [760, 'dark'],
+    ] as const) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ colorScheme: theme });
+      await page.screenshot({ path: test.info().outputPath(`cursor-refused-edit-asked-${width}x900-${theme}.png`) });
+    }
+    await page.emulateMedia({ colorScheme: 'light' });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    // Refused: the file stays as it was, and the run says it was blocked.
+    await ask.locator('[data-refuse]').click();
+    await expect.poll(async () => (await runOf(b, 1)).status, { timeout: 15_000 }).toBe('done');
+    expect(onDisk(repo, 'a/tax.mjs')).toBe(text(ORIGINAL));
+    expect(JSON.stringify((await runOf(b, 1)).stream)).toContain('Tried to change a/tax.mjs. Blocked.');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 // The real run's order, had Cursor's edit gone through: Claude Code writes a/tax.mjs by a shell command, which no hook
 // brackets here, so nobody's writes are seen in it; then Cursor adds its comment. Cursor's change is its line alone,
 // Claude Code's commit holds none of it, and reverting Cursor's run takes only it out.

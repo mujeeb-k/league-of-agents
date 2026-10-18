@@ -19,7 +19,7 @@ import {
 import { AGENTS } from './agents/registry.mjs';
 import { checkClaude } from './agents/claude.mjs';
 import { noteUnanswered, onAgentLine } from './agents/stream.mjs';
-import { removeHooks } from './hooks-install.mjs';
+import { editHookInstalled, removeHooks } from './hooks-install.mjs';
 import { codeFiles, folders, inFolder, mapMax, readTree, hashOf, repoFile, treeEntry } from './files.mjs';
 import { showAt } from './snapshots.mjs';
 import { recordedAuthors, exportAttribution } from './authorship.mjs';
@@ -59,7 +59,10 @@ function state({ url }) {
     200,
     {
       repo: { name: path.basename(ROOT), branch: safeBranch(), root: ROOT },
-      agents: AGENTS,
+      // Cursor asks before an edit outside a section while the hooks it runs are in.
+      agents: AGENTS.cursor
+        ? { ...AGENTS, cursor: { ...AGENTS.cursor, asks: !AGENTS.cursor.stays && editHookInstalled() } }
+        : AGENTS,
       root,
       // Whether a map was ever asked for here: until then, the app asks which folder to map when the repo is too large.
       rootChosen: fs.existsSync(mapFile()),

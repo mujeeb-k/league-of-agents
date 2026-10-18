@@ -245,7 +245,7 @@ function RunRow({ r }: { r: Run }) {
           ) : null}
         </div>
         {running && r.scope?.length && r.stays !== undefined ? (
-          <p className="reach mt-1 text-xs text-muted-foreground text-pretty">{reachOf(r.stays)}</p>
+          <p className="reach mt-1 text-xs text-muted-foreground text-pretty">{reachOf(r.stays, !!r.asks)}</p>
         ) : null}
         {running && !r.scope?.length && r.contained ? (
           <p className="reach mt-1 text-xs text-muted-foreground text-pretty">{containedText()}</p>

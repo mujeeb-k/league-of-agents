@@ -24,6 +24,20 @@ export const shown = p => (p.startsWith(ROOT + path.sep) ? path.relative(ROOT, p
 const OURS = /(loa\.mjs|\.loa[\\/]bridge\.mjs|league-of-agents[\\/]hook[\\/]bridge\.mjs)" hook /;
 const isOurs = command => OURS.test(String(command));
 const backupFile = () => path.join(LOA, 'hooks-backup.json');
+/**
+ * Whether the repo's Claude Code hook file holds the bridge's check before an edit. Cursor runs that file too (its
+ * docs: on by default; seen with Cursor 2026.10.16), so its edits outside a section are refused and asked first.
+ */
+export function editHookInstalled() {
+  try {
+    const json = JSON.parse(fs.readFileSync(hookFiles().claude, 'utf8'));
+    return (json.hooks?.PreToolUse ?? []).some(e =>
+      (e?.hooks ?? []).some(h => isOurs(h?.command) && / hook pre$/.test(String(h.command))),
+    );
+  } catch {
+    return false;
+  }
+}
 /** The original of each hook file, by absolute path (older backups keyed them relative to the repo). */
 const readBackup = () =>
   Object.fromEntries(Object.entries(readJson(backupFile(), {})).map(([p, v]) => [path.resolve(ROOT, p), v]));

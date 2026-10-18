@@ -20,6 +20,7 @@ import {
 } from './parallel.mjs';
 import { base, setBase, rebase } from './watch.mjs';
 import { NO_SANDBOX, lockOfRun, saidHeld } from './sandbox.mjs';
+import { editHookInstalled } from './hooks-install.mjs';
 import { emit, emitRun } from './events.mjs';
 import { pinSteps, stepsKept, stepsOf } from './steps.mjs';
 
@@ -122,6 +123,8 @@ export function beginRun(opts) {
     const run = newRun(opts);
     // Said on its card: whether the system keeps it inside its section.
     if (run.scope.length) run.stays = saidHeld(run);
+    // Cursor's edits outside it are asked first while the hooks it runs are in: its commands aren't held.
+    if (run.scope.length && run.agent === 'cursor' && !run.stays && editHookInstalled()) run.asks = true;
     // Its colour on the map while it works: the first one free, kept with the run so every window and a reload
     // show the same.
     const taken = new Set([...working.values()].map(r => r.slot));

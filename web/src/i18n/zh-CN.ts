@@ -515,6 +515,8 @@ const catalogue: Catalogue = {
     '有些租户设置了数百次重试。无论租户的设置如何，都把上限定为 12 次。',
   "Retries are capped at **12** attempts per tenant, even when a tenant's settings ask for more.":
     '每个租户的重试上限为 **12** 次，即使租户的设置要求更多。',
+  'Asks before editing outside your selection; its commands can still change files there.':
+    '在选区外编辑前会先询问；它的命令仍可能更改那里的文件。',
   'Stays inside your selection': '不会越出你所选范围',
   "Can change files outside your selection. You'll see each one flagged.":
     '可以改动你所选范围之外的文件，每一个都会标出给你看。',

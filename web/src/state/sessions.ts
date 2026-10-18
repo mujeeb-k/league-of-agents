@@ -13,10 +13,16 @@ export function workingRuns(): Run[] {
   return S.WORKING.map(id => S.RUNS.find(r => r.id === id)).filter(r => !!r);
 }
 
-/** A session's colour: the one it was given as it started, the same in every window and after a reload. */
-/** Where a session on a section can change files: kept inside by the system, or anywhere, each change outside flagged. */
-export const reachOf = (stays: boolean) =>
-  stays ? t('Stays inside your selection') : t("Can change files outside your selection. You'll see each one flagged.");
+/**
+ * Where a session on a section can change files: kept inside by the system; asked before each edit outside, its
+ * commands not held; or anywhere, each change outside flagged.
+ */
+export const reachOf = (stays: boolean, asks = false) =>
+  stays
+    ? t('Stays inside your selection')
+    : asks
+      ? t('Asks before editing outside your selection; its commands can still change files there.')
+      : t("Can change files outside your selection. You'll see each one flagged.");
 
 /** The writes a session at work asked to make outside its section, not yet answered. */
 export const asking = (r: Run) => (r.status === 'running' ? (r.wants ?? []).filter(w => !w.answer) : []);

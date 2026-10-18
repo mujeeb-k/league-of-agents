@@ -346,7 +346,7 @@ export function Composer() {
       {/* With a selection: whether the agent picked stays inside it. With none: whether it stays inside the repo. */}
       {!blocked && st.sel.size && stays !== undefined ? (
         <p id="reach" className="px-1 pb-2 text-right text-xs text-muted-foreground text-pretty">
-          {reachOf(stays)}
+          {reachOf(stays, !!(S.CONN && S.LIVE_AGENTS?.[st.agent]?.asks))}
         </p>
       ) : !blocked && !st.sel.size && S.CONN && S.LIVE_AGENTS?.[st.agent]?.contained ? (
         <p id="reach" className="px-1 pb-2 text-right text-xs text-muted-foreground text-pretty">

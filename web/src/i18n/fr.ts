@@ -555,6 +555,8 @@ const catalogue: Catalogue = {
     'Certains locataires règlent des centaines de nouvelles tentatives. Plafonne-les à 12, quels que soient les réglages du locataire.',
   "Retries are capped at **12** attempts per tenant, even when a tenant's settings ask for more.":
     'Les nouvelles tentatives sont plafonnées à **12** par locataire, même quand les réglages d’un locataire en demandent plus.',
+  'Asks before editing outside your selection; its commands can still change files there.':
+    'Demande avant de modifier hors de votre sélection ; ses commandes peuvent encore y changer des fichiers.',
   'Stays inside your selection': 'Reste dans votre sélection',
   "Can change files outside your selection. You'll see each one flagged.":
     'Peut modifier des fichiers en dehors de votre sélection. Chacun vous sera signalé.',
