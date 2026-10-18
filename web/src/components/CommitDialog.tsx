@@ -20,7 +20,8 @@ export function CommitDialog() {
   const c = st.commit;
   const shared = c ? sharedOf(c.run) : new Map<string, number[]>(),
     n = c ? c.files.length + c.include.size : 0;
-  const blocked = !c || !n || c.changed.length > 0 || !c.branch || !c.message.trim() || st.busy === 'commit';
+  const blocked =
+    !c || !n || c.changed.length > 0 || !c.branch || !c.message.trim() || st.busy === 'commit' || S.WORKING.length > 0;
   return (
     <Dialog open={c !== null} onOpenChange={open => (open ? null : openCommit(null))}>
       <DialogContent id="commitDlg" className="gap-0 rounded-2xl p-6 shadow-[var(--e2)] sm:max-w-120">
@@ -81,10 +82,7 @@ export function CommitDialog() {
                 </li>
               ))}
               {(c.shared ?? []).map(f => {
-                const later = !!c.later?.includes(f);
-                // While the other session still works on it, its edits aren't all in the file yet.
-                const busy = (shared.get(f) ?? []).find(id => S.WORKING.includes(id));
-                const off = later || busy !== undefined;
+                const off = !!c.later?.includes(f);
                 return (
                   <li key={f}>
                     <label className={cn('flex items-start gap-2', !off && 'cursor-pointer')}>
@@ -108,13 +106,11 @@ export function CommitDialog() {
                           <SharedTag runs={shared.get(f) ?? []} />
                         </span>
                         <span className="mt-0.5 block text-muted-foreground text-pretty">
-                          {busy !== undefined
-                            ? t('Run {id} is still working. Choose once it ends.', { id: busy })
-                            : later
-                              ? t('Changed since this run ended, so it can’t go in with it.')
-                              : !c.whole || c.whole.includes(f)
-                                ? t('Ticked, the whole file goes in, the other session’s lines too.')
-                                : t('Ticked, only this run’s lines go in.')}
+                          {off
+                            ? t('Changed since this run ended, so it can’t go in with it.')
+                            : !c.whole || c.whole.includes(f)
+                              ? t('Ticked, the whole file goes in, the other session’s lines too.')
+                              : t('Ticked, only this run’s lines go in.')}
                         </span>
                       </span>
                     </label>
@@ -153,7 +149,13 @@ export function CommitDialog() {
               <DialogClose asChild>
                 <Button variant="outline">{t('Cancel')}</Button>
               </DialogClose>
-              <Button id="commitConfirm" disabled={blocked} className="tabular-nums" onClick={() => void commitDraft()}>
+              <Button
+                id="commitConfirm"
+                disabled={blocked}
+                title={S.WORKING.length ? t('Commit and Revert wait until no session is working.') : undefined}
+                className="tabular-nums"
+                onClick={() => void commitDraft()}
+              >
                 {st.busy === 'commit' ? <Spinner className="text-current" /> : null}
                 {tn(n, 'Commit {n} file', 'Commit {n} files')}
               </Button>

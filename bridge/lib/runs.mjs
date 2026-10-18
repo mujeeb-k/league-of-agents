@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { line, logError, readJson, splitLines, serial } from './util.mjs';
+import { line, logError, readJson, refused, splitLines, serial } from './util.mjs';
 import { inScope, rangeKept, scopeEntry } from './scope.mjs';
 import { ROOT, RUNS_DIR, git } from './repo.mjs';
 import { linesOf } from './agents/lines.mjs';
@@ -14,9 +14,6 @@ import {
   joinEpoch,
   keepsBaseline,
   leaveEpoch,
-  noteRevert,
-  heldBusy,
-  sharedBusy,
   ownChanges,
   peersOf,
   startingPoint,
@@ -279,18 +276,16 @@ export function push(run, entry) {
   emit('progress', run);
 }
 /**
- * Reverts a run: in the serial lane, so no snapshot, commit or other revert reads or writes its files halfway.
+ * Reverts a run once no session is working: in the serial lane, so no snapshot, commit or other revert reads or
+ * writes its files halfway.
  * @returns {Promise<{ ok: true; left?: string[] } | { conflict: string[] }>}
  */
 export function revertRun(run, force, chosen = []) {
   return serial(async () => {
-    // A file another session edited too is left as it is unless the person chose it (parallel.mjs share), and can't
-    // be chosen while that session still works.
+    // Nothing is written under a session at work: Revert waits until none is.
+    if (working.size) throw refused('sessions-working', 'Revert waits until no session is working.');
+    // A file another session edited too is left as it is unless the person chose it (parallel.mjs share).
     const left = (run.shared ?? []).map(s => s.path).filter(p => !chosen.includes(p));
-    // Only the files it will touch: a shared file left as it is waits on nothing.
-    const touched = [...run.changes, ...(run.unseen ?? [])].map(c => c.path).filter(p => !left.includes(p));
-    const busy = sharedBusy(run, chosen) ?? heldBusy(run, touched);
-    if (busy) throw busy;
     // A run names only files inside the repo; anything else in a run file is never read or touched.
     const changes = [...run.changes, ...(run.unseen ?? [])].filter(
       c => path.resolve(ROOT, c.path).startsWith(ROOT + path.sep) && !left.includes(c.path),
@@ -312,14 +307,13 @@ export function revertRun(run, force, chosen = []) {
       else stuck.push(c.path);
     }
     // Each file keeps its mode from before the run, so a mode the run changed goes back too.
-    const written = await putBlobs(back, `run ${run.id} reverted`, run.before, run.after);
+    await putBlobs(back, `run ${run.id} reverted`, run.before, run.after);
     run.reverted = true;
     left.push(...stuck);
     // What it left is kept on the run: reverted, but for these.
     if (left.length) run.left = left;
-    // The bridge's own writes are not someone's changes: taken into the baseline, or into the epoch under way.
-    if (working.size) noteRevert(run, written, left);
-    else await rebase();
+    // The bridge's own writes are not someone's changes: taken into the baseline.
+    await rebase();
     saveRun(run);
     emit('state');
     return { ok: true, ...(left.length ? { left } : {}) };

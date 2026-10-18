@@ -151,8 +151,10 @@ const outsideText = (run: Run, lines: string | null) =>
 /** A run action button: disabled while the bridge works on any action, with a spinner on the one in progress. */
 function ActButton({ run, act, children, ...props }: React.ComponentProps<typeof Button> & { run: Run; act: string }) {
   const mine = st.busy === `${act}:${run.id}`;
+  // Nothing is written under a session at work.
+  const waits = act === 'revert' && S.WORKING.length > 0;
   return (
-    <Button data-act={act} disabled={!!st.busy || isOffline()} aria-busy={mine || undefined} {...props}>
+    <Button data-act={act} disabled={!!st.busy || isOffline() || waits} aria-busy={mine || undefined} {...props}>
       {mine ? <Spinner className="text-current" /> : null}
       {children}
     </Button>
@@ -520,7 +522,7 @@ function RunView({ run }: { run: Run }) {
                     <Button
                       id="commitBtn"
                       className="flex-1"
-                      disabled={!!st.busy || isOffline()}
+                      disabled={!!st.busy || isOffline() || S.WORKING.length > 0}
                       title={t('Commit only this run’s files, with a message you write. Nothing is pushed.')}
                       onClick={() => void openCommit(run)}
                     >
@@ -559,6 +561,11 @@ function RunView({ run }: { run: Run }) {
                   </ActButton>
                 </div>
               )}
+              {S.CONN && S.WORKING.length ? (
+                <p className="waits mt-2 text-xs text-muted-foreground text-pretty">
+                  {t('Commit and Revert wait until no session is working.')}
+                </p>
+              ) : null}
               <div className="hintline mt-3 flex items-center gap-1 text-xs text-muted-foreground">
                 <Stat a={s.a} d={s.d} />
                 {tn(s.n, 'across {n} file', 'across {n} files')}

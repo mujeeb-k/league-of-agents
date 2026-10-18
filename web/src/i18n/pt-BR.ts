@@ -175,10 +175,8 @@ const catalogue: Catalogue = {
     'Marcado, o arquivo inteiro entra, com as linhas da outra sessão também.',
   'Outside {section}': 'Fora de {section}',
   'Outside its sections': 'Fora das seções dela',
-  'Run {id} is still working on {files}. Choose it once run {id} ends.':
-    'A execução {id} ainda trabalha em {files}. Escolha quando a execução {id} terminar.',
-  'Run {id} is still working. Choose once it ends.':
-    'A execução {id} ainda está trabalhando. Escolha quando ela terminar.',
+  'Commit and Revert wait until no session is working.':
+    'Commit e reversão esperam até nenhuma sessão estar trabalhando.',
   'Outside lines {lines}': 'Fora das linhas {lines}',
   'Reverted, except {files}.': 'Revertida, exceto {files}.',
   "Changed during run {id}. Who wrote it isn't known.": 'Mudado durante a execução {id}. Não se sabe quem escreveu.',

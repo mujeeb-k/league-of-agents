@@ -19,7 +19,7 @@ export const BY_CODE: Record<string, string> = {
   'run-active': 'Run {id} is still active',
   'sections-overlap': 'Run {id} is working on {path}. Pick a section outside it, or wait for it to finish.',
   'changed-since': '{files} changed since the run. Review it again before committing.',
-  'shared-busy': 'Run {id} is still working on {files}. Choose it once run {id} ends.',
+  'sessions-working': 'Commit and Revert wait until no session is working.',
   'git-refused': 'Git refused the commit.',
   'head-moved': 'Your branch moved while committing. Try again.',
   'changed-since-put-back': '{name} changed since it was put back. Restoring it would lose that change.',

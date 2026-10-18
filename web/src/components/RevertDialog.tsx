@@ -2,7 +2,6 @@
 // when ticked. A run with no shared file reverts at once, with no dialog (api/live.ts liveAction).
 import { openRevert, revertChosen } from '../api/live';
 import { ownFiles, sharedOf } from '../lib/model';
-import { cn } from '../lib/utils';
 import { S, st } from '../state/app';
 import { bump, useRegion } from '../state/render';
 import { Button } from './ui/button';
@@ -52,15 +51,12 @@ export function RevertDialog() {
                 </li>
               ))}
               {[...sharedOf(r.run)].map(([f, runs]) => {
-                // While the other session still works on it, the file can't go back: its edits aren't all in yet.
-                const busy = runs.find(id => S.WORKING.includes(id));
                 return (
                   <li key={f}>
-                    <label className={cn('flex items-start gap-2', !busy && 'cursor-pointer')}>
+                    <label className="flex cursor-pointer items-start gap-2">
                       <input
                         type="checkbox"
                         data-include={f}
-                        disabled={busy !== undefined}
                         checked={r.include.has(f)}
                         onChange={e => {
                           if (e.target.checked) r.include.add(f);
@@ -71,20 +67,18 @@ export function RevertDialog() {
                       />
                       <span className="min-w-0">
                         <span className="flex min-w-0 items-center gap-2">
-                          <span className={cn('min-w-0 truncate font-mono', busy && 'text-muted-foreground')} title={f}>
+                          <span className="min-w-0 truncate font-mono" title={f}>
                             {f}
                           </span>
                           <SharedTag runs={runs} />
                         </span>
                         <span className="mt-0.5 block text-muted-foreground text-pretty">
-                          {busy
-                            ? t('Run {id} is still working. Choose once it ends.', { id: busy })
-                            : S.ownLines
-                              ? t('Ticked, only this run’s lines come out.')
-                              : t(
-                                  'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.',
-                                  { id: r.run.id },
-                                )}
+                          {S.ownLines
+                            ? t('Ticked, only this run’s lines come out.')
+                            : t(
+                                'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.',
+                                { id: r.run.id },
+                              )}
                         </span>
                       </span>
                     </label>
@@ -100,7 +94,8 @@ export function RevertDialog() {
               <Button
                 variant="outline"
                 id="revertConfirm"
-                disabled={!n}
+                disabled={!n || S.WORKING.length > 0}
+                title={S.WORKING.length ? t('Commit and Revert wait until no session is working.') : undefined}
                 className="text-del tabular-nums hover:text-del"
                 onClick={() => void revertChosen()}
               >

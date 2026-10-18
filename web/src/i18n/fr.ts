@@ -176,10 +176,8 @@ const catalogue: Catalogue = {
     'Coché, le fichier entier est inclus, avec les lignes de l’autre session.',
   'Outside {section}': 'Hors de {section}',
   'Outside its sections': 'Hors de ses sections',
-  'Run {id} is still working on {files}. Choose it once run {id} ends.':
-    'L’exécution {id} travaille encore sur {files}. Choisissez-le quand l’exécution {id} sera terminée.',
-  'Run {id} is still working. Choose once it ends.':
-    'L’exécution {id} travaille encore. Choisissez quand elle sera terminée.',
+  'Commit and Revert wait until no session is working.':
+    'Committer et annuler attendent qu’aucune session ne soit au travail.',
   'Outside lines {lines}': 'Hors des lignes {lines}',
   'Reverted, except {files}.': 'Annulée, sauf {files}.',
   "Changed during run {id}. Who wrote it isn't known.":

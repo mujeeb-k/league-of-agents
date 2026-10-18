@@ -19,11 +19,9 @@ import { stepsOf } from './steps.mjs';
 
 /**
  * The epoch under way: its baseline, whether runs overlapped in it, its runs, what each file should hold at its end
- * (`expected`, by the commit that has it: a run's after, what a revert left, a commit, a file a commit held and put
- * back), what the bridge itself wrote meanwhile (`written`: a revert's files, a commit's), and runs whose checks
- * wait for its end.
- * @type {{ base: any; overlapped: boolean; runs: any[]; expected: Map<string, string>; written: Map<string, string>;
- *   checks: any[] } | null}
+ * (`expected`, by the run's after that has it), and runs whose checks wait for its end. Nothing else writes the files
+ * meanwhile: Commit and Revert wait until no session is working.
+ * @type {{ base: any; overlapped: boolean; runs: any[]; expected: Map<string, string>; checks: any[] } | null}
  */
 let epoch = null;
 
@@ -58,7 +56,7 @@ export async function startingPoint() {
 /** A run started: alone, it opens an epoch; with others at work, it joins theirs and every run in it overlaps. */
 export function joinEpoch(run) {
   if (!working.size) {
-    epoch = { base, overlapped: false, runs: [run], expected: new Map(), written: new Map(), checks: [] };
+    epoch = { base, overlapped: false, runs: [run], expected: new Map(), checks: [] };
     return;
   }
   epoch.overlapped = true;
@@ -125,17 +123,7 @@ const holder = (run, file) => epoch.runs.find(r => r !== run && r.scope?.length 
  * end.
  */
 export async function ownChanges(run, changes) {
-  if (!epoch) return changes;
-  // A file still as a revert or a commit left it is the bridge's own write, not the run's. Not so a file as another
-  // session left it: two sessions that edited one file each hold it.
-  const reverted = async c =>
-    epoch.written.has(c.path) &&
-    (await blobAt(epoch.written.get(c.path), c.path)) === (await blobAt(run.after, c.path));
-  if (!run.overlapped) {
-    const own = [];
-    for (const c of changes) if (!(await reverted(c))) own.push(c);
-    return own;
-  }
+  if (!epoch || !run.overlapped) return changes;
   const sections = epoch.runs.flatMap(r => r.scope ?? []);
   // Each session's reported files, read once: an ended session's steps are read from disk.
   const names = new Map(epoch.runs.map(r => [r, reported(r)]));
@@ -152,7 +140,7 @@ export async function ownChanges(run, changes) {
     const mine = named.has(c.path) || inScope(run.scope, c.path);
     if (!mine) {
       if (!inScope(sections, c.path) && !byAnother(c.path)) outside.push(c.path);
-    } else if (!(await reverted(c))) {
+    } else {
       // Another session wrote it too, or it is in another's section, where what changed besides isn't this run's: the
       // run's change is what its own writes did, on the file as the others left it, and those writes are kept for
       // its revert and its commit (runs.mjs, commit.mjs).
@@ -247,66 +235,6 @@ function share(run, other, file) {
       emitRun(r);
     }
   }
-}
-
-/**
- * A shared file can't go back or be committed with one session while another that edited it still works: that
- * session's edits aren't all in the file yet, and the file put back under it would no longer be its change.
- * The refusal, or null.
- */
-export function sharedBusy(run, files) {
-  for (const s of run.shared ?? []) {
-    const id = files.includes(s.path) ? s.with.find(i => working.has(i)) : undefined;
-    if (id !== undefined)
-      return refused('shared-busy', `Run ${id} is still working on ${s.path}. Choose it once run ${id} ends.`, {
-        id,
-        files: s.path,
-      });
-  }
-  return null;
-}
-
-/**
- * A revert while runs work: what it wrote (`commit` holds each file as it left it) is the revert's, not theirs, and
- * not left over at the epoch's end. The files it left as they are (`left`) it didn't write.
- */
-export function noteRevert(run, commit, left = []) {
-  if (epoch)
-    for (const c of [...run.changes, ...(run.unseen ?? [])]) {
-      if (left.includes(c.path)) continue;
-      epoch.expected.set(c.path, commit);
-      epoch.written.set(c.path, commit);
-    }
-}
-
-/**
- * A commit while runs work: what it changed, a hook's files among them, is the commit's. It isn't the session's in
- * whose section a hook wrote, and isn't left over at the epoch's end.
- */
-export function noteCommit(sha, files, written = true) {
-  if (epoch)
-    for (const p of files) {
-      epoch.expected.set(p, sha);
-      if (written) epoch.written.set(p, sha);
-    }
-}
-
-/**
- * A file a run wrote outside its own section, in a section another session still works in: it isn't committed or
- * reverted with this run until that session ends, so nothing is swapped or rewritten under a working agent, and
- * that session's own change to it stays its own. The refusal, or null.
- */
-export function heldBusy(run, files) {
-  for (const p of files) {
-    if (!run.writes?.[p]) continue;
-    const other = [...working.values()].find(r => r !== run && r.scope?.length && inScope(r.scope, p));
-    if (other)
-      return refused('shared-busy', `Run ${other.id} is still working on ${p}. Choose it once run ${other.id} ends.`, {
-        id: other.id,
-        files: p,
-      });
-  }
-  return null;
 }
 
 /** A run's checks: now, or once the epoch ends when it overlapped others still at work. */

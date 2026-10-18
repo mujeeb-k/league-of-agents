@@ -274,8 +274,8 @@ test('a shared file', async ({ page }) => {
   }
 });
 
-// A shared file while its other session still works: its box is off, with the reason. Then reverted without it:
-// the run says what it left.
+// While another session still works, Revert is off, with the reason under it. Once none works, reverted without the
+// shared file: the run says what it left.
 test('a shared file whose other session still works', async ({ page }) => {
   test.setTimeout(120_000);
   const { b, repo, cursor, release } = await sharedFileBridge(true);
@@ -283,17 +283,20 @@ test('a shared file whose other session still works', async ({ page }) => {
     await page.goto(linkFor(b));
     await expect(page.locator('#conn')).toHaveText('Live');
     await page.locator(`#sideList [data-run="${cursor}"]`).click();
-    await page.locator('#insp [data-act="revert"]').click();
-    await expect(page.locator('#revertDlg [data-include="a/tax.mjs"]')).toBeDisabled();
+    await expect(page.locator('#insp [data-act="revert"]')).toBeDisabled();
+    await expect(page.locator('#insp .waits')).toBeVisible();
     await expect(page.locator(TOAST)).toHaveCount(0, { timeout: 10_000 });
-    await shoot(page, 'shared-file-revert-other-session-at-work', NARROW);
+    await shoot(page, 'revert-waits-for-sessions', NARROW, () => page.locator('#insp .waits').scrollIntoViewIfNeeded());
+    await release();
+    await expect(page.locator('#insp [data-act="revert"]')).toBeEnabled({ timeout: 15_000 });
+    await page.locator('#insp [data-act="revert"]').click();
+    await expect(page.locator('#revertDlg')).toBeVisible();
     await page.locator('#revertConfirm').click();
     await expect(page.locator('#insp .outcome')).toHaveText('Reverted, except a/tax.mjs.');
     await expect(page.locator(TOAST)).toHaveCount(0, { timeout: 10_000 });
     await shoot(page, 'shared-file-reverted-except', NARROW, () =>
       page.locator('#insp .outcome').scrollIntoViewIfNeeded(),
     );
-    await release();
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });

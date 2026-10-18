@@ -168,9 +168,7 @@ test('two sessions edit one file: each run is credited with its own lines, commi
   }
 });
 
-test('run 1 committed while run 2 still works: reverting run 2 later takes back only its own lines', async ({
-  page,
-}) => {
+test('run 1 waits to be committed while run 2 still works; then each keeps to its own lines', async ({ page }) => {
   const { repo, b, start, go } = await twoSessions();
   try {
     await page.goto(linkFor(b));
@@ -179,10 +177,11 @@ test('run 1 committed while run 2 still works: reverting run 2 later takes back 
     const cursor = await start('cursor', ['b/'], CURSOR_PROMPT);
     go('one');
     await ended(b, claude);
-    // Committed with run 2 at work, before it has touched the file: not shared yet.
-    const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: [] });
-    expect.soft(done.status).toBe(200);
-    expect.soft(committed(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
+    // With run 2 at work, the commit waits (VISION 29): nothing is committed or written.
+    const early = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: [] });
+    expect.soft([early.status, early.body.code]).toEqual([409, 'sessions-working']);
+    expect.soft(git(repo, 'log', '--oneline').trim().split('\n')).toHaveLength(1);
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
     expect.soft((await runOf(b, cursor)).status).toBe('running');
     expect.soft(await onMap(page, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
     go('two');
@@ -194,6 +193,10 @@ test('run 1 committed while run 2 still works: reverting run 2 later takes back 
     expect.soft(sharedOf(two)).toEqual([['a/tax.mjs', [claude]]]);
     expect.soft(sharedOf(await runOf(b, claude))).toEqual([['a/tax.mjs', [cursor]]]);
     expect.soft(await onMap(page, 'a/tax.mjs')).toEqual(AFTER_BOTH);
+    // Now none works: run 1's commit holds its lines, not run 2's.
+    const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
+    expect.soft(done.status).toBe(200);
+    expect.soft(committed(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
     const back = await call(b, `/api/runs/${cursor}/revert`, { force: false, shared: ['a/tax.mjs'] });
     expect.soft(back.status).toBe(200);
     expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
@@ -329,9 +332,9 @@ test('a bracketed command and an edit make a shared file: commit and revert each
   }
 });
 
-// A shared file committed while a third session still works: the file holds the other run's lines again after the
-// commit, and that is the bridge's own write. When the third ends, no run by none of them is made of it.
-test('a shared file committed while a third session works leaves no run by none of them', async () => {
+// A shared file whose commit waits for a third session: once it ends, the commit holds this run's lines, the file
+// holds the other run's again after it (the bridge's own write), and no run by none of them is made of it.
+test('a shared file waits for a third session to be committed, and leaves no run by none of them', async () => {
   const { repo, b, start, go } = await twoSessions();
   try {
     const claude = await start('claude', ['a/'], CLAUDE_PROMPT);
@@ -341,12 +344,14 @@ test('a shared file committed while a third session works leaves no run by none 
     await ended(b, claude);
     go('two');
     await ended(b, cursor);
+    const early = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
+    expect.soft([early.status, early.body.code]).toEqual([409, 'sessions-working']);
+    go('three');
+    await ended(b, third);
     const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
     expect.soft(done.status).toBe(200);
     expect.soft(committed(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
     expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(BOTH_TAX));
-    go('three');
-    await ended(b, third);
     const state = (await call(b, '/api/state')).body as unknown as { runs: RunDTO[] };
     expect.soft(state.runs.map(r => r.agent)).toEqual(['claude', 'cursor', 'cursor']);
   } finally {
@@ -427,9 +432,9 @@ test("a run's commit of a file outside its section holds its lines alone, not an
   }
 });
 
-// As "a shared file committed while a third session works", in a repo with no pre-commit hook: nothing is held while
-// git commits, and still no run by none of them is made of the other run's lines.
-test('a shared file committed while a third session works, with no commit hook, leaves no run by none of them', async () => {
+// As "a shared file waits for a third session", in a repo with no pre-commit hook: nothing is held while git commits,
+// and still no run by none of them is made of the other run's lines.
+test('a shared file waits for a third session to be committed, with no commit hook, and leaves no run by none of them', async () => {
   const { repo, b, start, go } = await twoSessions();
   try {
     fs.rmSync(path.join(repo, '.git/hooks/pre-commit'));
@@ -440,11 +445,14 @@ test('a shared file committed while a third session works, with no commit hook, 
     await ended(b, claude);
     go('two');
     await ended(b, cursor);
+    const early = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
+    expect.soft([early.status, early.body.code]).toEqual([409, 'sessions-working']);
+    go('three');
+    await ended(b, third);
     const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
     expect.soft(done.status).toBe(200);
     expect.soft(committed(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
-    go('three');
-    await ended(b, third);
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(BOTH_TAX));
     const state = (await call(b, '/api/state')).body as unknown as { runs: RunDTO[] };
     expect.soft(state.runs.map(r => r.agent)).toEqual(['claude', 'cursor', 'cursor']);
   } finally {
@@ -454,8 +462,7 @@ test('a shared file committed while a third session works, with no commit hook, 
 });
 
 // Cursor's run, which wrote a file in Claude Code's section, is committed while Claude Code still works there: the
-// commit waits, as for a shared file, so the file isn't swapped under a working agent, and Claude Code's change on it
-// stays its own when it ends.
+// commit waits, as every commit does while a session works, and Claude Code's change on it stays its own when it ends.
 test("a run's file in a section still at work can't be committed until that session ends", async () => {
   const { repo, b, start, go } = await twoSessions(FAKE_CURSOR, {}, ['--no-hooks']);
   const SHELL = '// written by a shell command';
@@ -465,7 +472,7 @@ test("a run's file in a section still at work can't be committed until that sess
     const cursor = await start('cursor', ['b/'], 'Add a daily summary. insert:a/tax.mjs:1:comment');
     await ended(b, cursor);
     const early = await call(b, `/api/runs/${cursor}/commit`, { message: 'Note where tax is used', include: [] });
-    expect.soft([early.status, early.body.code]).toEqual([409, 'shared-busy']);
+    expect.soft([early.status, early.body.code]).toEqual([409, 'sessions-working']);
     go('d');
     // Claude Code's change on the file is its command's line, without Cursor's; both wrote it, so it is shared.
     const one = await ended(b, claude);

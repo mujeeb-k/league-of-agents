@@ -5,17 +5,17 @@
 // show clean and everything else staged stays exactly as it was. A hook may commit more than it was handed (a
 // formatter's index file, a generated list): those files are named on the run, and are the commit's, not a session's.
 // A file another session also wrote goes in with this session's lines only (writes.mjs); while a pre-commit hook
-// runs, the working tree holds that version, and the other's lines are put back after.
+// runs, the working tree holds that version, and the other's lines are put back after. A commit waits until no
+// session is working, so nothing is swapped under an agent at work.
 import fs from 'node:fs';
 import path from 'node:path';
 import { logError, readJson, refused, serial } from './util.mjs';
 import { LOA, ROOT, gitAsync } from './repo.mjs';
-import { blobAt, blobNow, commitBlobs, headNow, putBlobs } from './snapshots.mjs';
+import { blobAt, blobNow, headNow, putBlobs } from './snapshots.mjs';
 import { takeOut } from './writes.mjs';
 import { emitRun } from './events.mjs';
-import { runs, saveRun } from './runs.mjs';
+import { runs, saveRun, working } from './runs.mjs';
 import { line } from './util.mjs';
-import { heldBusy, noteCommit, sharedBusy } from './parallel.mjs';
 
 /** Files held at the commit's version while git commits (commitRun), until they are put back. */
 const heldFile = () => path.join(LOA, 'held.json');
@@ -121,15 +121,10 @@ export function commitRun(run, { message = '', include = [] } = {}) {
     if (run.status === 'running' || run.reverted)
       throw refused('not-committable', 'Only a finished run can be committed.');
     if (!message.trim()) throw refused('no-message', 'Write a commit message first.');
+    // Nothing is committed under a session at work: Commit waits until none is.
+    if (working.size) throw refused('sessions-working', 'Commit waits until no session is working.');
     // An earlier commit's held files not yet put back go back first, before this one reads the files.
     await restoreHeld();
-    // Only the files that go in: a shared file left out waits on nothing.
-    const both = (run.shared ?? []).map(s => s.path);
-    const going = [...run.changes, ...(run.unseen ?? [])]
-      .map(c => c.path)
-      .filter(p => !both.includes(p) || include.includes(p));
-    const busy = sharedBusy(run, include) ?? heldBusy(run, going);
-    if (busy) throw busy;
     const { files, yours, shared, changed } = await commitPreview(run, include);
     if (changed.length)
       throw refused('changed-since', `${changed.join(', ')} changed since the run.`, { files: changed.join(', ') });
@@ -229,23 +224,6 @@ export function commitRun(run, { message = '', include = [] } = {}) {
       entries.push([p, entry ? entry.split(/\s+/).slice(0, 3) : null]);
     }
     await setEntries(process.env);
-    // What the commit left on disk is the bridge's write, not a change of anyone's: the commit's version, or where
-    // the file still holds another session's lines (held and put back, or never held), the file as it is.
-    const kept = [],
-      apart = [];
-    for (const p of committed) {
-      const now = await blobNow(p, true);
-      if (now === (await blobAt(sha, p))) kept.push(p);
-      else apart.push([p, now]);
-    }
-    noteCommit(sha, kept);
-    // Expected, not written by the bridge: a session that wrote the file meanwhile keeps its change.
-    if (apart.length)
-      noteCommit(
-        await commitBlobs(sha, apart, `run ${run.id} committed, as on disk`),
-        apart.map(([p]) => p),
-        false,
-      );
     run.committed = { sha, at: Date.now(), files: chosen, ...(hook.length ? { hook } : {}) };
     if (hook.length)
       run.stream.push(

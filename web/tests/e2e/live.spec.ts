@@ -3260,18 +3260,25 @@ test.describe('sessions at once', () => {
       expect(files.map(f => fs.existsSync(path.join(repo, f)))).toEqual([true, false, true]);
     }));
 
-  test("an earlier run reverted while sessions work is the revert's, not left over when they end", () =>
+  // Revert and Commit wait until no session is working (VISION 29): nothing is rewritten under an agent at work.
+  test('an earlier run is reverted only once no session works, and is no leftover of theirs', () =>
     twoSessions(async (b, repo) => {
       const earlier = (await start(b, ['shared/'], 'edit:shared/log.ts')).body as unknown as RunDTO;
       await until(b, earlier.id, 'done');
+      const edited = fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8');
       const a = (await start(b, ['apps/'], 'edit:apps/console/main.ts wait:a')).body as unknown as RunDTO;
       const c = (await start(b, ['notes.md'], 'edit:notes.md wait:c')).body as unknown as RunDTO;
-      expect((await call(b, `/api/runs/${earlier.id}/revert`, {})).status).toBe(200);
-      expect(fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8')).toBe(SEED['shared/log.ts']);
+      const early = await call(b, `/api/runs/${earlier.id}/revert`, {});
+      expect([early.status, early.body.code]).toEqual([409, 'sessions-working']);
+      const commit = await call(b, `/api/runs/${earlier.id}/commit`, { message: 'Log' });
+      expect([commit.status, commit.body.code]).toEqual([409, 'sessions-working']);
+      expect(fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8')).toBe(edited);
       go(repo, 'a');
       go(repo, 'c');
       await until(b, a.id, 'done');
       await until(b, c.id, 'done');
+      expect((await call(b, `/api/runs/${earlier.id}/revert`, {})).status).toBe(200);
+      expect(fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8')).toBe(SEED['shared/log.ts']);
       expect((await runOf(b, a.id)).changes.map(ch => ch.path)).toEqual(['apps/console/main.ts']);
       expect((await runOf(b, c.id)).changes.map(ch => ch.path)).toEqual(['notes.md']);
       expect((await state(b)).runs.map(r => r.agent)).toEqual(['hermes', 'hermes', 'hermes']);
@@ -6622,7 +6629,7 @@ test.describe('two agents, one checkout', () => {
       { FAKE_CURSOR_WRITES_FIRST: '1' },
     ));
 
-  test("a shared file can't go back or be committed with one session while the other still works on it", () =>
+  test("a shared file can't go back or be committed while a session still works; once none does, each holds its own", () =>
     twoAgents(async (b, repo) => {
       const seed = read(repo, 'a/tax.mjs');
       const { a, c } = await both(b, repo, 'want:a/tax.mjs', 'edit:b/invoice.mjs');
@@ -6634,26 +6641,26 @@ test.describe('two agents, one checkout', () => {
       // Cursor's session has ended and Claude Code's still works: the file is shared already.
       expect((await runOf(b, d.id)).shared).toEqual([{ path: 'a/tax.mjs', with: [a.id] }]);
       const both2 = read(repo, 'a/tax.mjs');
-      const busy = { code: 'shared-busy', args: { id: a.id, files: 'a/tax.mjs' } };
-      const revert = await call(b, `/api/runs/${d.id}/revert`, { shared: ['a/tax.mjs'] });
-      expect(revert.status).toBe(409);
-      expect(revert.body).toMatchObject(busy);
+      const busy = { code: 'sessions-working', args: {} };
+      for (const body of [{ shared: ['a/tax.mjs'] }, {}]) {
+        const revert = await call(b, `/api/runs/${d.id}/revert`, body);
+        expect([revert.status, revert.body]).toMatchObject([409, busy]);
+      }
       const commit = await call(b, `/api/runs/${d.id}/commit`, { message: 'Summary', include: ['a/tax.mjs'] });
-      expect(commit.status).toBe(409);
-      expect(commit.body).toMatchObject(busy);
+      expect([commit.status, commit.body]).toMatchObject([409, busy]);
       // Nothing was touched, and nothing recorded.
       expect(read(repo, 'a/tax.mjs')).toBe(both2);
       expect((await runOf(b, d.id)).reverted).toBe(false);
       expect(git(repo, 'log', '--oneline').trim().split('\n')).toHaveLength(1);
-      // Left as it is, the revert goes through, and says on the run what it left.
-      const left = await call(b, `/api/runs/${d.id}/revert`, {});
-      expect([left.status, left.body]).toEqual([200, { ok: true, left: ['a/tax.mjs'] }]);
-      expect((await runOf(b, d.id)).left).toEqual(['a/tax.mjs']);
       // Claude Code's session ends with the file still its own, and nothing is left for a run by none of them.
       go(repo, 'a');
       await until(b, a.id, 'done');
       expect(paths(await runOf(b, a.id))).toEqual(['a/tax.mjs']);
       expect((await state(b)).runs.map(r => r.agent)).toEqual(['claude', 'cursor', 'cursor']);
+      // Left as it is, the revert goes through, and says on the run what it left.
+      const left = await call(b, `/api/runs/${d.id}/revert`, {});
+      expect([left.status, left.body]).toEqual([200, { ok: true, left: ['a/tax.mjs'] }]);
+      expect((await runOf(b, d.id)).left).toEqual(['a/tax.mjs']);
       // Now that both have ended it can be chosen. Only Claude Code's lines would come out, but its rewrite of the
       // whole file touches Cursor's line: the file stays as it is, and the revert says so.
       const chosen = await call(b, `/api/runs/${a.id}/revert`, { shared: ['a/tax.mjs'] });
@@ -6662,7 +6669,7 @@ test.describe('two agents, one checkout', () => {
       expect(seed).not.toBe(both2);
     }));
 
-  test('a shared file a revert left is no leftover when a third session ends later', () =>
+  test("a shared file's revert waits for a third session too, and what it left is no leftover", () =>
     twoAgents(async (b, repo) => {
       const { a, c } = await both(b, repo, 'want:a/tax.mjs', 'edit:b/invoice.mjs');
       await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
@@ -6675,18 +6682,20 @@ test.describe('two agents, one checkout', () => {
       go(repo, 'a');
       await until(b, a.id, 'done');
       const both2 = read(repo, 'a/tax.mjs');
-      // Both sharers have ended. Cursor's session is reverted with the shared file left as it is.
-      const left = await call(b, `/api/runs/${d.id}/revert`, {});
-      expect(left.body).toEqual({ ok: true, left: ['a/tax.mjs'] });
+      // Both sharers have ended, the third still works: the revert waits for it.
+      expect((await call(b, `/api/runs/${d.id}/revert`, {})).body).toMatchObject({ code: 'sessions-working' });
       go(repo, 'z');
       await until(b, third.id, 'done');
+      // Cursor's session is reverted with the shared file left as it is.
+      const left = await call(b, `/api/runs/${d.id}/revert`, {});
+      expect(left.body).toEqual({ ok: true, left: ['a/tax.mjs'] });
       // The file is as both left it, and no run "by none of them" holds it: reverting one would undo what was left.
       expect(read(repo, 'a/tax.mjs')).toBe(both2);
       await expect.poll(async () => (await state(b)).working).toEqual([]);
       expect((await state(b)).runs.map(r => r.agent)).toEqual(['claude', 'cursor', 'claude', 'cursor']);
     }));
 
-  test("a session reverted before another edits its file doesn't share that file", () =>
+  test("a session can't be reverted while another works, even before that one edits its file; then they share it", () =>
     twoAgents(async (b, repo) => {
       const seed = read(repo, 'a/tax.mjs');
       const a = await start(b, 'claude', ['a/'], 'want:a/tax.mjs wait:a');
@@ -6694,16 +6703,19 @@ test.describe('two agents, one checkout', () => {
       await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
       go(repo, 'a');
       await until(b, a.id, 'done');
-      // Reverted while Cursor's session still works, and before that session touches the file.
-      expect((await call(b, `/api/runs/${a.id}/revert`, {})).body).toEqual({ ok: true });
-      expect(read(repo, 'a/tax.mjs')).toBe(seed);
+      // Cursor's session still works, though it hasn't touched the file: the revert waits.
+      expect((await call(b, `/api/runs/${a.id}/revert`, {})).body).toMatchObject({ code: 'sessions-working' });
+      expect(read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
       go(repo, 'c');
       await until(b, d.id, 'done');
       const [ra, rd] = [await runOf(b, a.id), await runOf(b, d.id)];
-      // Only Cursor's edit is in the file: it is Cursor's alone, to revert and commit unasked.
-      expect(read(repo, 'a/tax.mjs')).toBe(seed + '// edited by cursor in ' + rd.sessionId + '\n');
-      expect(paths(rd)).toContain('a/tax.mjs');
-      expect([ra.shared, rd.shared]).toEqual([undefined, undefined]);
+      // Both wrote it: shared, each with its own line.
+      expect(read(repo, 'a/tax.mjs')).toBe('// written by a session\n// edited by cursor in ' + rd.sessionId + '\n');
+      expect([ra.shared, rd.shared]).toEqual([
+        [{ path: 'a/tax.mjs', with: [d.id] }],
+        [{ path: 'a/tax.mjs', with: [a.id] }],
+      ]);
+      expect(seed).not.toBe(read(repo, 'a/tax.mjs'));
     }));
 
   test('a run that edits a very long file still ends, and the next one starts', async () => {
@@ -6730,7 +6742,9 @@ test.describe('two agents, one checkout', () => {
     }
   });
 
-  test("while its other session still works, a shared file's box is off in Revert, with the reason", ({ page }) =>
+  test('while any session works, Revert is off, with the reason; once none does, a shared file can be ticked', ({
+    page,
+  }) =>
     twoAgents(async (b, repo) => {
       const { a, c } = await both(b, repo, 'want:a/tax.mjs', 'edit:b/invoice.mjs');
       await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
@@ -6741,17 +6755,21 @@ test.describe('two agents, one checkout', () => {
       await page.goto(linkFor(b));
       await expect(page.locator('#conn')).toHaveText('Live');
       await page.locator(`#sideList [data-run="${d.id}"]`).click();
-      await page.locator('#insp [data-act="revert"]').click();
-      const tick = page.locator('#revertDlg [data-include="a/tax.mjs"]');
-      await expect(tick).toBeDisabled();
-      await expect(page.locator('#revertFiles li').last()).toContainText(
-        `Run ${a.id} is still working. Choose once it ends.`,
-      );
-      await expect(page.locator('#revertConfirm')).toHaveText('Revert');
-      // Once that session ends, the box can be ticked.
+      const WAITS = 'Commit and Revert wait until no session is working.';
+      const revert = page.locator('#insp [data-act="revert"]');
+      await expect(revert).toBeDisabled();
+      await expect(page.locator('#insp .waits')).toHaveText(WAITS);
+      // Keeping writes nothing: on.
+      await expect(page.locator('#insp [data-act="keep"]')).toBeEnabled();
+      // Once that session ends, Revert is on, and the shared file's box can be ticked.
       go(repo, 'a');
       await until(b, a.id, 'done');
+      await expect(revert).toBeEnabled();
+      await expect(page.locator('#insp .waits')).toHaveCount(0);
+      await page.locator('#insp [data-act="revert"]').click();
+      const tick = page.locator('#revertDlg [data-include="a/tax.mjs"]');
       await expect(tick).toBeEnabled();
+      await expect(page.locator('#revertConfirm')).toHaveText('Revert');
       await page.keyboard.press('Escape');
     }));
 
@@ -6895,7 +6913,12 @@ test.describe('two agents, one checkout', () => {
       const { a, c } = await both(b, repo, 'want:a/rounding.mjs', 'edit:b/cart.mjs');
       go(repo, 'a');
       await until(b, a.id, 'done');
-      // Committed while the other session still works.
+      // The commit waits for the other session.
+      expect((await call(b, `/api/runs/${a.id}/commit`, { message: 'Rounding' })).body).toMatchObject({
+        code: 'sessions-working',
+      });
+      go(repo, 'c');
+      await until(b, c.id, 'done');
       const made = await call(b, `/api/runs/${a.id}/commit`, { message: 'Rounding' });
       expect(made.status).toBe(200);
       expect(made.body).toMatchObject({ files: ['a/rounding.mjs'], hook: ['b/MODULES.md'] });
@@ -6906,9 +6929,7 @@ test.describe('two agents, one checkout', () => {
       expect(said(await runOf(b, a.id), 'hook-committed')).toEqual([{ files: 'b/MODULES.md' }]);
       // Nothing of the commit is left looking staged or changed: only the other session's own work.
       expect(git(repo, 'status', '--porcelain')).toBe(' M b/cart.mjs\n');
-      go(repo, 'c');
-      await until(b, c.id, 'done');
-      // What the hook wrote in b/ is the commit's, not the session's that was working there.
+      // What the hook wrote in b/ is the commit's, not the session's that worked there.
       expect(paths(await runOf(b, c.id))).toEqual(['b/cart.mjs']);
       expect((await state(b)).runs.map(r => r.agent)).toEqual(['claude', 'cursor']);
     }));
