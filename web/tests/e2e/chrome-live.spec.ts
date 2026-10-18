@@ -21,6 +21,12 @@ const TYPES: Record<string, string> = {
 };
 
 test.skip(!fs.existsSync(CHROME), 'Google Chrome is not installed');
+// On GitHub's macOS runners Chrome's profile can't be removed as it closes (ENOTEMPTY, in both of the macOS job's
+// full runs, f07e80b); on a Mac they pass. Skipped on that job alone, on the owner's word (spec 022, M5).
+test.skip(
+  !!process.env.CI && process.platform === 'darwin',
+  "Chrome's profile isn't removed on GitHub's macOS runners",
+);
 
 /** Real Chrome with a fresh profile, the permission set as given, and the site served from web/dist. */
 async function chrome(permission: 'granted' | 'denied' | null): Promise<BrowserContext> {
