@@ -126,6 +126,7 @@ const Card = memo(function Card({ c }: { c: CardData }) {
             ref={markFresh}
             className={r.au ? `ln ${r.k} au-${r.au}` : `ln ${r.k}`}
             data-ln={r.ln ?? undefined}
+            title={r.cmd ? t('By a command') : undefined}
           >
             <i>{r.gutter}</i>
             <span>

@@ -276,6 +276,9 @@ out({
     ],
   },
 });
+// A model turn passes before its next call, as one does after each tool result: without the hooks, the bridge reads
+// the file an edit left when it hears of the result, and a command at once after could be in that read.
+await new Promise(r => setTimeout(r, 150));
 t = fs.readFileSync('shared/allowlist.ts', 'utf8');
 byCommand('shared/allowlist.ts', t + '\nexport function isEmpty(p: Policy) {\n  return p.origins.length === 0;\n}\n');
 // Refused in a section's sandbox when the file is outside it: Claude Code carries on, and so does this.

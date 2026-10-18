@@ -93,10 +93,12 @@ export interface Run {
   summary: string;
   status: RunStatus;
   changes: Map<string, Change>;
-  /** The added lines the agent wrote through its edit tools: [from, to] indexes in each file after the run. */
+  /** The lines its session wrote: [from, to] indexes in each file after the run (RunDTO.agentLines). */
   agentLines?: Record<string, [number, number][]>;
-  /** Lines of its files that another session's edit steps wrote while it worked: [from, to, that run], in the file it left. */
-  otherLines?: Record<string, [number, number, number][]>;
+  /** Of those, the lines its edit tools didn't write: by a command. */
+  commandLines?: Record<string, [number, number][]>;
+  /** Lines of its files another session wrote while it worked: [from, to, that run, 1 where by a command]. */
+  otherLines?: Record<string, ([number, number, number] | [number, number, number, number])[]>;
   reviewed: Set<string>;
   kept?: boolean;
   reverted?: boolean;

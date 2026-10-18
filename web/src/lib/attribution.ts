@@ -2,8 +2,9 @@
 // last wrote it. Built by walking the runs in order, each from the file as the run found it to the file it left.
 //
 // What the labels mean:
-// - agent, with its run: the line changed during an edit step that run's agent reported (the run's agentLines, from
-//   the bridge: bridge/lib/agents/lines.mjs). In a run's own file this may be another session's run (otherLines).
+// - agent, with its run: the line changed on disk while that run's session worked, in a file only it was writing,
+//   whatever the tool (the run's agentLines, from the bridge: bridge/lib/agents/lines.mjs), marked where by a command
+//   (commandLines). In a run's own file this may be another session's run (otherLines).
 // - human: saved from the map's editor (a run by "you").
 // - mixed: someone else rewrote part of a line an agent had written.
 // - unknown, with a run: changed during that run, but not by an agent's edit: a command, a hand, watch mode.
@@ -17,6 +18,8 @@ export interface Owner {
   author: Author;
   /** The run that last wrote the line; null for a line no kept run wrote. */
   run: number | null;
+  /** How an agent's line was written, where not by its edit tools. */
+  how?: 'command';
   /** For a line no kept run wrote: what git records about it (a Git AI note, or a co-author trailer). */
   source?: 'git-ai' | 'trailer';
   by?: string;
@@ -70,11 +73,12 @@ function align(t: Tracked | undefined, lines: string[]): Tracked {
 
 /** Who wrote a line a run added, at index `at` in the file the run left, given the lines its hunk replaced. */
 function authorOf(run: Run, path: string, at: number, text: string, replaced: Tracked): Owner {
-  const tool = run.agentLines?.[path]?.some(([from, to]) => at >= from && at <= to);
-  if (tool) return { author: 'agent', run: run.id };
-  // Another session's edit step wrote it while this run worked: that session's line.
-  const other = run.otherLines?.[path]?.find(([from, to]) => at >= from && at <= to);
-  if (other) return { author: 'agent', run: other[2] };
+  const within = ([from, to]: number[]) => at >= from! && at <= to!;
+  if (run.agentLines?.[path]?.some(within))
+    return { author: 'agent', run: run.id, ...(run.commandLines?.[path]?.some(within) ? { how: 'command' } : {}) };
+  // Another session wrote it while this run worked: that session's line.
+  const other = run.otherLines?.[path]?.find(within);
+  if (other) return { author: 'agent', run: other[2], ...(other[3] ? { how: 'command' } : {}) };
   const wasAgent = replaced.owners.some(
     (o, i) => (o.author === 'agent' || o.author === 'mixed') && overlap(replaced.lines[i]!, text) >= 0.5,
   );

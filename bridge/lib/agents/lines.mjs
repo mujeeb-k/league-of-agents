@@ -1,11 +1,10 @@
-// The lines an agent wrote itself, by its edit tools, kept for the run's attribution (web/src/lib/attribution.ts).
-// A line is an agent's when it changed during an edit step that agent reported: between the file as the step found
-// it and as it left it (steps.mjs keeps both). So it holds for every agent that reports its edits, and a change made
-// between two steps, by another session, a command or a person, is never counted as the agent's. Where a run's edits
-// were not seen as steps (a terminal turn captured afterwards), the text its edit tools put in is matched instead.
+// Who wrote each line of the files a run changed, kept for the run's attribution (web/src/lib/attribution.ts): by
+// what changed on disk while each session worked, whatever the tool (linesOf). What an agent's edit tools put in is
+// noted too, to tell its edit tools' lines from those of its commands.
 import path from 'node:path';
 import { ROOT, gitAsync } from '../repo.mjs';
 import { realish } from '../util.mjs';
+import { inScope } from '../scope.mjs';
 
 /**
  * The lines Claude Code wrote itself, per file, from its edit tools' input: what Edit, MultiEdit and Write put
@@ -82,81 +81,98 @@ async function carry(owners, a, b, who) {
 }
 
 /**
- * Who wrote the lines of each file a run changed, in the file as the run left it: `agent`, the run's own lines, as
- * [from, to] ranges; `other`, the lines another session's edit steps wrote while it worked, as [from, to, run].
- * From each edit step on the file, the run's and those of the sessions at work beside it (`peers`), in the order
- * they were made. A file with no step seen falls back to the text the run's edit tools put in (Claude Code's).
- * `agent` is absent for a run whose agent reported no edit at all. `stepsOf` gives a run's steps, each edit's file
- * already kept, and `blobAt` a file's blob in a snapshot: handed in by runs.mjs, which this module is imported by.
+ * Who wrote the lines of each file a run changed, in the file as the run left it, by what changed on disk while each
+ * session worked, whatever the tool. Every write seen to the file is its session's: an edit step (from the file as it
+ * found it to the file as it left it, steps.mjs) or a shell command the hooks bracketed (shell.mjs). What changed
+ * where no write was seen is the session's that was writing the file then: the one session at work whose section
+ * holds it, or the one session at work at all; otherwise nobody can say, and it is nobody's. Of a run's own lines,
+ * those its edit tools' text doesn't hold are marked as written by a command.
+ * Returns `agent`, the run's lines as [from, to] ranges; `command`, those of them not by its edit tools; `other`,
+ * another session's lines, as [from, to, run], with a fourth 1 where by a command. `stepsOf` gives a run's steps,
+ * each edit's file already kept, and `blobAt` a file's blob in a snapshot: handed in by runs.mjs.
  */
 export async function linesOf(run, peers, { stepsOf, blobAt }) {
   const texts = agentLinesOf(run);
+  // Runs no agent made (watch mode's, saves from the map's editor) are no session: none of their lines is an agent's.
+  const agentRun = r => r.agent !== 'detected' && r.agent !== 'you';
+  if (!agentRun(run)) return { agent: {} };
+  const sessions = [run, ...peers.filter(agentRun)];
   const made = r => stepsOf(r).filter(s => s?.act === 'edit' && s.file && s.blob && !s.refused);
-  const mine = made(run);
-  if (!texts && !mine.length) return {};
   const agent = {},
+    command = {},
     other = {};
   for (const c of run.changes) {
     if (c.deleted) continue;
-    // Peers' steps count from when this run began: before that, their lines are in the file as it found it.
-    // A shell command's write (shell.mjs) is in the order too, credited to nobody: an agent's lines are only those an
-    // edit step of its wrote.
-    const commands = r =>
-      (r.wrote ?? [])
-        .filter(w => w.file === c.path && w.at >= run.startedAt)
-        .map((w, i) => ({ at: w.at, i, from: w.from, blob: w.to ?? EMPTY, run: 0 }));
-    const steps = [
-      ...mine.filter(s => s.file === c.path).map(s => ({ ...s, run: run.id })),
-      ...peers.flatMap(p =>
-        made(p)
+    // Its writes from when this run began: before that, others' lines are in the file as it found it.
+    const writes = sessions
+      .flatMap(r => [
+        ...made(r)
           .filter(s => s.file === c.path && s.at >= run.startedAt)
-          .map(s => ({ ...s, run: p.id })),
-      ),
-      ...[run, ...peers].flatMap(commands),
-    ].sort((x, y) => x.at - y.at || x.run - y.run || x.i - y.i);
-    if (!steps.some(s => s.run === run.id)) {
-      if (texts?.[c.path]) agent[c.path] = texts[c.path];
-      if (!steps.length) continue;
-    }
-    let at = (await blobAt(run.before, c.path)) ?? EMPTY;
-    let owners = Array(await linesIn(at)).fill(0);
-    for (const s of steps) {
-      // An edit whose start wasn't seen: what changed up to its end may be another's too. Of it, the run's are only
-      // the lines its edit tool's own text holds (marked by the run's id, negative, until that is known below).
-      if (s.late || s.from === undefined) {
-        owners = await carry(owners, at, s.blob, s.run ? -s.run : 0);
-        at = s.blob;
-        continue;
+          .map(s => ({ start: s.at, end: s.at, from: s.late ? undefined : s.from, to: s.blob, run: r.id, edit: true })),
+        ...(r.wrote ?? [])
+          .filter(w => w.file === c.path && w.at >= run.startedAt)
+          .map(w => ({ start: w.start ?? w.at, end: w.at, from: w.from, to: w.to, run: r.id, edit: false })),
+      ])
+      .sort((x, y) => x.start - y.start || x.run - y.run);
+    /** Who was writing the file between two moments, where no write of it was seen: a run's id, or 0. */
+    const writer = (t0, t1) => {
+      const at = sessions.filter(r => r.startedAt <= t1 && (r.endedAt ?? Infinity) >= t0);
+      const holding = at.filter(r => r.scope?.length && inScope(r.scope, c.path));
+      if (holding.length === 1) return holding[0].id;
+      return !holding.length && at.length === 1 ? at[0].id : 0;
+    };
+    // A line's writer: the run's id, negative where not by an edit tool, or 0.
+    let state = (await blobAt(run.before, c.path)) ?? EMPTY,
+      t = run.startedAt;
+    let owners = Array(await linesIn(state)).fill(0);
+    for (const w of writes) {
+      const to = w.to ?? EMPTY;
+      if (w.from === undefined) {
+        // An edit whose start wasn't seen: its session's only if no one else could have been writing the file.
+        const who = writer(t, w.end);
+        owners = await carry(owners, state, to, who === w.run ? w.run : 0);
+      } else {
+        owners = await carry(owners, state, w.from ?? EMPTY, -writer(t, w.start));
+        owners = await carry(owners, w.from ?? EMPTY, to, w.edit ? w.run : -w.run);
       }
-      const from = s.from ?? EMPTY;
-      // What changed outside any step is nobody's.
-      owners = await carry(owners, at, from, 0);
-      owners = await carry(owners, from, s.blob, s.run);
-      at = s.blob;
+      state = to;
+      t = w.end;
     }
-    owners = await carry(owners, at, (await blobAt(run.after, c.path)) ?? EMPTY, 0);
+    owners = await carry(owners, state, (await blobAt(run.after, c.path)) ?? EMPTY, -writer(t, Date.now()));
+    // What its edit tools' own text holds is by its edit tools, though the step that wrote it wasn't seen whole.
     const said = new Set(
       (texts?.[c.path] ?? []).flatMap(([a, b]) => Array.from({ length: b - a + 1 }, (_, k) => a + k)),
     );
-    owners = owners.map((o, i) => (o < 0 ? (o === -run.id && said.has(i) ? run.id : 0) : o));
-    const ranges = who => {
+    owners = owners.map((o, i) => (o === -run.id && said.has(i) ? run.id : o || 0));
+    // Runs of lines `who` takes, each [from, to, writer]; `same` says when two neighbours are one range.
+    const ranges = (who, same = (x, y) => x === y) => {
       const out = [];
       owners.forEach((o, i) => {
         if (!who(o)) return;
         const last = out.at(-1);
-        if (last && last[1] === i - 1 && last[2] === o) last[1] = i;
+        if (last && last[1] === i - 1 && same(last[2], o)) last[1] = i;
         else out.push([i, i, o]);
       });
       return out;
     };
-    const own = ranges(o => o === run.id).map(([a, b]) => [a, b]);
-    if (steps.some(s => s.run === run.id)) {
-      if (own.length) agent[c.path] = own;
-    }
-    const theirs = ranges(o => o !== 0 && o !== run.id);
+    // Its own lines, by its edit tools or not, as one range where they meet.
+    const own = ranges(
+      o => Math.abs(o) === run.id,
+      () => true,
+    ).map(([a, b]) => [a, b]);
+    if (own.length) agent[c.path] = own;
+    const byCommand = ranges(o => o === -run.id).map(([a, b]) => [a, b]);
+    if (byCommand.length) command[c.path] = byCommand;
+    const theirs = ranges(o => o !== 0 && Math.abs(o) !== run.id).map(([a, b, o]) =>
+      o < 0 ? [a, b, -o, 1] : [a, b, o],
+    );
     if (theirs.length) other[c.path] = theirs;
   }
-  return { agent, ...(Object.keys(other).length ? { other } : {}) };
+  return {
+    agent,
+    ...(Object.keys(command).length ? { command } : {}),
+    ...(Object.keys(other).length ? { other } : {}),
+  };
 }
 
 /**

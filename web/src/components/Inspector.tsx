@@ -602,13 +602,16 @@ function authorText(o: Owner, run: Run | null): string {
       "Commit {commit} names an agent as co-author ({who}). It covers the whole commit, not lines, so this line is at most partly the agent's.",
       { commit: o.commit ?? '', who: o.by ?? '' },
     );
-  if (author === 'agent') return t('{agent} wrote it with its edit tools.', { agent: who });
+  if (author === 'agent')
+    return o.how === 'command'
+      ? t('{agent} wrote it by a command.', { agent: who })
+      : t('{agent} wrote it with its edit tools.', { agent: who });
   if (author === 'human') return t('Saved in the editor on the map.');
   if (author === 'mixed') return t('Rewritten in part after an agent wrote it.');
   if (!run) return t("No run kept on this computer changed it, so who wrote it isn't known.");
   // A bridge that didn't say which lines the run's agent wrote (0.2.0, but for Claude Code): not known, either way.
   return run.agentLines
-    ? t("Changed during run {id}, but not by an agent's edit: by a command, or some other way.", { id: run.id })
+    ? t('Not from a session: changed while run {id} worked.', { id: run.id })
     : t("Changed during run {id}. Who wrote it isn't known.", { id: run.id });
 }
 

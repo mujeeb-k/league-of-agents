@@ -196,10 +196,12 @@ const catalogue: Catalogue = {
     'La nota de Git AI en el commit {commit} dice que la escribió un agente.',
   "Commit {commit} names an agent as co-author ({who}). It covers the whole commit, not lines, so this line is at most partly the agent's.":
     'El commit {commit} nombra a un agente como coautor ({who}). Eso abarca todo el commit, no líneas, así que esta línea es como mucho en parte del agente.',
+  '{agent} wrote it by a command.': '{agent} lo escribió con un comando.',
+  'By a command': 'Con un comando',
   '{agent} wrote it with its edit tools.': '{agent} la escribió con sus herramientas de edición.',
   'Rewritten in part after an agent wrote it.': 'Reescrita en parte después de que la escribiera un agente.',
-  "Changed during run {id}, but not by an agent's edit: by a command, or some other way.":
-    'Cambiada durante la ejecución {id}, pero no por una edición de un agente: por un comando, o de otra forma.',
+  'Not from a session: changed while run {id} worked.':
+    'No es de una sesión: cambió mientras trabajaba la ejecución {id}.',
   "No run kept on this computer changed it, so who wrote it isn't known.":
     'Ninguna ejecución guardada en esta computadora la cambió, así que no se sabe quién la escribió.',
   Authors: 'Autores',

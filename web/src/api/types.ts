@@ -97,12 +97,17 @@ export interface RunDTO {
   resumeFrom: number | null;
   sessionId: string | null;
   /**
-   * The added lines the agent wrote through its edit tools, per file: [from, to] line indexes in the file after the
-   * run. Claude Code only; bridges before 0.2.0 don't send it.
+   * The lines its session wrote, per file: [from, to] line indexes in the file after the run. Bridges before 0.2.0
+   * don't send it; 0.2.0 sends Claude Code's edit tools' lines only.
    */
   agentLines?: Record<string, [number, number][]>;
-  /** Lines of its files that another session's edit steps wrote while it worked: [from, to, that run], in the file it left. */
-  otherLines?: Record<string, [number, number, number][]>;
+  /** Of those, the lines its edit tools didn't write: by a command (bridges after 0.2.0). */
+  commandLines?: Record<string, [number, number][]>;
+  /**
+   * Lines of its files another session wrote while it worked: [from, to, that run], and a fourth 1 where by a
+   * command, in the file it left.
+   */
+  otherLines?: Record<string, ([number, number, number] | [number, number, number, number])[]>;
   /** The model the agent reported (bridges before 0.2.0 don't send it). */
   model?: string | null;
   status: RunStatus;

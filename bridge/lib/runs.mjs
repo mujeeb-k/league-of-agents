@@ -164,7 +164,8 @@ export async function finishRun(run, status = 'done', { checks = true } = {}) {
   try {
     const wrote = await linesOf(run, peers, { stepsOf, blobAt });
     // Said even when it is none of them: left out, the app reads it as not worked out (an older bridge's run).
-    run.agentLines = wrote.agent ?? {};
+    run.agentLines = wrote.agent;
+    if (wrote.command) run.commandLines = wrote.command;
     if (wrote.other) run.otherLines = wrote.other;
   } catch (e) {
     logError(e);

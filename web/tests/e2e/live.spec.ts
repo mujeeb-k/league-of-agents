@@ -1702,9 +1702,10 @@ test('bridge keeps deny rules, records raw agent output, and keeps secret files 
   }
 });
 
-// Attribution: which added lines Claude Code wrote through its edit tools. Lines it wrote another way (here, the
-// stand-in appends a function and creates a file without an edit tool, as a shell command would) aren't its.
-test('bridge records the lines Claude Code wrote with its edit tools, and only those', async () => {
+// Attribution: what changed on disk while only Claude Code's session worked is its own, whatever the tool (VISION
+// 30). The lines no edit tool of its wrote (here, the stand-in appends a function and creates a file without one,
+// as a shell command would) are its too, marked as written by a command.
+test('bridge credits Claude Code with every line its session wrote, and marks those its edit tools did not write', async () => {
   const repo = makeRepo();
   const b = await startBridge(repo, FAKE_CLAUDE, {}, ['--no-hooks']);
   try {
@@ -1717,18 +1718,31 @@ test('bridge records the lines Claude Code wrote with its edit tools, and only t
     const after = fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8').split('\n');
     const line = after.findIndex(l => l.includes('ALLOWLIST_VIOLATION: ${action}'));
     expect(line).toBeGreaterThan(0);
-    expect(run.agentLines).toEqual({ 'shared/allowlist.ts': [[line, line]] });
-    // Not the appended isEmpty, not the new file: added in the run, but by no edit tool.
+    const appended = after.findIndex(l => l.includes('isEmpty'));
+    expect(appended).toBeGreaterThan(line);
+    const created = fs.readFileSync(path.join(repo, 'shared/policy-cache.ts'), 'utf8').trimEnd().split('\n').length;
     expect(run.changes.map(c => c.path).sort()).toEqual(['shared/allowlist.ts', 'shared/policy-cache.ts']);
+    expect(run.agentLines).toEqual({
+      'shared/allowlist.ts': [
+        [line, line],
+        [appended - 1, appended + 2],
+      ],
+      'shared/policy-cache.ts': [[0, created - 1]],
+    });
+    // The appended isEmpty and the new file: by no edit tool, so by a command.
+    expect(run.commandLines).toEqual({
+      'shared/allowlist.ts': [[appended - 1, appended + 2]],
+      'shared/policy-cache.ts': [[0, created - 1]],
+    });
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
 });
 
-// Colored by author: the line Claude Code wrote with its Edit tool is the agent's; the lines it added another way
-// are unknown, never human. A click on a line shows its run and prompt.
-test('colored by author: agent lines marked, the rest unknown, and a line shows its run and prompt', async ({
+// Colored by author: every line Claude Code's session wrote is the agent's, the ones its edit tools didn't write
+// said as by a command; none is human. A click on a line shows its run and prompt.
+test("colored by author: agent lines marked, a command's said so, and a line shows its run and prompt", async ({
   page,
 }) => {
   const repo = makeRepo(),
@@ -1748,21 +1762,23 @@ test('colored by author: agent lines marked, the rest unknown, and a line shows 
     await expect(page.locator('#byAuthor')).toHaveAttribute('aria-pressed', 'true');
     const card = page.locator('.card[data-path="shared/allowlist.ts"]');
     await card.scrollIntoViewIfNeeded();
-    const agent = card.locator('.ln.au-agent');
+    // The edited line, and the four of the appended isEmpty. No line is called human.
+    await expect(card.locator('.ln.au-agent')).toHaveCount(5);
+    const agent = card.locator('.ln.au-agent', { hasText: 'ALLOWLIST_VIOLATION: ${action} on ${origin}' });
     await expect(agent).toHaveCount(1);
-    await expect(agent).toContainText('ALLOWLIST_VIOLATION: ${action} on ${origin}');
-    // The appended isEmpty: in the run, but by no edit tool. No line is called human.
-    await expect(card.locator('.ln', { hasText: 'isEmpty' })).toHaveClass(/au-unknown/);
+    await expect(agent).not.toHaveAttribute('title');
+    const byCommand = card.locator('.ln', { hasText: 'isEmpty' });
+    await expect(byCommand).toHaveClass(/au-agent/);
+    await expect(byCommand).toHaveAttribute('title', 'By a command');
     await expect(page.locator('.ln.au-human')).toHaveCount(0);
     await agent.click();
     await expect(page.locator('#authorLine')).toContainText('Agent');
     await expect(page.locator('#authorLine')).toContainText('Claude Code wrote it with its edit tools.');
     await expect(page.locator('#authorLine')).toContainText('Claude Code · claude-sonnet-5-5 · Run 1');
-    // The line no edit tool wrote: this bridge worked that out, and says so.
-    await card.locator('.ln', { hasText: 'isEmpty' }).click();
-    await expect(page.locator('#authorLine')).toContainText(
-      "Changed during run 1, but not by an agent's edit: by a command, or some other way.",
-    );
+    // The line no edit tool wrote: still the session's, by a command.
+    await byCommand.click();
+    await expect(page.locator('#authorLine')).toContainText('Claude Code wrote it by a command.');
+    await expect(page.locator('#authorLine')).toContainText('Claude Code · claude-sonnet-5-5 · Run 1');
     await agent.click();
     await expect(page.locator('#authorLine')).toContainText('Name the action and origin in allowlist errors');
     await page.screenshot({ path: test.info().outputPath('by-author.png') });
@@ -1861,11 +1877,11 @@ test('attribution exports to git notes on the last commit, only when asked', asy
     git(repo, 'add', '-A');
     git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'the run');
     const head = git(repo, 'rev-parse', 'HEAD').trim();
-    const line =
-      fs
-        .readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8')
-        .split('\n')
-        .findIndex(l => l.includes('${action}')) + 1;
+    const lines = fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8').split('\n');
+    const line = lines.findIndex(l => l.includes('${action}')) + 1;
+    // The isEmpty its command appended, from the blank line before it: the session's too.
+    const from = lines.findIndex(l => l.includes('isEmpty')),
+      to = from + 3;
     expect(git(repo, 'for-each-ref', 'refs/notes/')).toBe('');
     const exportAs = async (name: string) => {
       await page.keyboard.press('ControlOrMeta+k');
@@ -1893,13 +1909,16 @@ test('attribution exports to git notes on the last commit, only when asked', asy
       .find(f => f.path === 'shared/allowlist.ts')!
       .conversations.find(c => c.contributor.type === 'ai')!;
     expect(ai.contributor.model_id).toBe('anthropic/claude-sonnet-5-5');
-    expect(ai.ranges).toEqual([{ start_line: line, end_line: line }]);
+    expect(ai.ranges).toEqual([
+      { start_line: line, end_line: line },
+      { start_line: from, end_line: to },
+    ]);
     expect(git(repo, 'notes', '--ref=agent-trace', 'show', 'HEAD')).not.toContain('Name the action');
     await exportAs('as a Git AI note');
     await expect(page.locator(TOAST)).toContainText(`to refs/notes/ai on ${head.slice(0, 8)}`);
     const [attest, meta] = git(repo, 'notes', '--ref=ai', 'show', 'HEAD').split('\n---\n');
     expect(attest!.split('\n')[0]).toBe('shared/allowlist.ts');
-    expect(attest!.split('\n')[1]).toMatch(new RegExp(`^  s_[0-9a-f]{14}::t_[0-9a-f]{14} ${line}$`));
+    expect(attest!.split('\n')[1]).toMatch(new RegExp(`^  s_[0-9a-f]{14}::t_[0-9a-f]{14} ${line},${from}-${to}$`));
     const m = JSON.parse(meta!) as {
       schema_version: string;
       base_commit_sha: string;
@@ -2437,8 +2456,9 @@ test.describe('sessions at once', () => {
         await until(b, c.id, 'done');
         const run = await runOf(b, c.id);
         expect(run.changes.map(ch => ch.path)).toEqual(['shared/log.ts']);
-        // The run's change, but no line of it the agent's: a command is no edit step.
-        expect(run.agentLines).toEqual({});
+        // The run's change, and its line the agent's, written by a command: it alone was writing then.
+        expect(run.agentLines).toEqual({ 'shared/log.ts': [[1, 1]] });
+        expect(run.commandLines).toEqual({ 'shared/log.ts': [[1, 1]] });
         // Outside its section: undone at once, and the agent told why.
         expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
         expect(run.summary).toContain('notes.md: League of Agents scope lock: a shell command changed notes.md');
@@ -2494,7 +2514,7 @@ test.describe('sessions at once', () => {
   );
 
   onMac(
-    "in the sandbox, Claude Code's shell commands write in its section, credited to no agent, and nowhere else",
+    "in the sandbox, Claude Code's shell commands write in its section, credited to it as a command's, and nowhere else",
     () =>
       twoSessions(async (b, repo) => {
         const prompt = 'Log it. shell:shared/log.ts shell:notes.md shell:apps/console/main.ts';
@@ -2503,7 +2523,8 @@ test.describe('sessions at once', () => {
         await until(b, c.id, 'done');
         const run = await runOf(b, c.id);
         expect(run.changes.map(ch => ch.path)).toEqual(['shared/log.ts']);
-        expect(run.agentLines).toEqual({});
+        expect(run.agentLines).toEqual({ 'shared/log.ts': [[1, 1]] });
+        expect(run.commandLines).toEqual({ 'shared/log.ts': [[1, 1]] });
         // Refused by the system: never written, so nothing to put back.
         expect(run.summary).toContain('notes.md: EPERM');
         expect(run.summary).toContain('apps/console/main.ts: EPERM');
@@ -6565,10 +6586,12 @@ test.describe('two agents, one checkout', () => {
       expect(seed).not.toBe('// written by a session\n');
     }));
 
-  test("each line is its agent's when it changed during an edit step that agent reported, for Cursor as for Claude Code", () =>
+  // What changed on disk while only one session was writing the file is that session's, whatever wrote it (VISION 30):
+  // the bridge can't tell a line added by hand then from one the agent wrote by a command.
+  test("while only Cursor's session writes its file, each line that changes is its own; between its edit steps, by a command", () =>
     twoAgents(async (b, repo) => {
       const lines = (f: string) => read(repo, f).trimEnd().split('\n');
-      // Cursor edits b/cart.mjs twice. Between its two edits a line is added by hand: not during a step of anyone's.
+      // Cursor edits b/cart.mjs twice. Between its two edits a line is added another way: during no edit step.
       const c = await start(b, 'cursor', ['b/'], 'edit:b/cart.mjs wait:x edit:b/cart.mjs');
       await expect.poll(() => lines('b/cart.mjs').at(-1)).toContain('// edited by cursor');
       fs.appendFileSync(path.join(repo, 'b/cart.mjs'), '// added by hand\n');
@@ -6580,15 +6603,11 @@ test.describe('two agents, one checkout', () => {
           .slice(-3)
           .map(l => l.slice(0, 19)),
       ).toEqual(['// edited by cursor', '// added by hand', '// edited by cursor']);
-      // Cursor's two lines are Cursor's; the line between is in its run, and not its own.
+      // All three are Cursor's: the line between, by a command.
       const run = await runOf(b, c.id);
       expect(paths(run)).toEqual(['b/cart.mjs']);
-      expect(run.agentLines).toEqual({
-        'b/cart.mjs': [
-          [n - 3, n - 3],
-          [n - 1, n - 1],
-        ],
-      });
+      expect(run.agentLines).toEqual({ 'b/cart.mjs': [[n - 3, n - 1]] });
+      expect(run.commandLines).toEqual({ 'b/cart.mjs': [[n - 2, n - 2]] });
       expect(run.otherLines).toBeUndefined();
     }));
 

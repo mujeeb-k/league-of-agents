@@ -180,10 +180,11 @@ const catalogue: Catalogue = {
   "Git AI's note on commit {commit} says an agent wrote it.": '提交 {commit} 上的 Git AI note 说是一个代理写的。',
   "Commit {commit} names an agent as co-author ({who}). It covers the whole commit, not lines, so this line is at most partly the agent's.":
     '提交 {commit} 把一个代理列为共同作者（{who}）。这适用于整个提交而非具体的行，所以这一行最多只部分属于该代理。',
+  '{agent} wrote it by a command.': '{agent} 通过命令写的。',
+  'By a command': '通过命令',
   '{agent} wrote it with its edit tools.': '{agent} 用它的编辑工具写了这一行。',
   'Rewritten in part after an agent wrote it.': '在代理写完之后被部分改写。',
-  "Changed during run {id}, but not by an agent's edit: by a command, or some other way.":
-    '在运行 {id} 期间改动，但不是代理的编辑：是某条命令，或其他方式。',
+  'Not from a session: changed while run {id} worked.': '不来自任何会话：在运行 {id} 期间被修改。',
   "No run kept on this computer changed it, so who wrote it isn't known.":
     '此电脑上保留的运行都没有改动过它，所以不知道是谁写的。',
   Authors: '作者',

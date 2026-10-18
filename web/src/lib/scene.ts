@@ -56,6 +56,8 @@ export interface CodeRow {
   tokens: Token[];
   /** Coloured by author: who wrote the line, and its line number, to show its run when clicked. */
   au: Author | null;
+  /** An agent's line written by a command: said on hover. */
+  cmd: boolean;
   ln: number | null;
 }
 export type CardData =
@@ -310,6 +312,7 @@ export function computeScene(): SceneData {
         gutter: r.k === 'add' ? '+' : r.k === 'del' ? '−' : String(r.n),
         tokens: markWords(hl(r.t || ' '), r.wd),
         au: byAuthor && r.n ? (S.AUTHORS.get(f.path)?.[r.n - 1]?.author ?? null) : null,
+        cmd: byAuthor && !!r.n && S.AUTHORS.get(f.path)?.[r.n - 1]?.how === 'command',
         ln: byAuthor && r.n ? r.n : null,
       })),
       rest,
