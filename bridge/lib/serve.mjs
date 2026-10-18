@@ -7,7 +7,7 @@ import { ROOT, bridgeFile, TOKEN, setHooks } from './repo.mjs';
 import { AGENTS, ACP } from './agents/registry.mjs';
 import { CLAUDE_RECHECK_MS, checkClaude } from './agents/claude.mjs';
 import { stopSessions } from './sessions.mjs';
-import { copyForHooks, installHooks, removeHooks } from './hooks-install.mjs';
+import { copyForHooks, installHooks, markRunning, markStopped, removeHooks } from './hooks-install.mjs';
 import { working, loadRuns, pruneRuns, finishRun, interruptLeftover } from './runs.mjs';
 import { watch } from './watch.mjs';
 import { restoreHeld } from './commit.mjs';
@@ -28,6 +28,7 @@ export async function serve(hooks) {
     mode: 0o600,
   });
   fs.chmodSync(bridgeFile, 0o600);
+  markRunning(hooks);
   copyForHooks();
   if (hooks) installHooks();
   else removeHooks();
@@ -46,12 +47,12 @@ export async function serve(hooks) {
       // A captured terminal turn has no agent the bridge started to stop: it ends here.
       if (!(await stopSessions())) for (const run of left) await finishRun(run, 'interrupted').catch(logError);
       // Its hooks come off with it: nothing runs a stopped bridge's hooks.
-      if (hooks)
-        try {
-          removeHooks();
-        } catch (e) {
-          logError(e);
-        }
+      try {
+        if (hooks) removeHooks();
+        markStopped();
+      } catch (e) {
+        logError(e);
+      }
       process.exit(0);
     });
   const server = createBridgeServer(port);

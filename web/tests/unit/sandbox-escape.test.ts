@@ -60,6 +60,15 @@ function withSession<T>(
   }
   for (const f of ['Library/Keychains/login.keychain-db', 'Library/Keychains/other.keychain-db'])
     fs.writeFileSync(path.join(home, f), `${MARKER}\n`);
+  // Another repo's bridge, running: its key, which would let a session drive that bridge, and its log of links.
+  fs.mkdirSync(path.join(home, 'code/other/.loa'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'code/other/.loa/bridge.json'), JSON.stringify({ port: 1, token: MARKER }));
+  fs.writeFileSync(path.join(home, 'code/other/.loa/bridge.log'), `Open http://127.0.0.1:1/#t=${MARKER}\n`);
+  fs.mkdirSync(path.join(home, '.config/league-of-agents/running'), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, '.config/league-of-agents/running/1'),
+    JSON.stringify({ root: path.join(home, 'code/other'), hooks: false }),
+  );
   fs.writeFileSync(path.join(repo, 'src/a.txt'), 'a\n');
   fs.writeFileSync(path.join(repo, 'other.txt'), 'o\n');
   fs.writeFileSync(path.join(repo, '.gitignore'), gitignore);
@@ -171,11 +180,16 @@ describe.runIf(process.platform === 'darwin')('a session on a section, in its sa
     });
   });
 
-  it("can't read the bridge's token, in its settings or its log", () => {
-    expect(attempt({ settings: 'cat .loa/bridge.json', log: 'cat .loa/bridge.log' })).toEqual({
-      settings: false,
-      log: false,
-    });
+  it("can't read a bridge's token, in its settings or its log, its own or another repo's", () => {
+    expect(
+      attempt({
+        settings: 'cat .loa/bridge.json',
+        log: 'cat .loa/bridge.log',
+        other: 'cat "$HOME/code/other/.loa/bridge.json"',
+        otherLog: 'cat "$HOME/code/other/.LOA/Bridge.log"',
+        search: 'grep -r loa-marker "$HOME/code"',
+      }),
+    ).toEqual({ settings: false, log: false, other: false, otherLog: false, search: false });
   });
 
   it("can't swap a folder that holds what runs later for one of its own", () => {
@@ -371,6 +385,21 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
     ).toEqual([2, 2, 0, 2, 2]);
   });
 
+  // Another repo's bridge key would let a session start a run there, held by nothing: no tool reads it, nor searches a
+  // folder that holds it.
+  it("never read another bridge's key or its log, nor search a folder that holds them", () => {
+    expect(
+      tools({
+        key: ['Read', { file_path: '~/code/other/.loa/bridge.json' }],
+        log: ['Read', { file_path: '~/code/other/.LOA/bridge.log' }],
+        home: ['Grep', { path: '~', pattern: 't' }],
+        code: ['Grep', { path: '~/code', pattern: 't' }],
+        own: ['Grep', { path: '@/src', pattern: 'a' }],
+        names: ['Glob', { path: '~/code', pattern: '**/*.json' }],
+      }),
+    ).toEqual({ key: false, log: false, home: false, code: false, own: true, names: true });
+  });
+
   // A tool that could reach a file or start a program runs in Claude Code's own process, outside the sandbox: on a
   // section it would write anywhere (git's hooks, another repo), so it is refused, and said. Tools that touch no file
   // run.
@@ -413,6 +442,7 @@ describe.runIf(process.platform === 'darwin')('a Hermes session, whole inside th
         notes: 'touch "$HOME/notes"',
         key: 'cat "$HOME/.ssh/id_ed25519"',
         keychain: 'cat "$HOME/Library/Keychains/login.keychain-db"',
+        bridge: 'cat "$HOME/code/other/.loa/bridge.json"',
         temp: `touch ${PROBE} && rm ${PROBE}`,
       }),
     ).toEqual({
@@ -424,6 +454,7 @@ describe.runIf(process.platform === 'darwin')('a Hermes session, whole inside th
       notes: false,
       key: true,
       keychain: false,
+      bridge: false,
       temp: true,
     });
   });

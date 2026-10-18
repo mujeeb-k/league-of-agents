@@ -47,8 +47,12 @@ const userDir = () => path.join(os.homedir(), '.config', 'league-of-agents');
 const hookFile = () => path.join(LOA, 'bridge.mjs');
 /** What Cursor's hooks run, shared by every repo: the copy in League of Agents' own folder. */
 const userHookFile = () => path.join(userDir(), 'hook', 'bridge.mjs');
-/** The bridges running on this computer, by process id, so one stopping leaves Cursor's hooks to the others. */
-const runningFile = () => path.join(userDir(), 'running.json');
+/**
+ * The bridges running on this computer, a file each, named by its process id and holding its repo and whether its
+ * hooks are in: one stopping leaves Cursor's hooks to another, and a session's hook keeps every bridge's key unread
+ * (hook.mjs). A file each, so two starting at once never lose one another.
+ */
+const runningDir = () => path.join(userDir(), 'running');
 /** Whether a listed bridge still runs: its process, and its repo's bridge file still naming it. */
 const alive = (pid, root) => {
   try {
@@ -58,16 +62,26 @@ const alive = (pid, root) => {
   }
   return readJson(path.join(root, '.loa/bridge.json'), {}).pid === pid;
 };
-/** Marks this bridge as running (true) or stopped; returns how many others still run. */
-function registered(on) {
-  const all = readJson(runningFile(), {});
-  const live = Object.fromEntries(
-    Object.entries(all).filter(([pid, root]) => Number(pid) !== process.pid && alive(Number(pid), String(root))),
-  );
-  if (on) live[process.pid] = ROOT;
-  fs.mkdirSync(userDir(), { recursive: true });
-  fs.writeFileSync(runningFile(), JSON.stringify(live));
-  return Object.keys(live).filter(pid => Number(pid) !== process.pid).length;
+/** This bridge is running, with its hooks in or not. */
+export function markRunning(hooks) {
+  fs.mkdirSync(runningDir(), { recursive: true });
+  fs.writeFileSync(path.join(runningDir(), String(process.pid)), JSON.stringify({ root: ROOT, hooks }));
+}
+/** This bridge has stopped. */
+export function markStopped() {
+  fs.rmSync(path.join(runningDir(), String(process.pid)), { force: true });
+}
+/** How many other bridges with hooks still run; the files of those that don't go. */
+function othersWithHooks() {
+  let n = 0;
+  for (const f of fs.existsSync(runningDir()) ? fs.readdirSync(runningDir()) : []) {
+    const pid = Number(f),
+      b = readJson(path.join(runningDir(), f), {});
+    if (pid === process.pid) continue;
+    if (!alive(pid, String(b.root))) fs.rmSync(path.join(runningDir(), f), { force: true });
+    else if (b.hooks) n++;
+  }
+  return n;
 }
 /**
  * Hooks, the bridge's and the Claude Code plugin's, run a copy of the bridge inside the repo, so they keep working when the
@@ -138,7 +152,6 @@ const hasOwnContent = json =>
 
 export function installHooks() {
   copyTo(path.dirname(userHookFile()), userHookFile());
-  registered(true);
   const backup = readBackup();
   for (const [agent, p] of Object.entries(hookFiles())) {
     const text = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null;
@@ -175,8 +188,8 @@ export function installHooks() {
  * goes too.
  */
 export function removeHooks() {
-  const others = registered(false);
   const backup = readBackup();
+  const others = othersWithHooks();
   const changed = [];
   for (const p of Object.values(hookFiles())) {
     if (!fs.existsSync(p)) continue;
@@ -211,10 +224,6 @@ export function removeHooks() {
     changed.push(shown(p));
   }
   fs.rmSync(backupFile(), { force: true });
-  if (!others) {
-    fs.rmSync(path.dirname(userHookFile()), { recursive: true, force: true });
-    fs.rmSync(runningFile(), { force: true });
-    if (fs.existsSync(userDir()) && !fs.readdirSync(userDir()).length) fs.rmdirSync(userDir());
-  }
+  if (!others) fs.rmSync(path.dirname(userHookFile()), { recursive: true, force: true });
   return changed;
 }

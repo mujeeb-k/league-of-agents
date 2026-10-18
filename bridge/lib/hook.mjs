@@ -114,6 +114,20 @@ const EDITS = /^(Edit|Write|MultiEdit|NotebookEdit)$/,
 const FREE =
   /^(Agent|Task|TaskCreate|TaskGet|TaskList|TaskOutput|TaskStop|TaskUpdate|TodoWrite|WebFetch|WebSearch|BashOutput|KillBash|KillShell|Skill|ToolSearch|ExitPlanMode|AskUserQuestion)$/;
 const quoted = s => `'${String(s).replace(/'/g, "'\\''")}'`;
+/** A bridge's key, in its settings or its log, in any case (macOS's disk reads .LOA as .loa). */
+const TOKEN = /[\\/]\.loa[\\/]bridge\.(json|log)$/i;
+/** The repos of the bridges running on this computer, as they registered (hooks-install.mjs markRunning). */
+function runningRoots(home) {
+  const dir = path.join(home, '.config/league-of-agents/running');
+  try {
+    return fs.readdirSync(dir).flatMap(f => {
+      const root = readJson(path.join(dir, f), {}).root;
+      return typeof root === 'string' ? [realish(root)] : [];
+    });
+  } catch {
+    return [];
+  }
+}
 
 /**
  * A tool call of a Claude Code session the bridge holds (sandbox.mjs). Claude Code itself runs outside the sandbox;
@@ -184,9 +198,11 @@ function hold(data, cwd) {
     if (!paths.length) throw new Error('no path');
     for (const p of paths) {
       const rel = path.relative(h.root, p);
-      // The bridge's token: a session that read it could ask the bridge to write for it, outside its section.
-      if (['bridge.json', 'bridge.log'].some(f => p === path.join(h.root, '.loa', f)))
-        block(`${rel} holds League of Agents' key, which a session never reads.`);
+      // A bridge's token, this repo's or another's: a session that read it could have a bridge write for it, outside its
+      // section. And a search of a folder that holds another running bridge's repo, which Grep would read.
+      if (TOKEN.test(p)) block(`${rel} holds League of Agents' key, which a session never reads.`);
+      if (tool === 'Grep' && runningRoots(h.home).some(root => root !== h.root && under(root, p)))
+        block(`${p} holds another repo that League of Agents works in, whose key a session never reads.`);
       // The Keychain's files, and a search of a folder that holds them (Grep and Glob read outside the sandbox).
       const keychain = path.join(h.home, 'Library/Keychains');
       if (under(p, keychain) || (tool !== 'Read' && READS.test(tool) && under(keychain, p)))

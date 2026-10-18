@@ -246,12 +246,12 @@ const REPO_SETTINGS = [
 ];
 
 /**
- * Prepares the sandbox that holds a run. Reads: everything a session would read anywhere, but the bridge's own token.
+ * Prepares the sandbox that holds a run. Reads: everything a session would read anywhere, but a bridge's token.
  * Writes: nothing outside the repo but temp folders, /dev, that agent's state and caches. Inside the repo, it locks
  * the run to its section: writes only to the section, to what the
  * repo ignores, and to the temporary files an agent's edit tool writes beside a file before renaming it over the
  * file (TEMP_BESIDE); no tracked file outside the section, even one that matches an ignore rule; nothing that runs
- * later outside the sandbox (runLater, REPO_SETTINGS); and no reading the bridge's own token. Asynchronous: in a repo the size of
+ * later outside the sandbox (runLater, REPO_SETTINGS); and no reading a bridge's token. Asynchronous: in a repo the size of
  * llvm, git's listings take a second.
  */
 export async function prepareSandbox(run) {
@@ -321,8 +321,12 @@ export async function prepareSandbox(run) {
     for (const d of above(at)) parents.add(d);
   }
   for (const d of parents) deny.push(add('literal', d));
-  // The bridge's token, in its settings and in the link its log prints.
-  const token = ['bridge.json', 'bridge.log'].map(f => add('literal', path.join(real, '.loa', f))).join(' ');
+  // Every bridge's token, in its settings and in the link its log prints, this repo's or another's: one read would let
+  // a session start a run that nothing holds. In any case, as macOS's disk reads .LOA as .loa.
+  const token = [
+    ...['bridge.json', 'bridge.log'].map(f => add('literal', path.join(real, '.loa', f))),
+    add('regex', '/\\.[Ll][Oo][Aa]/[Bb][Rr][Ii][Dd][Gg][Ee]\\.([Jj][Ss][Oo][Nn]|[Ll][Oo][Gg])$'),
+  ].join(' ');
   // In the home folder a session reads what it would anywhere; it writes only its agent's own state and caches.
   const home = realish(os.homedir());
   const state = [...AGENT_STATE[run.agent](home), ...CACHES.map(c => ['subpath', path.join(home, c)])].map(
@@ -346,7 +350,7 @@ export async function prepareSandbox(run) {
     `(allow file-write* ${[...allow, each(state)].join(' ')})`,
     ...(folders.length ? [`(allow file-write-create ${folders.join(' ')})`] : []),
     `(deny file-write* ${deny.join(' ')})`,
-    // The bridge's key, and the Keychain's files: no session reads either (the Keychain is used through macOS, not read).
+    // A bridge's key, and the Keychain's files: no session reads either (the Keychain is used through macOS, not read).
     `(deny file-read* ${token} ${add('subpath', path.join(home, 'Library/Keychains'))})`,
   ].join('\n');
   const args = [SANDBOX_EXEC, '-p', profile, ...params.flatMap(([k, v]) => ['-D', `${k}=${v}`])];
