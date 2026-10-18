@@ -39,8 +39,9 @@ export async function serve(hooks) {
   // Watch mode starts once events can be sent: it says so if it can't start.
   await watch();
   await interruptLeftover();
-  // Stopping the bridge mid-run closes the run the same way; an agent it started is stopped first.
-  for (const sig of ['SIGTERM', 'SIGINT'])
+  // Stopping the bridge mid-run closes the run the same way; an agent it started is stopped first. A terminal closed
+  // under a bridge in the foreground stops it too (SIGHUP).
+  for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'])
     process.on(sig, async () => {
       const left = [...working.values()];
       for (const run of left) run.status = 'interrupted';

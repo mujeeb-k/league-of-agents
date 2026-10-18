@@ -5039,6 +5039,62 @@ test("Cursor's hooks are shared: they stay while another bridge runs, and go wit
   }
 });
 
+// The person runs the bridge in a terminal and closes it: the bridge gets SIGHUP, and its hooks come off as on stop.
+test('a bridge whose terminal closes takes its hooks off', async () => {
+  const repo = makeRepo();
+  const b = await startBridge(repo);
+  try {
+    expect(fs.readFileSync(path.join(repo, '.claude/settings.local.json'), 'utf8')).toContain('hook pre');
+    process.kill(-b.proc.pid!, 'SIGHUP');
+    await expect.poll(() => b.proc.exitCode !== null || b.proc.signalCode !== null).toBe(true);
+    expect(fs.existsSync(path.join(repo, '.claude/settings.local.json'))).toBe(false);
+    expect(fs.existsSync(path.join(homeOf(repo), '.cursor/hooks.json'))).toBe(false);
+    expect(fs.existsSync(path.join(homeOf(repo), '.config/league-of-agents/running'))).toBe(true);
+    expect(fs.readdirSync(path.join(homeOf(repo), '.config/league-of-agents/running'))).toEqual([]);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// A bridge before this one (0.2.0) ran Cursor's hooks from its own repo and never registered. Still running, it keeps
+// the shared hooks in when this bridge stops; stopped, its entry is stale and goes, never pointing into a repo again.
+test("an older bridge's Cursor hooks: kept while it runs, its stale entry gone once it has stopped", async () => {
+  const repo = makeRepo(),
+    old = path.join(path.dirname(repo), 'old-repo'),
+    home = homeOf(repo),
+    file = path.join(home, '.cursor/hooks.json');
+  fs.mkdirSync(path.join(old, '.loa'), { recursive: true });
+  // Running: its bridge file names a process that is alive (this one).
+  fs.writeFileSync(path.join(old, '.loa/bridge.json'), JSON.stringify({ port: 1, token: 't', pid: process.pid }));
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const theirs = { command: 'say done' };
+  const olds = {
+    beforeSubmitPrompt: [{ command: `"${process.execPath}" "${old}/.loa/bridge.mjs" hook start cursor` }],
+    stop: [theirs, { command: `"${process.execPath}" "${old}/.loa/bridge.mjs" hook stop cursor` }],
+  };
+  fs.writeFileSync(file, JSON.stringify({ version: 1, hooks: olds }) + '\n');
+  const commands = () => JSON.stringify(JSON.parse(fs.readFileSync(file, 'utf8')));
+  const shared = path.join(home, '.config/league-of-agents/hook/bridge.mjs');
+  try {
+    let b = await startBridge(repo);
+    expect(commands()).toContain(shared);
+    expect(commands()).not.toContain(`${old}/.loa/bridge.mjs`);
+    b.stop();
+    // The older bridge still runs: the shared hooks stay, with the copy they run.
+    expect(commands()).toContain(shared);
+    expect(fs.existsSync(shared)).toBe(true);
+    // Stopped: the next bridge to stop takes them out, and the stale entry with them.
+    fs.writeFileSync(path.join(old, '.loa/bridge.json'), JSON.stringify({ port: 1, token: 't', pid: 999_999 }));
+    b = await startBridge(repo);
+    b.stop();
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual({ version: 1, hooks: { stop: [theirs] } });
+    expect(fs.existsSync(shared)).toBe(false);
+  } finally {
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 // Cursor opens a folder as its workspace, often the folder holding the repo, and reads hooks only from there or
 // from the person's own settings. The hook finds the repo from the workspace and the files attached.
 test('Cursor hooks find the repo inside the workspace, and only their own conversation closes a run', async () => {

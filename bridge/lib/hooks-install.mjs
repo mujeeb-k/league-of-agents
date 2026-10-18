@@ -71,6 +71,19 @@ export function markRunning(hooks) {
 export function markStopped() {
   fs.rmSync(path.join(runningDir(), String(process.pid)), { force: true });
 }
+/**
+ * Bridges before this one (0.2.0) ran Cursor's hooks from their repo's own copy and never registered: those whose
+ * entries the person's file held, still running, keep the shared hooks in (they run them too). A stopped one's
+ * entry is stale, and goes.
+ */
+function oldBridgesRunning(text) {
+  const roots = [...String(text ?? '').matchAll(/"([^"]+?)[\\/]+\.loa[\\/]+bridge\.mjs\\?" hook/g)].map(m => m[1]);
+  return [...new Set(roots)].filter(root => {
+    if (root === ROOT) return false;
+    const pid = readJson(path.join(root, '.loa/bridge.json'), {}).pid;
+    return typeof pid === 'number' && alive(pid, root);
+  }).length;
+}
 /** How many other bridges with hooks still run; the files of those that don't go. */
 function othersWithHooks() {
   let n = 0;
@@ -189,7 +202,7 @@ export function installHooks() {
  */
 export function removeHooks() {
   const backup = readBackup();
-  const others = othersWithHooks();
+  const others = othersWithHooks() + oldBridgesRunning(backup[hookFiles().cursor]?.text);
   const changed = [];
   for (const p of Object.values(hookFiles())) {
     if (!fs.existsSync(p)) continue;
