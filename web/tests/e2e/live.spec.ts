@@ -189,7 +189,7 @@ test('live run, review and revert', async ({ page }) => {
     // Reverted all the same: run 2's lines come out, and the edit made since stays.
     await page.locator('[data-act="revert"]').click();
     await expect(page.locator('#conflictDlg')).toContainText(
-      'Run 2’s lines come out of every file it changed. The edits made since stay.',
+      'Removes run 2’s lines from each file it changed. Later edits stay.',
     );
     await page.locator('#conflictRevert').click();
     await expect(page.locator(TOAST)).toHaveText('Reverted run 2');

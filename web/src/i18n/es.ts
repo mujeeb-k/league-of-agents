@@ -161,8 +161,8 @@ const catalogue: Catalogue = {
   'Keep {n} files': { one: 'Conservar {n} archivo', other: 'Conservar {n} archivos' },
   'Changed since this run ended, so it can’t go in with it.':
     'Cambió después de terminar esta ejecución, así que no puede entrar con ella.',
-  'Run {id}’s lines come out of every file it changed. The edits made since stay.':
-    'Las líneas de la ejecución {id} salen de cada archivo que cambió. Las ediciones hechas desde entonces se quedan.',
+  'Removes run {id}’s lines from each file it changed. Later edits stay.':
+    'Quita las líneas de la ejecución {id} de cada archivo que cambió. Las ediciones posteriores se quedan.',
   'Reverting run {id} puts these files back as they were before it, and the edits made since are lost.':
     'Revertir la ejecución {id} deja estos archivos como estaban antes de ella, y se pierden las ediciones hechas desde entonces.',
   'Keep my later edits': 'Conservar mis ediciones posteriores',

@@ -150,8 +150,8 @@ const catalogue: Catalogue = {
   'Commit {n} files': { other: '提交 {n} 个文件' },
   'Keep {n} files': { other: '保留 {n} 个文件' },
   'Changed since this run ended, so it can’t go in with it.': '这次运行结束后它又有改动，因此不能随这次运行提交。',
-  'Run {id}’s lines come out of every file it changed. The edits made since stay.':
-    '运行 {id} 的行会从它改过的每个文件中移除。之后的编辑会保留。',
+  'Removes run {id}’s lines from each file it changed. Later edits stay.':
+    '从它改过的每个文件中移除运行 {id} 的行。之后的编辑会保留。',
   'Reverting run {id} puts these files back as they were before it, and the edits made since are lost.':
     '撤销运行 {id} 会把这些文件恢复到它之前的样子，之后所做的编辑会丢失。',
   'Keep my later edits': '保留我之后的编辑',

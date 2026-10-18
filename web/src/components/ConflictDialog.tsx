@@ -49,7 +49,7 @@ export function ConflictDialog() {
                     later: c.later.id,
                   })
                 : S.ownLines
-                  ? t('Run {id}’s lines come out of every file it changed. The edits made since stay.', {
+                  ? t('Removes run {id}’s lines from each file it changed. Later edits stay.', {
                       id: c.run.id,
                     })
                   : t(
