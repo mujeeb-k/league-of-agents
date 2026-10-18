@@ -68,8 +68,19 @@ export function applyView(settle = false) {
 export const minZoom = () =>
   Math.min(0.04, (dom.stage.clientWidth - 60) / (S.WB.w || 1), (dom.stage.clientHeight - 60) / (S.WB.h || 1));
 /** Told when the person moves the map (not when it follows a session): following stops (state/watch.ts). */
-let moved = () => {};
-export const onCameraMove = (fn: () => void) => void (moved = fn);
+let told = () => {};
+export const onCameraMove = (fn: () => void) => void (told = fn);
+/**
+ * How many times the map has been moved other than by following a session: the person's moves, and the flights
+ * they ask for. A flight the app would make by itself (a run that just finished) is dropped after one.
+ */
+let byPerson = 0;
+export const personMoves = () => byPerson;
+/** The person moved the map: a zoom, a fit, a drag or a scroll. */
+export function moved() {
+  byPerson++;
+  told();
+}
 export function zoomAt(px: number, py: number, f: number) {
   endFirstLoad();
   moved();

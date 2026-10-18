@@ -1,6 +1,6 @@
 // The canvas stage: its markup and input handlers.
 import { useEffect, useRef } from 'react';
-import { applyView, flyDir, flyFile, flyTo, minZoom, zoomAt } from '../lib/camera';
+import { applyView, flyDir, flyFile, flyTo, minZoom, moved, zoomAt } from '../lib/camera';
 import { CH, CW } from '../lib/constants';
 import { existsNow } from '../lib/model';
 import { updateEdgeFocus } from '../lib/scene';
@@ -21,7 +21,6 @@ import { Kbd } from './ui/kbd';
 import { Phrase } from './bits';
 import { useScene } from './Scene';
 import { Markers } from './Markers';
-import { stopFollowing } from '../state/watch';
 
 interface Drag {
   sx: number;
@@ -109,7 +108,7 @@ function bindStage(stage: HTMLElement) {
       });
     } else {
       stage.classList.add('panning');
-      stopFollowing();
+      moved();
       st.v.x = drag.vx + dx;
       st.v.y = drag.vy + dy;
       applyView();
@@ -198,7 +197,7 @@ function bindStage(stage: HTMLElement) {
     if (inChrome(e.target as Element)) return;
     e.preventDefault();
     hideTip();
-    stopFollowing();
+    moved();
     const k = e.deltaMode === 1 ? 16 : 1;
     if (e.ctrlKey || e.metaKey) {
       const r = stage.getBoundingClientRect();

@@ -1,5 +1,5 @@
 // Live connection to the local bridge.
-import { applyView, flyFile, flyRun, openingView } from '../lib/camera';
+import { applyView, flyFile, flyRun, openingView, personMoves } from '../lib/camera';
 import { buildModel, specFromPaths } from '../lib/model';
 import { authorsOf, rangesOf } from '../lib/attribution';
 import { carryRenames, type SavedLayout } from '../lib/layout';
@@ -475,10 +475,12 @@ async function loadSteps(id: number) {
 
 /**
  * Opens a run that just finished, in Diff, and flies to it: after the frame that shows the new state is painted, so
- * that frame isn't held up by the open. Left alone if the person opened something else meanwhile.
+ * that frame isn't held up by the open. Left alone if the person opened something else meanwhile; not flown to if
+ * they moved the map meanwhile, which stays where they put it.
  */
 function openFinished(run: Run, was: Run | null) {
   justFinished.delete(run.id);
+  const moves = personMoves();
   // By id: a state event meanwhile makes new run objects.
   requestAnimationFrame(() =>
     setTimeout(() => {
@@ -490,7 +492,7 @@ function openFinished(run: Run, was: Run | null) {
         st.run = now;
         st.mode = 'diff';
         renderAll();
-        flyRun(now);
+        if (personMoves() === moves) flyRun(now);
       });
     }),
   );

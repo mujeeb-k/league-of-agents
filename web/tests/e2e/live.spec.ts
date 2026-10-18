@@ -6239,9 +6239,11 @@ test("a selection outside the open run's section starts a new session; the menu 
         .first()
         .click({ position: { x: 12, y: 8 } });
     };
-    // Its own section selected: a follow-up, as before. A file inside it too.
+    // Its own section selected: a follow-up, as before. A file inside it too. Picked once the run has opened in Diff:
+    // its flight to its files comes with its details, after the summary.
     await expect(scope).toHaveText(['shared/']);
     await expect(chip).toHaveText('Follow-up to run 1');
+    await expect(page.locator('#runbar [data-mode="diff"]')).toHaveAttribute('aria-checked', 'true');
     await pick('data-path="shared/log.ts"');
     await expect(scope).toHaveText(['log.ts']);
     await expect(chip).toHaveText('Follow-up to run 1');
@@ -6281,6 +6283,41 @@ test("a selection outside the open run's section starts a new session; the menu 
     await chip.click();
     await page.locator('#followMenu [data-follow="new"]').click();
     await expect(chip).toHaveText('New session');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// The macOS job's click timeout (spec 022, K3): a run that ends opens in Diff and flies to its files once its
+// details come. The person who moves the map before then keeps the view they chose.
+test('a finished run opens where the person moved the map meanwhile, not flown to its files @motion', async ({
+  page,
+}) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo);
+  try {
+    let release = () => {};
+    const held = new Promise<void>(r => (release = r));
+    await page.route(/\/api\/runs\/1(\?.*)?$/, async route => {
+      await held;
+      await route.continue();
+    });
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+    await page.locator('#prompt').fill('Name the action and origin in allowlist errors');
+    await page.locator('#prompt').press('Enter');
+    await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
+    // Ended, as the app knows it; then the whole map, by the person, before the run's details come.
+    await expect(page.locator('#sideList [data-run="1"]')).not.toContainText('Working', { timeout: 15_000 });
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press('0');
+    await expect(page.locator('#world')).not.toHaveClass(/\bnear\b/);
+    release();
+    await expect(page.locator('#runbar [data-mode="diff"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('#world')).not.toHaveClass(/\bnear\b/);
+    await page.locator('#nodes .fr[data-path="shared/log.ts"]').click({ position: { x: 12, y: 8 } });
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
