@@ -123,9 +123,8 @@ export function beginRun(opts) {
     if (lockOfRun(opts) === 'refuse') throw NO_SANDBOX();
     const before = await startingPoint();
     const run = newRun(opts);
-    // Said on its card: whether the system keeps it inside its section, or, on the whole repository, inside the repo.
+    // Said on its card: whether the system keeps it inside its section.
     if (run.scope.length) run.stays = saidHeld(run);
-    else if (saidHeld(run)) run.contained = true;
     // Its colour on the map while it works: the first one free, kept with the run so every window and a reload
     // show the same.
     const taken = new Set([...working.values()].map(r => r.slot));

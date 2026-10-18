@@ -1,9 +1,10 @@
-// What a session can't do, tried in the sandbox that holds it (bridge/lib/sandbox.mjs). A Claude Code session's
-// commands are run as they really run: handed to its hook, which rewrites them to start inside the sandbox
-// (bridge/lib/hook.mjs hold), and its file tools are put to the same hook. Tried: writing outside the section,
-// reading the bridge's token or the home folder (keys, the keychains, a browser's profile, another repo), writing
-// outside the repo but to temp, breaking out of the rewritten command line, and swapping a folder for one of its
-// own so that something which runs later, outside the sandbox, reads its files instead.
+// What a session on a section can't do, tried in the sandbox that holds it (bridge/lib/sandbox.mjs). A Claude Code
+// session's commands are run as they really run: handed to its hook, which rewrites them to start inside the sandbox
+// (bridge/lib/hook.mjs hold), and its file tools are put to the same hook. The section is all it is held to (owner,
+// 2026-10-18): it reads what it would anywhere, but for the bridge's token and the Keychain's files. Tried: writing
+// outside the section, reading the token or the Keychain, writing outside the repo but to temp, breaking out of the
+// rewritten command line, and swapping a folder for one of its own so that something which runs later, outside the
+// sandbox, reads its files instead.
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -14,9 +15,9 @@ import { tagged } from '../support/leftovers';
 
 const LIB = path.join(__dirname, '../../../bridge/lib');
 
-/** What is planted in the home folder's private files: no command's output may hold it. */
+/** What is planted in the Keychain's files: no command's output may hold it. */
 const MARKER = 'loa-marker-4c1d8e02ab';
-/** Private files in a home folder, each holding the marker. */
+/** Files in a home folder a session may read, as anywhere. */
 const PRIVATE = [
   '.ssh/id_ed25519',
   'Library/Application Support/Google/Chrome/Default/Cookies',
@@ -53,10 +54,12 @@ function withSession<T>(
   fs.writeFileSync(path.join(home, '.hermes/state.json'), '{}');
   fs.writeFileSync(path.join(home, '.gitconfig'), '[user]\n\tname = t\n');
   fs.writeFileSync(path.join(home, '.zshrc'), '# mine\n');
-  for (const f of [...PRIVATE, 'Library/Keychains/login.keychain-db', 'Library/Keychains/other.keychain-db']) {
+  for (const f of PRIVATE) {
     fs.mkdirSync(path.dirname(path.join(home, f)), { recursive: true });
-    fs.writeFileSync(path.join(home, f), `${MARKER}\n`);
+    fs.writeFileSync(path.join(home, f), 'readable\n');
   }
+  for (const f of ['Library/Keychains/login.keychain-db', 'Library/Keychains/other.keychain-db'])
+    fs.writeFileSync(path.join(home, f), `${MARKER}\n`);
   fs.writeFileSync(path.join(repo, 'src/a.txt'), 'a\n');
   fs.writeFileSync(path.join(repo, 'other.txt'), 'o\n');
   fs.writeFileSync(path.join(repo, '.gitignore'), gitignore);
@@ -136,7 +139,7 @@ function attempt(commands: Record<string, string>, opts: Opts | string[] = {}) {
             .hookSpecificOutput.updatedInput;
           res = spawnSync('/bin/zsh', ['-c', command], { cwd: s.repo, env, encoding: 'utf8' });
         }
-        // Whatever it managed, nothing private came out.
+        // Whatever it managed, nothing of the Keychain's came out.
         expect(res.stdout + res.stderr, name).not.toContain(MARKER);
         return [name, res.status === 0];
       }),
@@ -208,23 +211,23 @@ describe.runIf(process.platform === 'darwin')('a session on a section, in its sa
     ).toEqual({ venv: true, packages: true, notIgnored: false, asFile: false, other: false });
   });
 
-  it("can't read the home folder: keys, a browser's profile, another repo, or what is in it", () => {
+  it('reads the home folder as it would anywhere, but for the Keychain', () => {
     expect(
       attempt({
         key: 'cat "$HOME/.ssh/id_ed25519"',
         browser: 'cat "$HOME/Library/Application Support/Google/Chrome/Default/Cookies"',
         otherRepo: 'cat "$HOME/code/other/.git/config"',
         list: 'ls "$HOME"',
-        find: 'grep -r loa-marker "$HOME"',
         copy: 'cp "$HOME/.ssh/id_ed25519" src/key',
+        keychain: 'grep -r loa-marker "$HOME/Library/Keychains"',
       }),
-    ).toEqual({ key: false, browser: false, otherRepo: false, list: false, find: false, copy: false });
+    ).toEqual({ key: true, browser: true, otherRepo: true, list: true, copy: true, keychain: false });
   });
 
-  it("reads the repo and git's settings, and none of Claude Code's own folder", () => {
+  it("reads the repo, git's settings and Claude Code's own folder", () => {
     expect(
       attempt({ repo: 'cat other.txt', git: 'cat "$HOME/.gitconfig"', agent: 'cat "$HOME/.claude/settings.json"' }),
-    ).toEqual({ repo: true, git: true, agent: false });
+    ).toEqual({ repo: true, git: true, agent: true });
   });
 
   it('writes outside the repo only to temp', () => {
@@ -292,7 +295,7 @@ describe.runIf(process.platform === 'darwin')('a session on a section, in its sa
 });
 
 describe.runIf(process.platform === 'darwin')("a Claude Code session's file tools, held by its hook", () => {
-  it('read this repository, and nothing else', () => {
+  it("read anything but the bridge's token and the Keychain", () => {
     expect(
       tools({
         inside: ['Read', { file_path: '@/other.txt' }],
@@ -311,17 +314,18 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
       }),
     ).toEqual({
       inside: true,
-      key: false,
+      key: true,
       keychain: false,
-      ownFolder: false,
+      ownFolder: true,
       token: false,
       log: false,
-      system: false,
-      upAndOut: false,
+      system: true,
+      upAndOut: true,
       search: true,
+      // The home folder holds the Keychain: a search of it would read the Keychain's files.
       searchHome: false,
       list: true,
-      listHome: false,
+      listHome: true,
       listAbove: false,
     });
   });
@@ -339,22 +343,6 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
     ).toEqual({ inside: true, edit: true, outside: false, home: false, shellSetup: false, notebook: false });
   });
 
-  it("on the whole repository, write any file but git's own, the bridge's and what runs later", () => {
-    expect(
-      tools(
-        {
-          file: ['Write', { file_path: '@/other.txt', content: 'x' }],
-          hook: ['Write', { file_path: '@/.git/hooks/pre-commit', content: '#!/bin/sh' }],
-          config: ['Edit', { file_path: '@/.git/config', old_string: 'a', new_string: 'b' }],
-          bridge: ['Write', { file_path: '@/.loa/planted', content: 'x' }],
-          settings: ['Write', { file_path: '@/.claude/settings.json', content: '{}' }],
-          home: ['Write', { file_path: '~/notes', content: 'x' }],
-        },
-        [],
-      ),
-    ).toEqual({ file: true, hook: false, config: false, bridge: false, settings: false, home: false });
-  });
-
   it('follow a link in the selection to where it leads', () => {
     expect(
       withSession({}, s => {
@@ -364,7 +352,7 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
           hooked(s, 'Read', { file_path: path.join(s.repo, 'src/link') }).status,
         ];
       }),
-    ).toEqual([2, 2]);
+    ).toEqual([2, 0]);
   });
 
   it('follow a linked folder too, for a file not there yet', () => {
@@ -380,10 +368,10 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
           hooked(s, 'Glob', { pattern: 'src/d/**' }).status,
         ];
       }),
-    ).toEqual([2, 2, 2, 2, 2]);
+    ).toEqual([2, 2, 0, 2, 2]);
   });
 
-  it('are the only tools that reach a file or start a program: any other is refused', () => {
+  it("are all that is held: every other tool runs, an MCP server's included", () => {
     expect(
       tools({
         plan: ['TodoWrite', {}],
@@ -393,7 +381,7 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
         watcher: ['Monitor', { command: 'touch ~/notes' }],
         unknown: ['SomethingNew', {}],
       }),
-    ).toEqual({ plan: true, web: true, subagent: true, added: false, watcher: false, unknown: false });
+    ).toEqual({ plan: true, web: true, subagent: true, added: true, watcher: true, unknown: true });
   });
 
   it("refuse every call when the session's hold can't be read", () => {
@@ -411,7 +399,7 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
 describe.runIf(process.platform === 'darwin')('a Hermes session, whole inside the sandbox', () => {
   const hermes = (commands: Record<string, string>) => attempt(commands, { agent: 'hermes' });
 
-  it('reads and writes its own folder, and writes nowhere else outside the repo but temp', () => {
+  it('reads what it would anywhere but the Keychain, writes its own folder, and nowhere else outside the repo but temp', () => {
     expect(
       hermes({
         inside: 'echo x >> src/a.txt',
@@ -429,9 +417,9 @@ describe.runIf(process.platform === 'darwin')('a Hermes session, whole inside th
       outside: false,
       read: true,
       write: true,
-      claude: false,
+      claude: true,
       notes: false,
-      key: false,
+      key: true,
       keychain: false,
       temp: true,
     });
@@ -462,72 +450,5 @@ describe.runIf(process.platform === 'darwin')('the keychain folder, in a session
         folder: `mv ${K} "$HOME/Library/Keychains-away"`,
       }),
     ).toEqual({ save: false, remove: false, move: false, temp: false, add: false, folder: false });
-  });
-});
-
-describe.runIf(process.platform === 'darwin')('a session on the whole repository, in its sandbox', () => {
-  const whole = (commands: Record<string, string>) => attempt(commands, []);
-
-  it('writes anywhere in the repo, and commits', () => {
-    expect(
-      whole({
-        file: 'echo x >> other.txt && echo y > new.txt',
-        commit:
-          'git -c user.name=t -c user.email=t@example.test commit -qam "by the agent" && git log --oneline | grep -q agent',
-      }),
-    ).toEqual({ file: true, commit: true });
-  });
-
-  it("never writes git's settings or hooks, the bridge's folder, or agents' settings in the repo", () => {
-    expect(
-      whole({
-        config: 'git config core.fsmonitor "touch /tmp/x"',
-        configFile: 'echo "[core]" >> .git/config',
-        hook: 'mkdir -p .git/hooks && echo "#!/bin/sh" > .git/hooks/pre-commit',
-        bridge: 'echo x > .loa/planted',
-        agent: 'mkdir -p .claude && echo "{}" > .claude/settings.json',
-      }),
-    ).toEqual({ config: false, configFile: false, hook: false, bridge: false, agent: false });
-  });
-
-  // Only where git keeps each ref as a file of its own. packed-refs, where git gc moves them, stays writable (a
-  // session deletes a packed branch through it), so refs packed there are not held; nor are git's objects (below).
-  it("can't change, delete, add or move away the snapshots' refs kept as files", () => {
-    expect(
-      whole({
-        update: 'git update-ref refs/loa/runs/1/before "$(git write-tree | xargs git commit-tree -m x)"',
-        remove: 'git update-ref -d refs/loa/runs/1/before',
-        file: 'echo 0000000000000000000000000000000000000000 > .git/refs/loa/runs/1/before',
-        unlink: 'rm .git/refs/loa/runs/1/before',
-        add: 'git update-ref refs/loa/runs/9/before "$(git rev-parse refs/loa/runs/1/before)"',
-        move: 'mv .git/refs/loa .git/refs/gone',
-        branch: 'git update-ref refs/heads/other "$(git rev-parse refs/loa/runs/1/before)"',
-      }),
-    ).toEqual({ update: false, remove: false, file: false, unlink: false, add: false, move: false, branch: true });
-  });
-
-  // It writes git's folder so its agent can commit, and git keeps snapshots' contents there with everything else.
-  it("can still rewrite history, and delete git's objects, the snapshots' among them", () => {
-    const sole = (cmd: string) => whole({ done: cmd }).done;
-    expect({
-      history: sole(
-        'git -c user.name=t -c user.email=t@example.test commit -qm one && git update-ref -d HEAD && ! git log -1',
-      ),
-      objects: sole('rm -rf .git/objects/?? && ! git cat-file -e refs/loa/runs/1/before'),
-      packed: sole('echo "# changed" >> .git/packed-refs'),
-    }).toEqual({ history: true, objects: true, packed: true });
-  });
-
-  it("can't read the home folder, write outside the repo, or move the repo away", () => {
-    expect(
-      whole({
-        key: 'cat "$HOME/.ssh/id_ed25519"',
-        otherRepo: 'cat "$HOME/code/other/.git/config"',
-        notes: 'touch "$HOME/notes"',
-        shell: 'echo x >> "$HOME/.zshrc"',
-        move: 'mv "$BASE/code/repo" "$BASE/code/repo-away"',
-        token: 'cat .loa/bridge.json',
-      }),
-    ).toEqual({ key: false, otherRepo: false, notes: false, shell: false, move: false, token: false });
   });
 });

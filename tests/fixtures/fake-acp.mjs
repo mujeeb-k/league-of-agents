@@ -147,8 +147,8 @@ async function turn(sessionId, text) {
     return r.outcome?.optionId === 'yes';
   };
   // Asked to run a command, as Hermes does for one it deems dangerous and DeepSeek Harness for one that writes.
-  if (/command/.test(text))
-    await ask('session/request_permission', {
+  if (/command/.test(text)) {
+    const r = await ask('session/request_permission', {
       sessionId,
       toolCall: { toolCallId: 'cmd-1', title: 'bash', kind: 'execute', rawInput: { command: 'rm -rf build' } },
       options: [
@@ -156,6 +156,9 @@ async function turn(sessionId, text) {
         { optionId: 'no', name: 'Deny', kind: 'reject_once' },
       ],
     });
+    // The answer, for a test to read.
+    fs.appendFileSync(LOG, `command ${r.outcome?.optionId ?? r.outcome?.outcome}\n`);
+  }
   // "exec: <command>" to the end of its line: run it unasked, in a shell of its own, as Hermes runs commands, and
   // reply with its exit code and the end of its output.
   // Resumed with "You may now change <paths>.": it edits those, as a harness carries on once allowed, and runs the

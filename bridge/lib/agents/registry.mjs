@@ -88,13 +88,11 @@ export function loadAgents() {
   markHeld();
 }
 /**
- * What the app says before a run: on a section, whether the system keeps each agent the bridge starts inside it;
- * on the whole repository, whether it keeps each inside the repo.
+ * What the app says before a run on a section: whether the system keeps each agent the bridge starts inside it.
  */
 function markHeld() {
   for (const id of [...Object.keys(STREAMED), ...Object.keys(ACP)]) {
     AGENTS[id].stays = saidHeld({ agent: id, scope: ['/'] });
-    AGENTS[id].contained = saidHeld({ agent: id, scope: [] });
   }
 }
 /**
@@ -166,13 +164,12 @@ const STREAMED = {
       '--output-format',
       'stream-json',
       '--verbose',
-      // Never its own repo's settings or hooks: a session doesn't run what a cloned repo names.
-      '--setting-sources',
-      'user',
-      // Held by the sandbox: it does only what the bridge's hook allows (hook.mjs hold), and a call the hook never
-      // saw is left to its own permission check. Anywhere else it keeps that check, with edits in the repo allowed.
+      // Its settings load as in a terminal, the repo's own included. Held by the sandbox: the bridge's hook answers
+      // every call (hook.mjs hold), and one the hook never saw is refused, as the hook couldn't check it. Anywhere
+      // else nothing it would ask about is refused unasked: no one is there to answer, so it runs as allowed, held
+      // only to its section, where it has one, by the hook (hook.mjs pre).
       '--permission-mode',
-      sandboxed ? 'dontAsk' : 'acceptEdits',
+      sandboxed ? 'dontAsk' : 'bypassPermissions',
       '--settings',
       JSON.stringify(sandboxed ? held() : unheld(run)),
       ...(run.sessionId ? ['--resume', run.sessionId] : []),
@@ -201,8 +198,6 @@ const STREAMED = {
     ],
   ),
 };
-/** The command an agent the bridge starts is run by. */
-export const commandOf = id => BIN[id] ?? ACP[id]?.command[0];
 /** What starts an agent's run, or undefined for one the bridge doesn't start (watch mode, a captured terminal). */
 export const connectorOf = id => STREAMED[id] ?? (ACP[id] ? acpConnector(ACP[id]) : undefined);
 /**

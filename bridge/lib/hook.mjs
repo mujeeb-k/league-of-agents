@@ -110,18 +110,15 @@ function editRefused(data, cwd) {
 /** Claude Code's tools that write the file they name, and those that read files or list them. */
 const EDITS = /^(Edit|Write|MultiEdit|NotebookEdit)$/,
   READS = /^(Read|Glob|Grep|LS)$/;
-/** Its tools that touch no file and run no program on this machine. */
-const FREE =
-  /^(Agent|Task|TaskCreate|TaskGet|TaskList|TaskOutput|TaskStop|TaskUpdate|TodoWrite|WebFetch|WebSearch|BashOutput|KillBash|KillShell|Skill|ToolSearch|ExitPlanMode|AskUserQuestion)$/;
 const quoted = s => `'${String(s).replace(/'/g, "'\\''")}'`;
 
 /**
  * A tool call of a Claude Code session the bridge holds (sandbox.mjs). Claude Code itself runs outside the sandbox;
  * this is what keeps what it does inside. A shell command is rewritten to run inside the run's sandbox: its text goes
  * to a file, untouched, and the command line names only that file, so nothing in the text is read by a shell outside
- * the sandbox. A file tool is held to the repo for reads, and for writes to the selection, never to what runs later
- * outside the sandbox. Any other tool that could reach a file or start a program is refused. Whatever goes wrong
- * here, the call is refused.
+ * the sandbox. A file tool's writes are held to the selection, never to what runs later outside the sandbox, and it
+ * never reads the bridge's key. Every other tool runs as it would anywhere, an MCP server's included: what one
+ * writes outside the section is flagged after the run. Whatever goes wrong here, the call is refused.
  */
 /**
  * Writes the hook's answer whole. To a pipe, `process.stdout.write` returns before a long answer is written, and
@@ -167,8 +164,8 @@ function hold(data, cwd) {
       const command = [...h.args, '/bin/bash', file].map(quoted).join(' ');
       allow({ ...input, command });
     }
-    if (FREE.test(tool)) allow();
-    if (!EDITS.test(tool) && !READS.test(tool)) block(`${tool} can't be used in a session started from the map.`);
+    // Any tool but a file tool runs as the agent would run it: only the section is held.
+    if (!EDITS.test(tool) && !READS.test(tool)) allow();
     const under = (p, d) => p === d || p.startsWith(d + path.sep);
     // What the call names: a file, a folder to search, and for Glob the part of its pattern before any wildcard.
     const named = [
@@ -182,9 +179,13 @@ function hold(data, cwd) {
     if (!paths.length) throw new Error('no path');
     for (const p of paths) {
       const rel = path.relative(h.root, p);
-      const token = ['bridge.json', 'bridge.log'].some(f => p === path.join(h.root, '.loa', f));
-      if (!under(p, h.root) || token)
-        block(`${under(p, h.root) ? rel : p} can't be read from this session: only this repository's files.`);
+      // The bridge's token: a session that read it could ask the bridge to write for it, outside its section.
+      if (['bridge.json', 'bridge.log'].some(f => p === path.join(h.root, '.loa', f)))
+        block(`${rel} holds League of Agents' key, which a session never reads.`);
+      // The Keychain's files, and a search of a folder that holds them (Grep and Glob read outside the sandbox).
+      const keychain = path.join(h.home, 'Library/Keychains');
+      if (under(p, keychain) || (tool !== 'Read' && READS.test(tool) && under(keychain, p)))
+        block(`${p} holds the Keychain's files, which a session started from the map never reads.`);
       if (!EDITS.test(tool)) continue;
       const held =
         h.git.some(d => under(p, d)) || h.never.some(([kind, at]) => (kind === 'subpath' ? under(p, at) : p === at));

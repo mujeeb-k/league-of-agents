@@ -16,7 +16,7 @@ import { launch } from './process.mjs';
  * A connector for an ACP harness: each run is JSON-RPC 2.0 over its stdin and stdout, one message a line. No file
  * system or terminal is offered: the bridge reads what changed from its own snapshots. The harness's reply becomes
  * the run's summary, its tool calls the activity, and the edits it shows as diffs count as its lines. A follow-up
- * resumes the same session. What it asks before doing is answered by permitAcp. When the turn ends, the harness is
+ * resumes the same session. What it asks before doing is allowed but for its section's boundary (permitAcp). When the turn ends, the harness is
  * stopped.
  * @returns {import('./registry.mjs').Connector}
  */
@@ -255,26 +255,30 @@ const textOf = u => (u.content || []).map(c => c?.content?.text || '').join(' ')
 /** An edit: a call of kind "edit" (Hermes), or DeepSeek Harness's edit or write tool, sent as kind "other". */
 const isEdit = tool => tool.kind === 'edit' || (tool.kind === 'other' && ['edit', 'write'].includes(tool.title));
 /**
- * What an ACP harness asks before doing it (the tool call, as told so far): an edit is allowed when every file it
- * names is in the repo (not its .git or .loa) and in the run's scope, if it has one. Anything else is refused, and
- * the run says what; an edit outside the scope is asked of the person.
+ * What an ACP harness asks before doing it (the tool call, as told so far). Allowed, as it would be anywhere, but for
+ * an edit outside the run's section, if it has one, and a write to the bridge's own folder (.loa, which holds its
+ * key). An edit outside the section, in the repo, is asked of the person; the rest refused is said on the run. On a
+ * section, git's folder is never asked: what is there runs later, outside the sandbox, which refuses it whatever the
+ * answer.
  */
 function permitAcp(run, tool, options) {
   const rel = filesOf(tool);
-  // Any case: macOS's disk doesn't tell .GIT from .git.
-  const inRepo = rel.every(r => insideRepo(r) && !/^\.(git|loa)(\/|$)/i.test(r));
-  const outside = run.scope?.length ? rel.filter(r => !inScope(run.scope, r)) : [];
-  const ok = isEdit(tool) && rel.length > 0 && inRepo && !outside.length;
+  const edit = isEdit(tool);
+  // Any case: macOS's disk doesn't tell .LOA from .loa, or .GIT from .git.
+  const never = r => insideRepo(r) && (/^\.loa(\/|$)/i.test(r) || (!!run.scope?.length && /^\.git(\/|$)/i.test(r)));
+  const key = edit && rel.some(never);
+  const outside = edit && run.scope?.length ? rel.filter(r => !insideRepo(r) || !inScope(run.scope, r)) : [];
+  const ok = !key && !outside.length;
   const option = options.find(o => (ok ? /^allow/ : /^reject/).test(o.kind));
+  const asked = outside.filter(insideRepo);
   // An edit outside the section: the person is asked (runs.mjs blocked).
-  if (!ok && isEdit(tool) && inRepo && outside.length) for (const f of outside) blocked(run, f);
+  if (!key && asked.length === outside.length && asked.length) for (const f of asked) blocked(run, f);
   else if (!ok) {
     const what = acpToolLabel({ title: 'a request', ...tool });
     push(run, line('deny', 'refused-request', `Refused: ${what}`, { what }));
   }
   return option ? { outcome: 'selected', optionId: option.optionId } : { outcome: 'cancelled' };
 }
-/** A path inside the repo: not above it, nor elsewhere on the machine. */
 const insideRepo = r => !!r && r !== '..' && !r.startsWith('../') && !path.isAbsolute(r);
 /** The files a tool call names, as the repo names them. */
 const filesOf = tool =>

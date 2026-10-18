@@ -1956,7 +1956,7 @@ test('an ACP harness (Hermes): asks before editing, reports its model, is refuse
     // Found once `hermes acp --check` passes; the state names it and says nothing of its command.
     await expect
       .poll(async () => ((await api('/api/state')).body as unknown as StateResponse).agents.hermes)
-      .toEqual({ name: 'Hermes', available: true, stays: SANDBOX, contained: SANDBOX });
+      .toEqual({ name: 'Hermes', available: true, stays: SANDBOX });
     const first = await runToEnd(b, {
       agent: 'hermes',
       prompt: 'Record who reviewed it',
@@ -2011,7 +2011,7 @@ test('an ACP harness (Hermes): asks before editing, reports its model, is refuse
   }
 });
 
-test("without a sandbox, DeepSeek Harness runs in its read-only mode, so each edit asks: in the scope allowed and the agent's lines, outside refused", async () => {
+test("without a sandbox, DeepSeek Harness runs in its read-only mode, so each edit asks: in the scope allowed and the agent's lines, outside asked, a command allowed", async () => {
   const repo = makeRepo(),
     FILE = 'shared/allowlist.ts';
   const b = await startBridge(repo, FAKE_CLAUDE, { LOA_DSH_BIN: FAKE_ACP, FAKE_ACP_STYLE: 'dsh', LOA_SANDBOX: 'off' });
@@ -2032,8 +2032,9 @@ test("without a sandbox, DeepSeek Harness runs in its read-only mode, so each ed
     expect(fs.existsSync(path.join(repo, 'outside.txt'))).toBe(false);
     const entries = run.stream!.map(e => `${e.t} ${e.text}`);
     expect(entries).toContain('deny Tried to change outside.txt. Blocked.');
-    // A command it asks to run is refused, by what it would run.
-    expect(entries).toContain('deny Refused: bash rm -rf build');
+    // A command it asks to run is allowed: only the section is enforced.
+    expect(fs.readFileSync(acpLogOf(repo), 'utf8')).toMatch(/^command yes$/m);
+    expect(entries.filter(e => e.startsWith('deny Refused'))).toEqual([]);
     // Its sandbox holds each write until it asks: said as that, not as a failure.
     expect(entries).toContain(`warn Needs permission: edit ${FILE}`);
     expect(entries.filter(e => e.startsWith('err'))).toEqual([]);
@@ -2917,12 +2918,15 @@ test.describe('sessions at once', () => {
       expect(fs.existsSync(path.join(repo, 'shared/new.bin'))).toBe(false);
     }));
 
-  test("an ACP harness never edits the repo's git folder, whatever case it names it in", () =>
+  test("on a section, an ACP harness never edits the repo's git folder, whatever case it names it in: refused and said", () =>
     twoSessions(async (b, repo) => {
       const config = fs.readFileSync(path.join(repo, '.git/config'));
-      const h = (await start(b, [], 'edit:.GIT/config')).body as unknown as RunDTO;
+      const h = (await start(b, ['shared/'], 'edit:.GIT/config')).body as unknown as RunDTO;
       await until(b, h.id, 'done');
-      expect((await runOf(b, h.id)).stream?.map(e => e.text)).toContain('Refused: Approve edit: .GIT/config');
+      const run = await runOf(b, h.id);
+      expect(run.stream?.map(e => e.text)).toContain('Refused: Approve edit: .GIT/config');
+      // Never asked: no answer would let the sandbox write it.
+      expect(run.wants ?? []).toEqual([]);
       expect(fs.readFileSync(path.join(repo, '.git/config')).equals(config)).toBe(true);
     }));
 
@@ -2996,34 +3000,44 @@ test.describe('sessions at once', () => {
     }
   });
 
-  onMac("a session can't read the home folder: the card names the path, and the file's content lands nowhere", () =>
-    twoSessions(async (b, repo) => {
-      const key = path.join(homeOf(repo), '.ssh/id_ed25519');
-      fs.mkdirSync(path.dirname(key), { recursive: true });
-      fs.writeFileSync(key, `${MARKER}\n`);
-      const r = await runToEnd(b, {
-        agent: 'hermes',
-        prompt: 'exec: cat ~/.ssh/id_ed25519',
-        scope: ['shared/'],
-        resumeFrom: null,
-      });
-      expect(r.blockedPaths).toEqual(['~/.ssh/id_ed25519']);
-      expect(r.stream).toContainEqual({
-        t: 'deny',
-        text: 'Tried to open ~/.ssh/id_ed25519. Blocked.',
-        say: 'path-blocked',
-        outside: '~/.ssh/id_ed25519',
-      });
-      // Not a write outside the selection: that line is for those.
-      expect(r.commandBlocked).toBeUndefined();
-      expect(landings(MARKER, repo, [])).toEqual([]);
-    }),
+  // The one read the sandbox refuses but for the bridge's key: the Keychain's files (CLAUDE.md: League of Agents never
+  // grants access to a credential store). The rest of the home folder reads as it would anywhere.
+  onMac(
+    "a session can't read the Keychain's files: the card names the path, and the file's content lands nowhere",
+    () =>
+      twoSessions(async (b, repo) => {
+        const key = path.join(homeOf(repo), 'Library/Keychains/login.keychain-db');
+        fs.mkdirSync(path.dirname(key), { recursive: true });
+        fs.writeFileSync(key, `${MARKER}\n`);
+        const ssh = path.join(homeOf(repo), '.ssh/known_hosts');
+        fs.mkdirSync(path.dirname(ssh), { recursive: true });
+        fs.writeFileSync(ssh, 'github.com ssh-ed25519 AAAA\n');
+        const r = await runToEnd(b, {
+          agent: 'hermes',
+          prompt: 'exec: cat ~/Library/Keychains/login.keychain-db ~/.ssh/known_hosts',
+          scope: ['shared/'],
+          resumeFrom: null,
+        });
+        expect(r.blockedPaths).toEqual(['~/Library/Keychains/login.keychain-db']);
+        expect(r.stream).toContainEqual({
+          t: 'deny',
+          text: 'Tried to open ~/Library/Keychains/login.keychain-db. Blocked.',
+          say: 'path-blocked',
+          outside: '~/Library/Keychains/login.keychain-db',
+        });
+        // git over SSH needs ~/.ssh: read.
+        expect(r.summary).toContain('github.com ssh-ed25519 AAAA');
+        // Not a write outside the selection: that line is for those.
+        expect(r.commandBlocked).toBeUndefined();
+        expect(landings(MARKER, repo, [])).toEqual([]);
+      }),
   );
 
-  // Claude Code runs outside the sandbox, as in a terminal, and without its own permission check only when the
-  // sandbox holds its commands: the same code that gives it the hook which runs them inside gives it that, so one
-  // can't come without the other. `outside` is whether the agent's own process could write a file outside the
-  // section (it is not itself in the sandbox); `held`, whether it was given the hook, to refuse a call it can't check.
+  // Claude Code runs outside the sandbox, as in a terminal. On a section with the sandbox, the hook holds every call
+  // (its commands run inside) and allows what it doesn't refuse; anywhere else it isn't held, and nothing of Claude
+  // Code's own asks or denies (VISION 30: only the section is enforced). `outside` is whether the agent's own
+  // process could write a file outside the section (it is not itself in the sandbox); `held`, whether it was given
+  // the hook, to refuse a call it can't check.
   const permissionOf = async (env: Record<string, string>, scope: string[]) => {
     const repo = makeRepo();
     const log = path.join(path.dirname(repo), 'probe.log');
@@ -3051,9 +3065,9 @@ test.describe('sessions at once', () => {
         // Every tool, and a call it can't check refused.
         held:
           !!hook && !hook.matcher && /hook hold$/.test(hook.hooks[0]!.command) && hook.hooks[0]!.onFailure === 'block',
-        says: scope.length ? !!run.stays : !!run.contained,
-        // Never the repo's own Claude Code settings or hooks.
-        sources: args[args.indexOf('--setting-sources') + 1],
+        says: !!run.stays,
+        // The repo's own Claude Code settings and hooks load, as in a terminal.
+        sources: args.includes('--setting-sources'),
       };
     } finally {
       b.stop();
@@ -3061,21 +3075,21 @@ test.describe('sessions at once', () => {
     }
   };
   // Held, it does only what the hook allows; its card says so only once that design has been reviewed.
-  const HELD = { mode: 'dontAsk', outside: true, held: true, says: false, sources: 'user' },
-    FLAGGED = { mode: 'acceptEdits', outside: true, held: false, says: false, sources: 'user' };
+  const HELD = { mode: 'dontAsk', outside: true, held: true, says: false, sources: false },
+    FLAGGED = { mode: 'bypassPermissions', outside: true, held: false, says: false, sources: false };
   onMac(
-    'held by the sandbox, Claude Code runs outside it, with the hook, and does only what the hook allows',
+    'held by the sandbox on a section, Claude Code runs outside it, with the hook; on the whole repository it is not held',
     async () => {
       expect(await permissionOf({}, ['shared/'])).toEqual(HELD);
-      expect(await permissionOf({}, [])).toEqual(HELD);
+      expect(await permissionOf({}, [])).toEqual(FLAGGED);
     },
   );
-  test('where there is no sandbox, Claude Code keeps its own permission check', async () => {
+  test('where there is no sandbox, Claude Code is not held, and nothing of its own asks or denies', async () => {
     // A system without one (Linux, Windows): on a section, and on the whole repository.
     expect(await permissionOf({ LOA_SANDBOX: 'off' }, ['shared/'])).toEqual(FLAGGED);
     expect(await permissionOf({ LOA_SANDBOX: 'off' }, [])).toEqual(FLAGGED);
   });
-  test("a Claude Code too old to refuse a call its hook can't check is not held: it keeps its own check", async () => {
+  test("a Claude Code too old to refuse a call its hook can't check is not held", async () => {
     // Before 2.1.295 a hook that can't run lets the call through, so nothing would hold such a session.
     for (const version of ['2.1.294', '2.1.287', '2.0.300', 'unknown']) {
       expect(await permissionOf({ PROBE_VERSION: version }, ['shared/'])).toEqual(FLAGGED);
@@ -3087,7 +3101,7 @@ test.describe('sessions at once', () => {
       );
   });
   onMac(
-    "a sandbox that can't start starts no session on a section; a whole-repository run keeps the check",
+    "a sandbox that can't start starts no session on a section; a whole-repository run starts, not held",
     async () => {
       const broken = { LOA_SANDBOX_EXEC: '/usr/bin/false' };
       expect(await permissionOf(broken, ['shared/'])).toEqual({ refused: 'no-sandbox' });
@@ -3111,7 +3125,8 @@ test.describe('sessions at once', () => {
       fs.rmSync(path.dirname(repo), { recursive: true, force: true });
     }
   });
-  onMac('a tool the hook refuses is said as refused, not as a command that tried to write outside', () =>
+  // A tool the hook doesn't know (an MCP server's, Monitor) runs as it would anywhere: only the section is held.
+  onMac('a tool the hook does not know runs: nothing is refused or said as refused', () =>
     twoSessions(async b => {
       const started = (
         await call(b, '/api/runs', { agent: 'claude', prompt: 'tool:Monitor', scope: ['shared/'], resumeFrom: null })
@@ -3120,9 +3135,7 @@ test.describe('sessions at once', () => {
         .poll(async () => ((await call(b, `/api/runs/${started.id}`)).body as unknown as RunDTO).status)
         .toBe('done');
       const run = (await call(b, `/api/runs/${started.id}`)).body as unknown as RunDTO;
-      expect((run.stream ?? []).filter(e => e.t === 'err').map(e => e.text)).toEqual([
-        expect.stringContaining("Monitor can't be used in a session started from the map."),
-      ]);
+      expect((run.stream ?? []).filter(e => e.t === 'err').map(e => e.text)).toEqual([]);
       expect((run.stream ?? []).filter(e => e.t === 'deny')).toEqual([]);
       expect(run.commandBlocked).toBeUndefined();
     }),
@@ -3605,12 +3618,8 @@ test.describe('sessions at once, in the app', () => {
       async repo => {
         const STAYS = 'Stays inside your selection';
         const FLAGGED = "Can change files outside your selection. You'll see each one flagged.";
-        // With nothing selected, the session is on the whole repository: held inside it where there is a sandbox.
-        if (SANDBOX)
-          await expect(page.locator('#reach')).toHaveText(
-            "Can change any file in this repo. Can't touch the rest of your computer.",
-          );
-        else await expect(page.locator('#reach')).toHaveCount(0);
+        // With nothing selected, the session is on the whole repository: nothing holds it, and nothing is said.
+        await expect(page.locator('#reach')).toHaveCount(0);
         await folder(page, 'shared').click();
         await expect(page.locator('#reach')).toHaveText(SANDBOX ? STAYS : FLAGGED);
         await page.locator('#agentBtn').click();
@@ -3622,15 +3631,12 @@ test.describe('sessions at once, in the app', () => {
         await expect(running(page).locator('.reach')).toHaveText(SANDBOX ? STAYS : FLAGGED);
         go(repo, 'a');
         await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
-        // A session on the whole repository says on its card that it is held inside the repo, where it is.
+        // A session on the whole repository runs as in a terminal: its card says nothing of a boundary.
         await page.keyboard.press('Escape');
         await page.keyboard.press('Escape');
         await run(page, 'Add a header comment. wait:b');
-        if (SANDBOX)
-          await expect(running(page).locator('.reach')).toHaveText(
-            "Can change any file in this repo. Can't touch the rest of your computer.",
-          );
-        else await expect(running(page).locator('.reach')).toHaveCount(0);
+        await expect(running(page)).toHaveCount(1);
+        await expect(running(page).locator('.reach')).toHaveCount(0);
         go(repo, 'b');
         await expect(running(page)).toHaveCount(0, { timeout: 15_000 });
       },
@@ -3950,7 +3956,7 @@ test('harnesses the person adds in their own settings are listed by name and run
   const b = await startBridge(repo);
   try {
     const agents = ((await call(b, '/api/state')).body as unknown as StateResponse).agents;
-    expect(agents.goose).toEqual({ name: 'Goose', available: true, stays: false, contained: false });
+    expect(agents.goose).toEqual({ name: 'Goose', available: true, stays: false });
     expect(agents.claude!.name).toBe('Claude Code');
     expect(agents.dsh?.name).not.toBe('Mine too');
     expect(Object.keys(agents)).not.toContain('Not an id');
