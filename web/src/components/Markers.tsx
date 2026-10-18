@@ -7,8 +7,17 @@ import { sessionColour } from '../state/sessions';
 import { markers } from '../state/watch';
 import { t } from '../i18n';
 
-const doing = (act: string) =>
-  act === 'read' ? t('Reading') : act === 'edit' ? t('Editing') : act === 'run' ? t('Running a command') : t('Working');
+/** What a session is doing at its latest step: a call refused outside its section is said as blocked, not done. */
+const doing = ({ act, refused }: { act: string; refused?: boolean }) =>
+  refused
+    ? t('Blocked')
+    : act === 'read'
+      ? t('Reading')
+      : act === 'edit'
+        ? t('Editing')
+        : act === 'run'
+          ? t('Running a command')
+          : t('Working');
 
 export function Markers() {
   useRegion('watch');
@@ -32,7 +41,7 @@ export function Markers() {
               } as React.CSSProperties
             }
           >
-            <b>{doing(now.act)}</b>
+            <b>{doing(now)}</b>
           </div>
         );
       })}
