@@ -1118,7 +1118,7 @@ test('a renamed file keeps its place, shows as one file renamed, and leaves no g
     // Renamed in an editor, with one line changed on the way.
     fs.renameSync(path.join(repo, 'src/area0/part0/file0.ts'), path.join(repo, 'src/area0/part0/renamed.ts'));
     fs.appendFileSync(path.join(repo, 'src/area0/part0/renamed.ts'), 'export const more = 1;\n');
-    await expect.poll(async () => (await runsOf(b)).length, { timeout: 10_000 }).toBe(1);
+    await expect.poll(async () => (await endedRuns(b)).length, { timeout: 10_000 }).toBe(1);
     await expect(page.locator('#sideList .run')).toHaveCount(1);
     const after = await placesOf(page);
     expect(after['src/area0/part0/renamed.ts']).toBe(before['src/area0/part0/file0.ts']);
@@ -1151,7 +1151,7 @@ test('a renamed file edited in two places shows those two changes, not everythin
     now[3] = 'export const row3 = -3;';
     now[9] = 'export const row9 = -9;';
     fs.writeFileSync(path.join(repo, 'src/area0/part0/moved.ts'), now.join('\n') + '\n');
-    await expect.poll(async () => (await runsOf(b)).length, { timeout: 10_000 }).toBe(1);
+    await expect.poll(async () => (await endedRuns(b)).length, { timeout: 10_000 }).toBe(1);
     await page.locator('#sideList .run').click();
     const card = page.locator('.card[data-path="src/area0/part0/moved.ts"]');
     await expect(card.locator('header .from')).toHaveText('renamed from long.ts');
@@ -4190,6 +4190,11 @@ async function runsOf(b: Bridge) {
   const res = await fetch(`http://127.0.0.1:${b.port}/api/state`, { headers: { authorization: 'Bearer ' + b.token } });
   return ((await res.json()) as StateResponse).runs;
 }
+/**
+ * The runs that have ended. A run watch mode records is listed as it starts, its changes worked out a moment later,
+ * so one counted is read only once it ends (seen on macOS CI: a run of no changes, at 6ad0bfb).
+ */
+const endedRuns = async (b: Bridge) => (await runsOf(b)).filter(r => r.status !== 'running');
 async function watching(fn: (repo: string, b: Bridge) => Promise<void>) {
   const repo = makeRepo(),
     b = await startBridge(repo, undefined, { LOA_QUIET_MS: String(QUIET) }, ['--no-hooks']);
@@ -4209,7 +4214,7 @@ test('watch mode: a save from any editor becomes one run once the files are quie
     fs.renameSync(file + '.sb-tmp', file);
     await new Promise(r => setTimeout(r, QUIET / 3));
     fs.appendFileSync(file, '// saved again\n');
-    await expect.poll(async () => (await runsOf(b)).length, { timeout: 10_000 }).toBe(1);
+    await expect.poll(async () => (await endedRuns(b)).length, { timeout: 10_000 }).toBe(1);
     await settled();
     const runs = await runsOf(b);
     expect(runs).toHaveLength(1);
@@ -4273,7 +4278,7 @@ test('watch mode: a branch switch or pull resets the baseline and is never a run
     expect(await runsOf(b)).toEqual([]);
     // After the switches, an edit is still recorded against the new baseline, and only the edit.
     fs.appendFileSync(path.join(repo, 'apps/console/extra.ts'), 'export const more = 2;\n');
-    await expect.poll(async () => (await runsOf(b)).length, { timeout: 10_000 }).toBe(1);
+    await expect.poll(async () => (await endedRuns(b)).length, { timeout: 10_000 }).toBe(1);
     const [run] = await runsOf(b);
     expect(run!.changes.map(c => c.path)).toEqual(['apps/console/extra.ts']);
     expect(run!.changes[0]!.hunks.flatMap(h => h.add)).toEqual(['export const more = 2;']);
@@ -4316,7 +4321,7 @@ test('watch mode: a terminal turn interrupted before Stop is closed by the next 
     hook('stop', { session_id: 's1', reason: 'prompt_input_exit', cwd: repo });
     // Watch mode is back on: a later hand edit is a run of its own.
     edit('// by hand');
-    await expect.poll(async () => (await runsOf(b)).length, { timeout: 10_000 }).toBe(3);
+    await expect.poll(async () => (await endedRuns(b)).length, { timeout: 10_000 }).toBe(3);
     const runs = await runsOf(b);
     expect(runs.map(r => [r.agent, r.status, r.title, r.changes[0]!.hunks.flatMap(h => h.add)])).toEqual([
       ['claude-terminal', 'interrupted', 'First turn', ['// first turn']],
@@ -4727,7 +4732,7 @@ async function longRun(page: Page, bridge?: string) {
   const edited = lines.slice();
   for (const n of [5, 300, 596]) edited[n - 1] = `export const v${n} = ${n * 10};`;
   fs.writeFileSync(path.join(repo, FILE), edited.join('\n') + '\n');
-  await expect.poll(async () => (await runsOf(b)).length, { timeout: 15_000 }).toBe(1);
+  await expect.poll(async () => (await endedRuns(b)).length, { timeout: 15_000 }).toBe(1);
   await page.locator('[data-tab="runs"]').click();
   await page.locator('#sideList [data-run="1"]').click();
   await expect(page.locator('#runbar b')).toHaveText('Run 1');
@@ -4773,7 +4778,7 @@ test('a file opened during a run shows the whole file in Before, After and Diff,
     await expect(page.locator('#editor .cm-content')).toHaveAttribute('aria-readonly', 'false');
     // The bridge hands over the whole file as the run found it, past the 4,000 lines a run keeps in the state.
     fs.appendFileSync(path.join(repo, 'shared/big.ts'), '// 5001\n');
-    await expect.poll(async () => (await runsOf(b)).length, { timeout: 15_000 }).toBe(2);
+    await expect.poll(async () => (await endedRuns(b)).length, { timeout: 15_000 }).toBe(2);
     const before = await call(b, `/api/runs/2/before?path=${encodeURIComponent('shared/big.ts')}`);
     expect((before.body.text as string).split('\n').length).toBe(5001);
     expect((await call(b, `/api/runs/2/before?path=${encodeURIComponent(FILE)}`)).status).toBe(404);
@@ -5419,7 +5424,7 @@ test('uninstall: stops the bridge and leaves the repo and agent settings as befo
     const log = path.join(repo, 'shared/log.ts');
     const text = fs.readFileSync(log, 'utf8');
     fs.appendFileSync(log, '// edited\n');
-    await expect.poll(async () => (await runsOf(b)).length, { timeout: 10_000 }).toBe(1);
+    await expect.poll(async () => (await endedRuns(b)).length, { timeout: 10_000 }).toBe(1);
     fs.writeFileSync(log, text);
     expect(git(repo, 'for-each-ref', 'refs/loa/')).not.toBe('');
     expect(fs.readFileSync(own.cursor, 'utf8')).toContain(path.join(home, '.config/league-of-agents/hook/bridge.mjs'));
@@ -5488,7 +5493,7 @@ test('branch switch mid-session: runs, snapshots and reverts stay right, and the
 
     // Run 2, an edit on the new branch, recorded by watch mode.
     fs.appendFileSync(path.join(repo, 'shared/log.ts'), '// on feature\n');
-    await expect.poll(async () => (await runsOf(b)).length, { timeout: 10_000 }).toBe(2);
+    await expect.poll(async () => (await endedRuns(b)).length, { timeout: 10_000 }).toBe(2);
     expect(diffOf(2)).toBe('M\tshared/log.ts\n');
     expect(diffOf(1)).toBe(run1);
 
@@ -5805,7 +5810,7 @@ test("a cloned repo's checks wait for approval, and wait again when they change"
   };
   const edit = async (b: Bridge, n: number) => {
     fs.appendFileSync(path.join(repo, 'shared/log.ts'), `export const n${n} = ${n};\n`);
-    await expect.poll(async () => (await runsOf(b)).length, { timeout: 10_000 }).toBe(n);
+    await expect.poll(async () => (await endedRuns(b)).length, { timeout: 10_000 }).toBe(n);
     await settled();
     return (await runsOf(b))[n - 1]!;
   };
@@ -5910,7 +5915,7 @@ test("a repo that commits .loa/ can't approve its own checks or hand the bridge 
     expect(state.suggestedChecksFrom).toBe('repo');
     expect(state.checksOn).toEqual([]);
     fs.appendFileSync(path.join(repo, 'shared/log.ts'), 'export const x = 1;\n');
-    await expect.poll(async () => (await runsOf(b)).length, { timeout: 10_000 }).toBe(2);
+    await expect.poll(async () => (await endedRuns(b)).length, { timeout: 10_000 }).toBe(2);
     await settled();
     expect(fs.existsSync(ran)).toBe(false);
     // Reverting the planted run, even past its conflict, touches nothing outside the repo.

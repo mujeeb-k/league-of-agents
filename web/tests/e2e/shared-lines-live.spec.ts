@@ -84,8 +84,15 @@ const committed = (repo: string, file: string) => git(repo, 'show', `HEAD:${file
 const change = (run: RunDTO, file: string) => run.changes.find(c => c.path === file);
 const sharedOf = (run: RunDTO) => (run.shared ?? []).map(s => [s.path, s.with]);
 
-/** Who wrote each line of a file on the map, coloured by author: the line, and the run's agent for an agent's. */
-async function onMap(page: Page, file: string) {
+/**
+ * Who wrote each line of a file on the map, coloured by author: the line, and the run's agent for an agent's. First
+ * the app has heard of every run the bridge says has ended: one started from elsewhere opens as it ends, and would
+ * open over the map once it was closed.
+ */
+async function onMap(page: Page, b: Bridge, file: string) {
+  const { runs, working } = (await call(b, '/api/state')).body as unknown as { runs: RunDTO[]; working: number[] };
+  for (const r of runs.filter(r => !working.includes(r.id)))
+    await expect(page.locator(`#sideList [data-run="${r.id}"]`)).not.toContainText('Working');
   for (let i = 0; i < 2; i++) await page.keyboard.press('Escape');
   if ((await page.locator('#byAuthor').getAttribute('aria-pressed')) !== 'true') await page.keyboard.press('c');
   await expect(page.locator('#byAuthor')).toHaveAttribute('aria-pressed', 'true');
@@ -133,7 +140,7 @@ test('two sessions edit one file: each run is credited with its own lines, commi
       ],
     });
     expect.soft((await runOf(b, cursor)).status).toBe('running');
-    expect.soft(await onMap(page, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
+    expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
     // 3. Run 2 edits the same file, and one of its own, and ends.
     go('two');
     const two = await ended(b, cursor);
@@ -148,7 +155,7 @@ test('two sessions edit one file: each run is credited with its own lines, commi
     expect.soft(sharedOf(oneNow)).toEqual([['a/tax.mjs', [cursor]]]);
     expect.soft(change(oneNow, 'a/tax.mjs')?.hunks).toEqual(change(one, 'a/tax.mjs')?.hunks);
     expect.soft(oneNow.agentLines).toEqual(one.agentLines);
-    expect.soft(await onMap(page, 'a/tax.mjs')).toEqual(AFTER_BOTH);
+    expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_BOTH);
     // 4. Run 1 is committed, the shared file chosen: the commit holds run 1's lines, not run 2's.
     const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
     expect.soft(done.status).toBe(200);
@@ -161,7 +168,7 @@ test('two sessions edit one file: each run is credited with its own lines, commi
     expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(committed(repo, 'a/tax.mjs'));
     expect.soft(onDisk(repo, 'b/cart.mjs')).toBe(committed(repo, 'b/cart.mjs'));
     expect.soft(git(repo, 'status', '--porcelain', '--', 'a', 'b')).toBe('');
-    expect.soft(await onMap(page, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
+    expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
@@ -183,7 +190,7 @@ test('run 1 waits to be committed while run 2 still works; then each keeps to it
     expect.soft(git(repo, 'log', '--oneline').trim().split('\n')).toHaveLength(1);
     expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
     expect.soft((await runOf(b, cursor)).status).toBe('running');
-    expect.soft(await onMap(page, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
+    expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
     go('two');
     const two = await ended(b, cursor);
     expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(BOTH_TAX));
@@ -192,7 +199,7 @@ test('run 1 waits to be committed while run 2 still works; then each keeps to it
     expect.soft(two.agentLines).toEqual({ 'a/tax.mjs': [[10, 10]], 'b/cart.mjs': [[0, 0]] });
     expect.soft(sharedOf(two)).toEqual([['a/tax.mjs', [claude]]]);
     expect.soft(sharedOf(await runOf(b, claude))).toEqual([['a/tax.mjs', [cursor]]]);
-    expect.soft(await onMap(page, 'a/tax.mjs')).toEqual(AFTER_BOTH);
+    expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_BOTH);
     // Now none works: run 1's commit holds its lines, not run 2's.
     const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
     expect.soft(done.status).toBe(200);
@@ -201,7 +208,7 @@ test('run 1 waits to be committed while run 2 still works; then each keeps to it
     expect.soft(back.status).toBe(200);
     expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
     expect.soft(git(repo, 'status', '--porcelain', '--', 'a', 'b')).toBe('');
-    expect.soft(await onMap(page, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
+    expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
