@@ -3168,18 +3168,27 @@ test.describe('sessions at once', () => {
       fs.rmSync(path.dirname(repo), { recursive: true, force: true });
     }
   });
-  // A tool the hook doesn't know (an MCP server's, Monitor) runs as it would anywhere: only the section is held.
-  onMac('a tool the hook does not know runs: nothing is refused or said as refused', () =>
-    twoSessions(async b => {
+  // A tool Claude Code runs in its own process (an MCP server's, Monitor) would write past the section, outside the
+  // sandbox: on a section it is refused, and said as refused, and what it would have written is nowhere.
+  onMac("on a section, a tool the hook can't hold is refused and said, and writes nothing", () =>
+    twoSessions(async (b, repo) => {
+      const outside = path.join(path.dirname(repo), 'written-by-a-tool');
       const started = (
-        await call(b, '/api/runs', { agent: 'claude', prompt: 'tool:Monitor', scope: ['shared/'], resumeFrom: null })
+        await call(b, '/api/runs', {
+          agent: 'claude',
+          prompt: `tool:Monitor>${outside}`,
+          scope: ['shared/'],
+          resumeFrom: null,
+        })
       ).body as unknown as RunDTO;
       await expect
         .poll(async () => ((await call(b, `/api/runs/${started.id}`)).body as unknown as RunDTO).status)
         .toBe('done');
+      expect(fs.existsSync(outside)).toBe(false);
       const run = (await call(b, `/api/runs/${started.id}`)).body as unknown as RunDTO;
-      expect((run.stream ?? []).filter(e => e.t === 'err').map(e => e.text)).toEqual([]);
-      expect((run.stream ?? []).filter(e => e.t === 'deny')).toEqual([]);
+      expect((run.stream ?? []).filter(e => e.t === 'err').map(e => e.text)).toEqual([
+        expect.stringContaining("Monitor can't be used in a session on a section."),
+      ]);
       expect(run.commandBlocked).toBeUndefined();
     }),
   );

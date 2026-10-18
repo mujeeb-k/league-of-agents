@@ -125,8 +125,10 @@ if (wants.length) {
   out({ type: 'result', result: results.join('\n') + resume, session_id: 'sess-123', total_cost_usd: 0.0123 });
   process.exit(0);
 }
-// "tool:<name>" in the prompt: call that tool, which the hooks may refuse, and say what came of it.
-const named = /\btool:(\w+)/.exec(prompt)?.[1];
+// "tool:<name>" in the prompt: call that tool, which the hooks may refuse, and say what came of it. With
+// "tool:<name>><path>", the tool, once let through, writes that file from this process, as a tool Claude Code runs
+// itself (an MCP server's, Monitor) would, outside any sandbox.
+const [, named, target] = /\btool:(\w+)(?:>(\S+))?/.exec(prompt) ?? [];
 if (named) {
   const payload = { tool_name: named, tool_input: { command: 'true' }, tool_use_id: 'toolu_named', cwd: process.cwd() };
   out({
@@ -134,6 +136,7 @@ if (named) {
     message: { content: [{ type: 'tool_use', id: payload.tool_use_id, name: named, input: payload.tool_input }] },
   });
   const refused = runHooks('PreToolUse', payload);
+  if (!refused && target) fs.writeFileSync(target, `written by ${named}\n`);
   const content = refused ? `PreToolUse:${named} hook error: [node .loa/bridge.mjs hook hold]: ${refused}` : 'Done';
   out({
     type: 'user',

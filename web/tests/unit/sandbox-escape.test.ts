@@ -371,7 +371,10 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
     ).toEqual([2, 2, 0, 2, 2]);
   });
 
-  it("are all that is held: every other tool runs, an MCP server's included", () => {
+  // A tool that could reach a file or start a program runs in Claude Code's own process, outside the sandbox: on a
+  // section it would write anywhere (git's hooks, another repo), so it is refused, and said. Tools that touch no file
+  // run.
+  it("let only tools that touch no file run: an MCP server's, Monitor and a tool not known are refused", () => {
     expect(
       tools({
         plan: ['TodoWrite', {}],
@@ -381,7 +384,7 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
         watcher: ['Monitor', { command: 'touch ~/notes' }],
         unknown: ['SomethingNew', {}],
       }),
-    ).toEqual({ plan: true, web: true, subagent: true, added: true, watcher: true, unknown: true });
+    ).toEqual({ plan: true, web: true, subagent: true, added: false, watcher: false, unknown: false });
   });
 
   it("refuse every call when the session's hold can't be read", () => {

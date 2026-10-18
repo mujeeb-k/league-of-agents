@@ -110,6 +110,9 @@ function editRefused(data, cwd) {
 /** Claude Code's tools that write the file they name, and those that read files or list them. */
 const EDITS = /^(Edit|Write|MultiEdit|NotebookEdit)$/,
   READS = /^(Read|Glob|Grep|LS)$/;
+/** Its tools that touch no file and run no program on this machine. */
+const FREE =
+  /^(Agent|Task|TaskCreate|TaskGet|TaskList|TaskOutput|TaskStop|TaskUpdate|TodoWrite|WebFetch|WebSearch|BashOutput|KillBash|KillShell|Skill|ToolSearch|ExitPlanMode|AskUserQuestion)$/;
 const quoted = s => `'${String(s).replace(/'/g, "'\\''")}'`;
 
 /**
@@ -117,8 +120,8 @@ const quoted = s => `'${String(s).replace(/'/g, "'\\''")}'`;
  * this is what keeps what it does inside. A shell command is rewritten to run inside the run's sandbox: its text goes
  * to a file, untouched, and the command line names only that file, so nothing in the text is read by a shell outside
  * the sandbox. A file tool's writes are held to the selection, never to what runs later outside the sandbox, and it
- * never reads the bridge's key. Every other tool runs as it would anywhere, an MCP server's included: what one
- * writes outside the section is flagged after the run. Whatever goes wrong here, the call is refused.
+ * never reads a bridge's key. A tool that touches no file runs; any other (an MCP server's, Monitor) would run outside
+ * the sandbox, so it is refused, and said. Whatever goes wrong here, the call is refused.
  */
 /**
  * Writes the hook's answer whole. To a pipe, `process.stdout.write` returns before a long answer is written, and
@@ -164,8 +167,10 @@ function hold(data, cwd) {
       const command = [...h.args, '/bin/bash', file].map(quoted).join(' ');
       allow({ ...input, command });
     }
-    // Any tool but a file tool runs as the agent would run it: only the section is held.
-    if (!EDITS.test(tool) && !READS.test(tool)) allow();
+    if (FREE.test(tool)) allow();
+    // Any other tool runs in Claude Code's own process, outside the sandbox, so it could write past the section (an
+    // MCP server's, Monitor): refused, and said on the run.
+    if (!EDITS.test(tool) && !READS.test(tool)) block(`${tool} can't be used in a session on a section.`);
     const under = (p, d) => p === d || p.startsWith(d + path.sep);
     // What the call names: a file, a folder to search, and for Glob the part of its pattern before any wildcard.
     const named = [
