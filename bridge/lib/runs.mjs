@@ -15,6 +15,7 @@ import {
   keepsBaseline,
   leaveEpoch,
   noteRevert,
+  heldBusy,
   sharedBusy,
   ownChanges,
   peersOf,
@@ -286,7 +287,12 @@ export function revertRun(run, force, chosen = []) {
   return serial(async () => {
     // A file another session edited too is left as it is unless the person chose it (parallel.mjs share), and can't
     // be chosen while that session still works.
-    const busy = sharedBusy(run, chosen);
+    const busy =
+      sharedBusy(run, chosen) ??
+      heldBusy(
+        run,
+        [...run.changes, ...(run.unseen ?? [])].map(c => c.path),
+      );
     if (busy) throw busy;
     const left = (run.shared ?? []).map(s => s.path).filter(p => !chosen.includes(p));
     // A run names only files inside the repo; anything else in a run file is never read or touched.

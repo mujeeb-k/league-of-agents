@@ -15,7 +15,7 @@ import { takeOut } from './writes.mjs';
 import { emitRun } from './events.mjs';
 import { runs, saveRun } from './runs.mjs';
 import { line } from './util.mjs';
-import { noteCommit, sharedBusy } from './parallel.mjs';
+import { heldBusy, noteCommit, sharedBusy } from './parallel.mjs';
 
 /** Files held at the commit's version while git commits (commitRun), until they are put back. */
 const heldFile = () => path.join(LOA, 'held.json');
@@ -121,7 +121,14 @@ export function commitRun(run, { message = '', include = [] } = {}) {
     if (run.status === 'running' || run.reverted)
       throw refused('not-committable', 'Only a finished run can be committed.');
     if (!message.trim()) throw refused('no-message', 'Write a commit message first.');
-    const busy = sharedBusy(run, include);
+    // An earlier commit's held files not yet put back go back first, before this one reads the files.
+    await restoreHeld();
+    const busy =
+      sharedBusy(run, include) ??
+      heldBusy(
+        run,
+        [...run.changes, ...(run.unseen ?? [])].map(c => c.path),
+      );
     if (busy) throw busy;
     const { files, yours, shared, changed } = await commitPreview(run, include);
     if (changed.length)
@@ -170,8 +177,6 @@ export function commitRun(run, { message = '', include = [] } = {}) {
           if (now !== entry[2]) held.push([p, now, entry[2]]);
         }
     if (held.length) {
-      // An earlier commit's list not yet put back is put back first, so this one never writes over it.
-      await restoreHeld();
       fs.writeFileSync(heldFile(), JSON.stringify(held));
       await putBlobs(
         held.map(([p, , put]) => [p, put]),
@@ -234,10 +239,12 @@ export function commitRun(run, { message = '', include = [] } = {}) {
       else apart.push([p, now]);
     }
     noteCommit(sha, kept);
+    // Expected, not written by the bridge: a session that wrote the file meanwhile keeps its change.
     if (apart.length)
       noteCommit(
         await commitBlobs(sha, apart, `run ${run.id} committed, as on disk`),
         apart.map(([p]) => p),
+        false,
       );
     run.committed = { sha, at: Date.now(), files: chosen, ...(hook.length ? { hook } : {}) };
     if (hook.length)

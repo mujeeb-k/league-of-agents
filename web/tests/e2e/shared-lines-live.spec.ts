@@ -452,3 +452,33 @@ test('a shared file committed while a third session works, with no commit hook, 
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
 });
+
+// Cursor's run, which wrote a file in Claude Code's section, is committed while Claude Code still works there: the
+// commit waits, as for a shared file, so the file isn't swapped under a working agent, and Claude Code's change on it
+// stays its own when it ends.
+test("a run's file in a section still at work can't be committed until that session ends", async () => {
+  const { repo, b, start, go } = await twoSessions(FAKE_CURSOR, {}, ['--no-hooks']);
+  const SHELL = '// written by a shell command';
+  try {
+    const claude = await start('claude', ['a/'], 'Run the tests. shell:a/tax.mjs:d');
+    await expect.poll(() => onDisk(repo, 'a/tax.mjs')).toContain(SHELL);
+    const cursor = await start('cursor', ['b/'], 'Add a daily summary. insert:a/tax.mjs:1:comment');
+    await ended(b, cursor);
+    const early = await call(b, `/api/runs/${cursor}/commit`, { message: 'Note where tax is used', include: [] });
+    expect.soft([early.status, early.body.code]).toEqual([409, 'shared-busy']);
+    go('d');
+    // Claude Code's change on the file is its command's line, without Cursor's; both wrote it, so it is shared.
+    const one = await ended(b, claude);
+    expect.soft(change(one, 'a/tax.mjs')?.hunks).toEqual([{ at: 4, del: 0, add: [SHELL] }]);
+    expect.soft(sharedOf(one)).toEqual([['a/tax.mjs', [cursor]]]);
+    const done = await call(b, `/api/runs/${cursor}/commit`, {
+      message: 'Note where tax is used',
+      include: ['a/tax.mjs'],
+    });
+    expect.soft(done.status).toBe(200);
+    expect.soft(committed(repo, 'a/tax.mjs')).toBe(text([ORIGINAL[0]!, COMMENT, ...ORIGINAL.slice(1)]));
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});

@@ -148,7 +148,8 @@ export async function ownChanges(run, changes) {
   /** Files of this run's inside another session's section, by that session. */
   const crossed = new Map();
   for (const c of changes) {
-    const mine = named.has(c.path) || (inScope(run.scope, c.path) && !byAnother(c.path));
+    // In its own section, what changed is its at least in part: what another session wrote there is taken out below.
+    const mine = named.has(c.path) || inScope(run.scope, c.path);
     if (!mine) {
       if (!inScope(sections, c.path) && !byAnother(c.path)) outside.push(c.path);
     } else if (!(await reverted(c))) {
@@ -171,6 +172,23 @@ export async function ownChanges(run, changes) {
               : first;
         if (from === after) continue;
         own.push(await changeOf(c.path, from, after));
+      } else if (!named.has(c.path) && byAnother(c.path) && !c.unseen) {
+        // In its section, changed by writes of its not seen (a command no hook brackets) and by another session's that
+        // were: its change is the file as it left it without the other's writes. Where they can't be taken out, it
+        // isn't known apart from them.
+        const before = await blobAt(run.before, c.path),
+          after = await blobAt(run.after, c.path);
+        const others = epoch.runs
+          .filter(r => r !== run)
+          .flatMap(r => seenWrites(r, c.path))
+          .map(w => /** @type {import('./writes.mjs').Write} */ ([w.from === undefined ? UNSEEN : w.from, w.to, w.at]));
+        const mineOnly = await takeOut(others, after);
+        const left = 'blob' in mineOnly ? mineOnly.blob : UNSEEN;
+        if (left === before) continue;
+        (run.writes ??= {})[c.path] = [[before, left, run.endedAt ?? Date.now()]];
+        own.push(left === UNSEEN ? c : await changeOf(c.path, before, left));
+        for (const r of epoch.runs)
+          if (r !== run && names.get(r).has(c.path) && holds(r, c.path)) share(run, r, c.path);
       } else own.push(c);
       epoch.expected.set(c.path, run.after);
       const other = !inScope(run.scope, c.path) && holder(run, c.path);
@@ -265,12 +283,30 @@ export function noteRevert(run, commit, left = []) {
  * A commit while runs work: what it changed, a hook's files among them, is the commit's. It isn't the session's in
  * whose section a hook wrote, and isn't left over at the epoch's end.
  */
-export function noteCommit(sha, files) {
+export function noteCommit(sha, files, written = true) {
   if (epoch)
     for (const p of files) {
       epoch.expected.set(p, sha);
-      epoch.written.set(p, sha);
+      if (written) epoch.written.set(p, sha);
     }
+}
+
+/**
+ * A file a run wrote outside its own section, in a section another session still works in: it isn't committed or
+ * reverted with this run until that session ends, so nothing is swapped or rewritten under a working agent, and
+ * that session's own change to it stays its own. The refusal, or null.
+ */
+export function heldBusy(run, files) {
+  for (const p of files) {
+    if (!run.writes?.[p]) continue;
+    const other = [...working.values()].find(r => r !== run && r.scope?.length && inScope(r.scope, p));
+    if (other)
+      return refused('shared-busy', `Run ${other.id} is still working on ${p}. Choose it once run ${other.id} ends.`, {
+        id: other.id,
+        files: p,
+      });
+  }
+  return null;
 }
 
 /** A run's checks: now, or once the epoch ends when it overlapped others still at work. */
