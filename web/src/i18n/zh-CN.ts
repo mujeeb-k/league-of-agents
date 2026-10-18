@@ -70,11 +70,8 @@ const catalogue: Catalogue = {
   'These files changed after run {id}': '这些文件在运行 {id} 之后有改动',
   'Reverting run {id} now would undo part of run {later}. Revert run {later} first, then run {id}.':
     '现在撤销运行 {id} 会撤掉运行 {later} 的一部分。请先撤销运行 {later}，再撤销运行 {id}。',
-  'Reverting run {id} puts these files back as they were before it, and the edits made since are lost.':
-    '撤销运行 {id} 会把这些文件恢复到它之前的样子，之后所做的编辑会丢失。',
   Close: '关闭',
   'Open run {id}': '打开运行 {id}',
-  'Keep my later edits': '保留我之后的编辑',
   'Copy the command': '复制命令',
   'Copy the line': '复制这一行',
   Share: '分享',
@@ -150,11 +147,20 @@ const catalogue: Catalogue = {
   'Revert run {id}?': '撤销运行 {id}？',
   'Puts these files back as they were before run {id}. Nothing else is touched.':
     '将这些文件恢复到运行 {id} 之前的样子。其他内容不受影响。',
-  'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.':
-    '勾选后，它会恢复到运行 {id} 开始时的样子，另一个会话此后对它的改动将丢失。',
   'Commit {n} files': { other: '提交 {n} 个文件' },
   'Keep {n} files': { other: '保留 {n} 个文件' },
   'Changed since this run ended, so it can’t go in with it.': '这次运行结束后它又有改动，因此不能随这次运行提交。',
+  'Run {id}’s lines come out of every file it changed. The edits made since stay.':
+    '运行 {id} 的行会从它改过的每个文件中移除。之后的编辑会保留。',
+  'Reverting run {id} puts these files back as they were before it, and the edits made since are lost.':
+    '撤销运行 {id} 会把这些文件恢复到它之前的样子，之后所做的编辑会丢失。',
+  'Keep my later edits': '保留我之后的编辑',
+  'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.':
+    '勾选后，它会恢复到运行 {id} 开始时的样子，另一个会话此后对它的改动将丢失。',
+  'Takes run {id}’s lines out of these files. Nothing else is touched.':
+    '从这些文件中移除运行 {id} 的行。不会动其他任何内容。',
+  'Ticked, only this run’s lines come out.': '勾选后，只移除这次运行的行。',
+  'Ticked, only this run’s lines go in.': '勾选后，只提交这次运行的行。',
   'Ticked, the whole file goes in, the other session’s lines too.': '勾选后，整个文件都会提交，包括另一个会话的行。',
   'Outside {section}': '在 {section} 之外',
   'Outside its sections': '在其分区之外',

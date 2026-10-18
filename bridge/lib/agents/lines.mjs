@@ -99,6 +99,12 @@ export async function linesOf(run, peers, { stepsOf, blobAt }) {
   for (const c of run.changes) {
     if (c.deleted) continue;
     // Peers' steps count from when this run began: before that, their lines are in the file as it found it.
+    // A shell command's write (shell.mjs) is in the order too, credited to nobody: an agent's lines are only those an
+    // edit step of its wrote.
+    const commands = r =>
+      (r.wrote ?? [])
+        .filter(w => w.file === c.path && w.at >= run.startedAt)
+        .map((w, i) => ({ at: w.at, i, from: w.from, blob: w.to ?? EMPTY, run: 0 }));
     const steps = [
       ...mine.filter(s => s.file === c.path).map(s => ({ ...s, run: run.id })),
       ...peers.flatMap(p =>
@@ -106,6 +112,7 @@ export async function linesOf(run, peers, { stepsOf, blobAt }) {
           .filter(s => s.file === c.path && s.at >= run.startedAt)
           .map(s => ({ ...s, run: p.id })),
       ),
+      ...[run, ...peers].flatMap(commands),
     ].sort((x, y) => x.at - y.at || x.run - y.run || x.i - y.i);
     if (!steps.some(s => s.run === run.id)) {
       if (texts?.[c.path]) agent[c.path] = texts[c.path];
@@ -114,14 +121,24 @@ export async function linesOf(run, peers, { stepsOf, blobAt }) {
     let at = (await blobAt(run.before, c.path)) ?? EMPTY;
     let owners = Array(await linesIn(at)).fill(0);
     for (const s of steps) {
-      // Its start: as kept, or for one not seen, the file as last known.
-      const from = s.late || s.from === undefined ? at : (s.from ?? EMPTY);
+      // An edit whose start wasn't seen: what changed up to its end may be another's too. Of it, the run's are only
+      // the lines its edit tool's own text holds (marked by the run's id, negative, until that is known below).
+      if (s.late || s.from === undefined) {
+        owners = await carry(owners, at, s.blob, s.run ? -s.run : 0);
+        at = s.blob;
+        continue;
+      }
+      const from = s.from ?? EMPTY;
       // What changed outside any step is nobody's.
       owners = await carry(owners, at, from, 0);
       owners = await carry(owners, from, s.blob, s.run);
       at = s.blob;
     }
     owners = await carry(owners, at, (await blobAt(run.after, c.path)) ?? EMPTY, 0);
+    const said = new Set(
+      (texts?.[c.path] ?? []).flatMap(([a, b]) => Array.from({ length: b - a + 1 }, (_, k) => a + k)),
+    );
+    owners = owners.map((o, i) => (o < 0 ? (o === -run.id && said.has(i) ? run.id : 0) : o));
     const ranges = who => {
       const out = [];
       owners.forEach((o, i) => {

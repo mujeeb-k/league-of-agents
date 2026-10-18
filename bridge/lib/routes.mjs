@@ -18,7 +18,7 @@ import {
 } from './checks.mjs';
 import { AGENTS } from './agents/registry.mjs';
 import { checkClaude } from './agents/claude.mjs';
-import { onAgentLine } from './agents/stream.mjs';
+import { noteUnanswered, onAgentLine } from './agents/stream.mjs';
 import { removeHooks } from './hooks-install.mjs';
 import { codeFiles, folders, inFolder, mapMax, readTree, hashOf, repoFile, treeEntry } from './files.mjs';
 import { showAt } from './snapshots.mjs';
@@ -72,6 +72,8 @@ function state({ url }) {
       working: [...working.keys()],
       seq,
       version: VERSION,
+      // Revert takes out, and Commit puts in, a run's own lines only, never another's (writes.mjs).
+      ownLines: true,
       suggestedChecks: CONF.checks?.length ? [] : repoChecks.length ? repoChecks : detectChecks(),
       ...(repoChecks.length ? { suggestedChecksFrom: 'repo' } : {}),
       checksOn: (CONF.checks || []).map(c => c.name),
@@ -352,7 +354,7 @@ async function revert({ params, body }) {
   if (!run) return noRun;
   const { force, shared } = await body();
   const r = await revertRun(run, !!force, Array.isArray(shared) ? shared.map(String) : []);
-  return [r.conflict ? 409 : 200, r];
+  return ['conflict' in r ? 409 : 200, r];
 }
 /**
  * A file a run changed, whole, as the run found it: the state keeps only its first 4,000 lines (computeChanges).
@@ -540,6 +542,7 @@ async function captureStop({ body }) {
   const other = b.sessionId && captured?.sessionId && b.sessionId !== captured.sessionId;
   if (captured && !other) {
     for (const e of Array.isArray(b.events) ? b.events : []) onAgentLine(captured, JSON.stringify(e));
+    noteUnanswered(captured);
     if (b.summary) captured.summary = b.summary;
     // Cursor says how the turn ended.
     await finishRun(captured, b.status === 'aborted' ? 'cancelled' : b.status === 'error' ? 'failed' : 'done');

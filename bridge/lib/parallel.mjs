@@ -1,15 +1,17 @@
 // Sessions at once. Runs whose sections don't overlap work at the same time, and a run on the whole repository works
-// alone. From the first of them starting to the last ending (an epoch), the baseline stays where it was. A file an
-// agent's edit tool named is that run's change, wherever the file is: inside another session's section, it is said
-// on both runs. A file two sessions' edit tools both named is shared: said on both, and left out of either's revert
-// and commit unless the person chooses it. Whatever else changed in a run's own section while it worked is its own
-// too (its commands name no file, so a file one session changed only by a command is never seen as shared). When the last one ends, whatever changed that no run owns (an edit by hand, a command outside its section)
-// is recorded as a run of its own, credited to none of them.
+// alone. From the first of them starting to the last ending (an epoch), the baseline stays where it was. A file a
+// session wrote (its edit tools named it, unrefused, or its shell commands changed it: shell.mjs) is that run's
+// change, wherever the file is: inside another session's section, it is said on both runs. A file two sessions wrote
+// is shared: said on both, each run's change only what its own writes did (writes.mjs), and left out of either's
+// revert and commit unless the person chooses it. Whatever else changed in a run's own section while it worked is
+// its own too, where no other session wrote it. When the last one ends, whatever changed that no run owns (an edit by
+// hand, a command no hook bracketed) is recorded as a run of its own, credited to none of them.
 import { line, refused, serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
 import { CONF } from './repo.mjs';
 import { runChecks } from './checks.mjs';
 import { blobAt, commitWith, computeChanges, pin, snapshotNow } from './snapshots.mjs';
+import { changeOf, takeOut } from './writes.mjs';
 import { runs, working, newRun, finishRun, saveRun } from './runs.mjs';
 import { base, setBase, settle } from './watch.mjs';
 import { emit, emitRun } from './events.mjs';
@@ -17,8 +19,9 @@ import { stepsOf } from './steps.mjs';
 
 /**
  * The epoch under way: its baseline, whether runs overlapped in it, its runs, what each file should hold at its end
- * (`expected`, by the commit that has it: a run's after, a reverted run's before, a commit), what the bridge itself
- * wrote meanwhile (`written`: a revert's files, a commit's), and runs whose checks wait for its end.
+ * (`expected`, by the commit that has it: a run's after, what a revert left, a commit, a file a commit held and put
+ * back), what the bridge itself wrote meanwhile (`written`: a revert's files, a commit's), and runs whose checks
+ * wait for its end.
  * @type {{ base: any; overlapped: boolean; runs: any[]; expected: Map<string, string>; written: Map<string, string>;
  *   checks: any[] } | null}
  */
@@ -69,17 +72,58 @@ export const peersOf = run => (epoch?.runs.includes(run) ? epoch.runs.filter(r =
 /** Sessions that overlap leave the baseline where it was until the last one ends. */
 export const keepsBaseline = run => !!run.overlapped;
 
-/** The files a run's edit tools named and weren't refused: what its agent reported changing (steps.mjs). */
-const reported = run => new Set(stepsOf(run).flatMap(s => (s?.act === 'edit' && s.file && !s.refused ? [s.file] : [])));
+/**
+ * The files a run wrote: those its edit tools named and that were seen made, not refused or failed (steps.mjs), and
+ * those its shell commands changed and kept (shell.mjs).
+ */
+const reported = run =>
+  new Set([
+    ...stepsOf(run).flatMap(s => (s?.act === 'edit' && s.file && s.blob && !s.refused ? [s.file] : [])),
+    ...(run.wrote ?? []).map(w => w.file),
+  ]);
+/** A run's writes to a file as they were seen: its edit steps (a refused one is none) and its shell commands'. */
+const seenWrites = (run, file) =>
+  [
+    ...stepsOf(run).flatMap(s =>
+      s?.act === 'edit' && s.file === file && s.blob && !s.refused ? [{ at: s.at, from: s.from, to: s.blob }] : [],
+    ),
+    ...(run.wrote ?? []).filter(w => w.file === file).map(w => ({ at: w.at, from: w.from, to: w.to, start: w.start })),
+  ].sort((a, b) => a.at - b.at);
+/**
+ * A run's own writes to a file, as [from, to, at] (writes.mjs), from every write the epoch's sessions made to it in
+ * order: an edit whose start wasn't seen starts from the file as the write before it left it.
+ */
+async function ownWrites(run, file) {
+  const all = epoch.runs.flatMap(r => seenWrites(r, file).map(w => ({ ...w, run: r }))).sort((a, b) => a.at - b.at);
+  let last = await blobAt(epoch.base.commit, file);
+  /** @type {import('./writes.mjs').Write[]} */
+  const own = [];
+  for (const w of all) {
+    const from = w.from === undefined ? last : w.from;
+    last = w.to;
+    if (w.run !== run) continue;
+    // A shell command's write holds whatever changed while it ran (a test run, a build): another session's edits
+    // made meanwhile are taken out of it.
+    /** @type {import('./writes.mjs').Write[]} */
+    const meanwhile = w.start
+      ? all.filter(o => o.run !== run && o.at > w.start && o.at <= w.at).map(o => [o.from ?? null, o.to, o.at])
+      : [];
+    const to = meanwhile.length ? await takeOut(meanwhile, w.to) : { blob: w.to };
+    own.push([from, 'blob' in to ? to.blob : w.to, w.at]);
+  }
+  return own;
+}
 /** The other session of the epoch whose section holds a file. */
 const holder = (run, file) => epoch.runs.find(r => r !== run && r.scope?.length && inScope(r.scope, file));
 
 /**
  * The run's own changes, from all that changed while it worked. A run that worked alone owns them all,
- * except what a revert during it wrote. A run that overlapped owns the files its edit tools named, wherever they
- * are, and whatever else changed in its own section while it worked (its commands), unless another session's edit
- * tools named that file: then it is that session's. A file of its own inside another session's section is said on
- * both runs. What changed outside every section and no session named is said, and left for the epoch's end.
+ * except what a revert during it wrote. A run that overlapped owns the files it wrote (its edit steps, its bracketed
+ * shell commands), wherever they are, and whatever else changed in its own section while it worked, unless another
+ * session wrote that file: then it is that session's. Where another session wrote the file too, or it is in another's
+ * section, the run's change is its own writes alone (writes.mjs). A file of its own inside another session's section
+ * is said on both runs. What changed outside every section and no session wrote is said, and left for the epoch's
+ * end.
  */
 export async function ownChanges(run, changes) {
   if (!epoch) return changes;
@@ -109,7 +153,25 @@ export async function ownChanges(run, changes) {
     if (!mine) {
       if (!inScope(sections, c.path) && !byAnother(c.path)) outside.push(c.path);
     } else if (!(await reverted(c))) {
-      own.push(c);
+      // Another session wrote it too, or it is in another's section, where what changed besides isn't this run's: the
+      // run's change is what its own writes did, on the file as the others left it, and those writes are kept for
+      // its revert and its commit (runs.mjs, commit.mjs).
+      if (named.has(c.path) && (byAnother(c.path) || !inScope(run.scope, c.path)) && !c.unseen) {
+        const writes = await ownWrites(run, c.path);
+        if (!writes.length) {
+          // Its writes weren't kept (a file over the size the map opens, say): the change is the whole file.
+          own.push(c);
+          epoch.expected.set(c.path, run.after);
+          continue;
+        }
+        (run.writes ??= {})[c.path] = writes;
+        const after = await blobAt(run.after, c.path);
+        const base = await takeOut(writes, after);
+        // Where a later write overlaps its own, it is drawn from the file as its first write found it.
+        const from = 'blob' in base ? base.blob : (writes[0]?.[0] ?? null);
+        if (from === after) continue;
+        own.push(await changeOf(c.path, from, after));
+      } else own.push(c);
       epoch.expected.set(c.path, run.after);
       const other = !inScope(run.scope, c.path) && holder(run, c.path);
       if (other) crossed.set(other, [...(crossed.get(other) ?? []), c.path]);
@@ -149,8 +211,8 @@ function crossing(run, other, files) {
 }
 
 /**
- * Two sessions' edit tools named the same file: shared, said on both, each naming the other. Either may have ended
- * already; its record is saved again and sent.
+ * Two sessions wrote the same file (an edit step or a bracketed command each): shared, said on both, each naming the
+ * other. Either may have ended already; its record is saved again and sent.
  */
 function share(run, other, file) {
   for (const [r, o] of [
@@ -187,15 +249,15 @@ export function sharedBusy(run, files) {
 }
 
 /**
- * A revert while runs work: what it wrote is the revert's, not theirs, and not left over at the epoch's end. The
- * shared files it left as they are (`left`) it didn't write.
+ * A revert while runs work: what it wrote (`commit` holds each file as it left it) is the revert's, not theirs, and
+ * not left over at the epoch's end. The files it left as they are (`left`) it didn't write.
  */
-export function noteRevert(run, left = []) {
+export function noteRevert(run, commit, left = []) {
   if (epoch)
     for (const c of [...run.changes, ...(run.unseen ?? [])]) {
       if (left.includes(c.path)) continue;
-      epoch.expected.set(c.path, run.before);
-      epoch.written.set(c.path, run.before);
+      epoch.expected.set(c.path, commit);
+      epoch.written.set(c.path, commit);
     }
 }
 

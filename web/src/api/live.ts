@@ -630,6 +630,7 @@ export async function connect(c: Conn, quiet = false): Promise<string | null> {
     S.LIVE = true;
     S.EVSEQ = s.seq || 0;
     S.bridgeVersion = s.version ?? null;
+    S.ownLines = !!s.ownLines;
     st.updateDismissed = false;
     st.unreachable = null;
     saveConn(c);
@@ -694,7 +695,10 @@ async function revertOn(run: Run, shared: string[], force = false) {
   else toast(t('Reverted run {id}', { id: run.id }));
 }
 
-/** Revert even though the files changed again since the run; their later edits are lost. */
+/**
+ * Revert even though the files changed again since the run: a bridge after 0.2.0 takes out the run's own lines and
+ * keeps the later edits (a file where they touch is left); 0.2.0 puts the files back whole, and they are lost.
+ */
 export async function forceRevert(run: Run, shared: string[] = []) {
   if (st.busy) return;
   st.busy = `revert:${run.id}`;

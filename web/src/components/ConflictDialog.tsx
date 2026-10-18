@@ -3,7 +3,7 @@
 import { TriangleAlert } from 'lucide-react';
 import { forceRevert } from '../api/live';
 import type { Conflict } from '../lib/types';
-import { st } from '../state/app';
+import { S, st } from '../state/app';
 import { selectRun } from '../state/actions';
 import { bump, useRegion } from '../state/render';
 import { Button } from './ui/button';
@@ -48,10 +48,14 @@ export function ConflictDialog() {
                     id: c.run.id,
                     later: c.later.id,
                   })
-                : t(
-                    'Reverting run {id} puts these files back as they were before it, and the edits made since are lost.',
-                    { id: c.run.id },
-                  )}
+                : S.ownLines
+                  ? t('Run {id}’s lines come out of every file it changed. The edits made since stay.', {
+                      id: c.run.id,
+                    })
+                  : t(
+                      'Reverting run {id} puts these files back as they were before it, and the edits made since are lost.',
+                      { id: c.run.id },
+                    )}
             </DialogDescription>
             <ul
               id="conflictFiles"
@@ -83,7 +87,7 @@ export function ConflictDialog() {
                 <>
                   <DialogClose asChild>
                     <Button variant="outline" id="conflictKeep">
-                      {t('Keep my later edits')}
+                      {S.ownLines ? t('Cancel') : t('Keep my later edits')}
                     </Button>
                   </DialogClose>
                   {/* Destructive, but no red fill: warm colours stay small markers (BRAND.md). */}

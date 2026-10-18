@@ -75,11 +75,8 @@ const catalogue: Catalogue = {
   'These files changed after run {id}': 'Estos archivos cambiaron después de la ejecución {id}',
   'Reverting run {id} now would undo part of run {later}. Revert run {later} first, then run {id}.':
     'Revertir ahora la ejecución {id} desharía parte de la ejecución {later}. Revierte primero la ejecución {later} y luego la {id}.',
-  'Reverting run {id} puts these files back as they were before it, and the edits made since are lost.':
-    'Revertir la ejecución {id} deja estos archivos como estaban antes de ella, y se pierden las ediciones hechas desde entonces.',
   Close: 'Cerrar',
   'Open run {id}': 'Abrir la ejecución {id}',
-  'Keep my later edits': 'Conservar mis ediciones posteriores',
   'Copy the command': 'Copiar el comando',
   'Copy the line': 'Copiar la línea',
   Share: 'Compartir',
@@ -160,12 +157,21 @@ const catalogue: Catalogue = {
   'Revert run {id}?': '¿Revertir la ejecución {id}?',
   'Puts these files back as they were before run {id}. Nothing else is touched.':
     'Deja estos archivos como estaban antes de la ejecución {id}. No se toca nada más.',
-  'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.':
-    'Marcado, vuelve a como lo encontró la ejecución {id}. Lo que la otra sesión cambió en él desde entonces se pierde.',
   'Commit {n} files': { one: 'Hacer commit de {n} archivo', other: 'Hacer commit de {n} archivos' },
   'Keep {n} files': { one: 'Conservar {n} archivo', other: 'Conservar {n} archivos' },
   'Changed since this run ended, so it can’t go in with it.':
     'Cambió después de terminar esta ejecución, así que no puede entrar con ella.',
+  'Run {id}’s lines come out of every file it changed. The edits made since stay.':
+    'Las líneas de la ejecución {id} salen de cada archivo que cambió. Las ediciones hechas desde entonces se quedan.',
+  'Reverting run {id} puts these files back as they were before it, and the edits made since are lost.':
+    'Revertir la ejecución {id} deja estos archivos como estaban antes de ella, y se pierden las ediciones hechas desde entonces.',
+  'Keep my later edits': 'Conservar mis ediciones posteriores',
+  'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.':
+    'Marcado, vuelve a como lo encontró la ejecución {id}. Lo que la otra sesión cambió en él desde entonces se pierde.',
+  'Takes run {id}’s lines out of these files. Nothing else is touched.':
+    'Saca las líneas de la ejecución {id} de estos archivos. No se toca nada más.',
+  'Ticked, only this run’s lines come out.': 'Marcado, solo salen las líneas de esta ejecución.',
+  'Ticked, only this run’s lines go in.': 'Marcado, solo entran las líneas de esta ejecución.',
   'Ticked, the whole file goes in, the other session’s lines too.':
     'Marcado, entra el archivo entero, también las líneas de la otra sesión.',
   'Outside {section}': 'Fuera de {section}',

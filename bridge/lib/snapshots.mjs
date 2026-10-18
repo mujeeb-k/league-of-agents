@@ -154,10 +154,10 @@ export async function commitTree(tree, label, head) {
   });
   return out.trim();
 }
-/** A file's content id as it is on disk now, or null when it is gone. */
-export async function blobNow(p) {
+/** A file's content id as it is on disk now, or null when it is gone. `keep` writes the blob, to read it back. */
+export async function blobNow(p, keep = false) {
   if (!fs.existsSync(path.join(ROOT, p))) return null;
-  return (await gitAsync(['hash-object', '--', p])).trim();
+  return (await gitAsync(['hash-object', ...(keep ? ['-w'] : []), '--', p])).trim();
 }
 /** The branch HEAD points at and its commit; before the first commit, the branch and no commit. */
 export async function headNow() {
@@ -199,6 +199,45 @@ export async function commitWith(commit, files, label) {
   const tree = (await gitAsync(['write-tree'], { env })).trim();
   fs.rmSync(index, { force: true });
   return commitTree(tree, label, await headNow());
+}
+/**
+ * A commit with the files of `commit`, except each of `files` ([path, blob]) as that blob, or absent where it is null.
+ * A file keeps its mode in `commit`, or in `also` where `commit` doesn't have it. Built in an index of its own.
+ */
+export async function commitBlobs(commit, files, label, also = commit) {
+  // An index of its own for each call: two of them at once never share one.
+  const index = path.join(LOA, `blobs-${crypto.randomBytes(6).toString('hex')}.index`);
+  const env = { ...process.env, GIT_INDEX_FILE: index };
+  try {
+    await gitAsync(['read-tree', commit], { env });
+    for (const [p, blob] of files) {
+      if (blob === null) {
+        await gitAsync(['update-index', '--force-remove', '--', p], { env });
+        continue;
+      }
+      const line =
+        (await gitAsync(['ls-tree', commit, '--', p])).trim() || (await gitAsync(['ls-tree', also, '--', p])).trim();
+      const mode = line ? line.split(/\s+/)[0] : '100644';
+      await gitAsync(['update-index', '--add', '--cacheinfo', `${mode},${blob},${p}`], { env });
+    }
+    const tree = (await gitAsync(['write-tree'], { env })).trim();
+    return commitTree(tree, label, await headNow());
+  } finally {
+    fs.rmSync(index, { force: true });
+  }
+}
+/**
+ * Writes files in the working tree as blobs have them ([path, blob], null: removed), by git's own checkout, the index
+ * left alone. Returns the commit that holds them (commitBlobs), the bridge's own write.
+ */
+export async function putBlobs(files, label, base, also = base) {
+  const written = await commitBlobs(base, files, label, also);
+  await restoreFrom(
+    written,
+    files.filter(([, b]) => b !== null).map(([p]) => p),
+  );
+  for (const [p, b] of files) if (b === null) fs.rmSync(path.join(ROOT, p), { force: true });
+  return written;
 }
 export async function pin(id, which, commit) {
   // Unpinned, a snapshot could be pruned later: said in the log, though the run goes on.

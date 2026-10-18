@@ -17,5 +17,11 @@ if (!fixture) {
   console.error('Set LOA_FIXTURE to a recorded stream.');
   process.exit(1);
 }
-for (const line of fs.readFileSync(fixture, 'utf8').split('\n'))
-  if (line.trim()) console.log(line.split('/repo').join(process.cwd()));
+// A line {"loa_wait": "<name>"} isn't the agent's: the replay holds there until .loa/go-<name> exists, so a test can
+// say when the rest of the recording happens.
+for (const line of fs.readFileSync(fixture, 'utf8').split('\n')) {
+  if (!line.trim()) continue;
+  const hold = /^\{"loa_wait":"([\w-]+)"\}$/.exec(line.trim())?.[1];
+  if (!hold) console.log(line.split('/repo').join(process.cwd()));
+  else while (!fs.existsSync(`.loa/go-${hold}`)) await new Promise(r => setTimeout(r, 50));
+}

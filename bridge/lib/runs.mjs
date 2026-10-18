@@ -6,7 +6,8 @@ import { line, logError, readJson, splitLines, serial } from './util.mjs';
 import { inScope, rangeKept, scopeEntry } from './scope.mjs';
 import { ROOT, RUNS_DIR, git } from './repo.mjs';
 import { linesOf } from './agents/lines.mjs';
-import { blobAt, blobNow, pin, restoreFrom, showAt, computeChanges, snapshotNow } from './snapshots.mjs';
+import { blobAt, blobNow, pin, putBlobs, showAt, computeChanges, snapshotNow } from './snapshots.mjs';
+import { takeOut } from './writes.mjs';
 import {
   checksFor,
   clash,
@@ -67,9 +68,13 @@ export function pruneRuns() {
 export const saveRun = r => fs.writeFileSync(path.join(RUNS_DIR, r.id + '.json'), JSON.stringify(r));
 /**
  * A run as the state and its events carry it: without its activity or each file as it found it, which grow with every
- * run kept (GET /api/runs/:id has them, fullRun).
+ * run kept (GET /api/runs/:id has them, fullRun), nor its writes (writes.mjs), which only the bridge reads.
+ * @param {Record<string, any>} run
  */
-export const publicRun = ({ stream, ...r }) => ({ ...r, changes: (r.changes || []).map(({ pre, ...c }) => c) });
+export const publicRun = ({ stream, writes, wrote, ...r }) => ({
+  ...r,
+  changes: (r.changes || []).map(({ pre, ...c }) => c),
+});
 /** A run with everything: its activity's last 60 entries, and each file as it found it. */
 export const fullRun = r => ({ ...r, stream: (r.stream || []).slice(-60) });
 /** A run's title: the prompt's first line, shortened. */
@@ -273,35 +278,50 @@ export function push(run, entry) {
   if (run.stream.length > 400) run.stream.splice(0, run.stream.length - 400);
   emit('progress', run);
 }
-export async function revertRun(run, force, chosen = []) {
-  // A file another session edited too is left as it is unless the person chose it (parallel.mjs share), and can't
-  // be chosen while that session still works.
-  const busy = sharedBusy(run, chosen);
-  if (busy) throw busy;
-  const left = (run.shared ?? []).map(s => s.path).filter(p => !chosen.includes(p));
-  // A run names only files inside the repo; anything else in a run file is never read or touched.
-  const changes = [...run.changes, ...(run.unseen ?? [])].filter(
-    c => path.resolve(ROOT, c.path).startsWith(ROOT + path.sep) && !left.includes(c.path),
-  );
-  const drift = [];
-  for (const c of changes) {
-    if ((await blobNow(c.path)) !== (await blobAt(run.after, c.path))) drift.push(c.path);
-  }
-  if (drift.length && !force) return { conflict: drift };
-  const back = [];
-  for (const c of changes)
-    if (c.created) fs.rmSync(path.join(ROOT, c.path), { force: true });
-    else if ((await blobAt(run.before, c.path)) !== null) back.push(c.path);
-  await restoreFrom(run.before, back);
-  run.reverted = true;
-  // What it left is kept on the run: reverted, but for these.
-  if (left.length) run.left = left;
-  // The bridge's own writes are not someone's changes: taken into the baseline, or into the epoch under way.
-  if (working.size) noteRevert(run, left);
-  else await serial(() => rebase());
-  saveRun(run);
-  emit('state');
-  return { ok: true, ...(left.length ? { left } : {}) };
+/**
+ * Reverts a run: in the serial lane, so no snapshot, commit or other revert reads or writes its files halfway.
+ * @returns {Promise<{ ok: true; left?: string[] } | { conflict: string[] }>}
+ */
+export function revertRun(run, force, chosen = []) {
+  return serial(async () => {
+    // A file another session edited too is left as it is unless the person chose it (parallel.mjs share), and can't
+    // be chosen while that session still works.
+    const busy = sharedBusy(run, chosen);
+    if (busy) throw busy;
+    const left = (run.shared ?? []).map(s => s.path).filter(p => !chosen.includes(p));
+    // A run names only files inside the repo; anything else in a run file is never read or touched.
+    const changes = [...run.changes, ...(run.unseen ?? [])].filter(
+      c => path.resolve(ROOT, c.path).startsWith(ROOT + path.sep) && !left.includes(c.path),
+    );
+    const drift = [];
+    for (const c of changes) {
+      if ((await blobNow(c.path)) !== (await blobAt(run.after, c.path))) drift.push(c.path);
+    }
+    if (drift.length && !force) return { conflict: drift };
+    // Each file with the run's own writes taken out of it as it is now, never put back whole: what another session
+    // or the person wrote, committed or not, stays. A run that worked alone wrote the whole change (writes.mjs). A
+    // file where something since overlaps the run's lines is left as it is, and said.
+    const back = [],
+      stuck = [];
+    for (const c of changes) {
+      const writes = run.writes?.[c.path] ?? [[await blobAt(run.before, c.path), await blobAt(run.after, c.path)]];
+      const out = await takeOut(writes, await blobNow(c.path, true));
+      if ('blob' in out) back.push([c.path, out.blob]);
+      else stuck.push(c.path);
+    }
+    // Each file keeps its mode from before the run, so a mode the run changed goes back too.
+    const written = await putBlobs(back, `run ${run.id} reverted`, run.before, run.after);
+    run.reverted = true;
+    left.push(...stuck);
+    // What it left is kept on the run: reverted, but for these.
+    if (left.length) run.left = left;
+    // The bridge's own writes are not someone's changes: taken into the baseline, or into the epoch under way.
+    if (working.size) noteRevert(run, written, left);
+    else await rebase();
+    saveRun(run);
+    emit('state');
+    return { ok: true, ...(left.length ? { left } : {}) };
+  });
 }
 /**
  * A run the bridge stopped during (a crash, a restart) is closed as interrupted, with the changes made so far:

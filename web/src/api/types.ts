@@ -197,6 +197,8 @@ export interface StateResponse {
   seq: number;
   /** The bridge's version; bridges before 0.1.0 don't send it. */
   version?: string | null;
+  /** Revert takes out, and Commit puts in, a run's own lines only (bridges after 0.2.0); before, whole files. */
+  ownLines?: boolean;
   /** Checks found in the repo, offered while none are set up (bridges before 0.1.0 don't send it). */
   suggestedChecks?: { name: string; run: string }[];
   /** 'repo' when the suggested checks are the repo's own loa.config.json, waiting for approval in this clone. */
@@ -322,6 +324,8 @@ export interface CommitPreview {
   yours: string[];
   /** Files another session edited too: left out unless ticked (bridges after 0.2.0). */
   shared?: string[];
+  /** The shared files whose lines can't be told apart from the other session's: they go in whole. */
+  whole?: string[];
   /** The shared files changed since the run ended: they can't go in with this run. */
   later?: string[];
   /** Files changed since the run ended: nothing commits until they are reviewed again. */

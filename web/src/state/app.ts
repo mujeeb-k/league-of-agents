@@ -40,6 +40,8 @@ export const S = {
   TOTALS: new Map<string, number>(),
   /** The connected bridge's version, or null when it is too old to say. */
   bridgeVersion: null as string | null,
+  /** Whether the bridge reverts and commits a run's own lines only (StateResponse.ownLines). */
+  ownLines: false,
   /** Checks the bridge found in a repo with none set up, to offer turning on. */
   suggestedChecks: [] as { name: string; run: string }[],
   /** True when the suggested checks come from the repo's loa.config.json: approved here before they run. */

@@ -100,25 +100,32 @@ const keeping = new Map();
 /**
  * An edit step done: its file, as the edit left it, kept as a blob. Read at once, before the agent's next edit can
  * change it, and kept only if git would snapshot it: not a file git ignores or an untracked one that usually holds
- * secrets, nor one over the size the map opens.
+ * secrets, nor one over the size the map opens. An agent that says what the file was before and after its edit
+ * (`exact`: Cursor) is taken at its word: what changed besides, before or after, isn't the edit's.
+ * @param {{ before?: string; after?: string }} [exact]
  */
-export function stepDone(run, i) {
+export function stepDone(run, i, exact = {}) {
   const s = live.get(run.id)?.[i];
   if (!s?.file) return;
   let text;
   try {
     const abs = path.join(ROOT, s.file);
     if (fs.statSync(abs).size > MAX_BYTES) return;
-    text = fs.readFileSync(abs);
+    text = typeof exact.after === 'string' ? Buffer.from(exact.after) : fs.readFileSync(abs);
   } catch {
     return;
   }
   const key = `${run.id} ${s.file}`;
-  const start = found.get(`${run.id} ${i}`);
+  const seen = found.get(`${run.id} ${i}`);
+  // A file the edit created: Cursor may say it was empty before, where it wasn't there.
+  const start =
+    typeof exact.before === 'string' && !(exact.before === '' && seen === null) ? Buffer.from(exact.before) : seen;
   found.delete(`${run.id} ${i}`);
   const kept = (keeping.get(key) ?? Promise.resolve()).then(async () => {
     if (!(await keepable(s.file))) return;
-    const hash = async bytes => (await gitAsync(['hash-object', '-w', '--stdin'], { input: bytes })).trim();
+    // As git would keep the file at its path (its line-ending and clean filters), like a snapshot does.
+    const hash = async bytes =>
+      (await gitAsync(['hash-object', '-w', '--stdin', '--path', s.file], { input: bytes })).trim();
     s.blob = await hash(text);
     // The file as the edit found it. Read the same as it left it, the edit had landed before the call was heard
     // of (or changed nothing): its start wasn't seen.
@@ -165,10 +172,17 @@ export async function pinSteps(run) {
   live.delete(run.id);
   await Promise.all([...keeping.entries()].filter(([k]) => k.startsWith(`${run.id} `)).map(([, p]) => p));
   for (const k of [...keeping.keys()]) if (k.startsWith(`${run.id} `)) keeping.delete(k);
-  const blobs = steps.filter(s => s.blob);
+  // Each edit's file as it found it and as it left it, and each shell command's (run.wrote, shell.mjs): what the
+  // run's writes are taken out against (writes.mjs).
+  const blobs = [
+    ...steps.flatMap(s => [...(s.blob ? [[s.blob, `${s.i}`]] : []), ...(s.from ? [[s.from, `${s.i}-from`]] : [])]),
+    ...(run.wrote ?? []).flatMap((w, k) =>
+      [w.from, w.to].flatMap((b, j) => (b ? [[b, `command-${k}-${j ? 'to' : 'from'}`]] : [])),
+    ),
+  ];
   if (!blobs.length) return;
   const tree = (
-    await gitAsync(['mktree'], { input: blobs.map(s => `100644 blob ${s.blob}\t${s.i}`).join('\n') + '\n' })
+    await gitAsync(['mktree'], { input: blobs.map(([b, name]) => `100644 blob ${b}\t${name}`).join('\n') + '\n' })
   ).trim();
   await gitAsync(['update-ref', `refs/loa/runs/${run.id}/steps`, tree]);
 }

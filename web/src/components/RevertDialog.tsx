@@ -41,7 +41,9 @@ export function RevertDialog() {
           <>
             <DialogTitle className="mb-1 text-base">{t('Revert run {id}?', { id: r.run.id })}</DialogTitle>
             <DialogDescription className="mb-4 text-ink2 text-pretty">
-              {t('Puts these files back as they were before run {id}. Nothing else is touched.', { id: r.run.id })}
+              {S.ownLines
+                ? t('Takes run {id}’s lines out of these files. Nothing else is touched.', { id: r.run.id })
+                : t('Puts these files back as they were before run {id}. Nothing else is touched.', { id: r.run.id })}
             </DialogDescription>
             <ul id="revertFiles" className="mb-6 flex flex-col gap-1 rounded-lg border bg-card px-3 py-2 text-xs">
               {own.map(f => (
@@ -77,10 +79,12 @@ export function RevertDialog() {
                         <span className="mt-0.5 block text-muted-foreground text-pretty">
                           {busy
                             ? t('Run {id} is still working. Choose once it ends.', { id: busy })
-                            : t(
-                                'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.',
-                                { id: r.run.id },
-                              )}
+                            : S.ownLines
+                              ? t('Ticked, only this run’s lines come out.')
+                              : t(
+                                  'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.',
+                                  { id: r.run.id },
+                                )}
                         </span>
                       </span>
                     </label>

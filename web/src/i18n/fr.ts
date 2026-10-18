@@ -74,11 +74,8 @@ const catalogue: Catalogue = {
   'These files changed after run {id}': 'Ces fichiers ont changé après l’exécution {id}',
   'Reverting run {id} now would undo part of run {later}. Revert run {later} first, then run {id}.':
     'Annuler l’exécution {id} maintenant défairait une partie de l’exécution {later}. Annulez d’abord l’exécution {later}, puis l’exécution {id}.',
-  'Reverting run {id} puts these files back as they were before it, and the edits made since are lost.':
-    'Annuler l’exécution {id} remet ces fichiers comme avant elle, et les modifications faites depuis sont perdues.',
   Close: 'Fermer',
   'Open run {id}': 'Ouvrir l’exécution {id}',
-  'Keep my later edits': 'Garder mes modifications ultérieures',
   'Copy the command': 'Copier la commande',
   'Copy the line': 'Copier la ligne',
   Share: 'Partager',
@@ -160,12 +157,21 @@ const catalogue: Catalogue = {
   'Revert run {id}?': 'Annuler l’exécution {id} ?',
   'Puts these files back as they were before run {id}. Nothing else is touched.':
     'Remet ces fichiers comme ils étaient avant l’exécution {id}. Rien d’autre n’est touché.',
-  'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.':
-    'Coché, il revient tel que l’exécution {id} l’a trouvé. Ce que l’autre session y a modifié depuis est perdu.',
   'Commit {n} files': { one: 'Committer {n} fichier', other: 'Committer {n} fichiers' },
   'Keep {n} files': { one: 'Garder {n} fichier', other: 'Garder {n} fichiers' },
   'Changed since this run ended, so it can’t go in with it.':
     'Modifié depuis la fin de cette exécution : il ne peut pas partir avec elle.',
+  'Run {id}’s lines come out of every file it changed. The edits made since stay.':
+    'Les lignes de l’exécution {id} sont retirées de chaque fichier qu’elle a modifié. Les modifications faites depuis restent.',
+  'Reverting run {id} puts these files back as they were before it, and the edits made since are lost.':
+    'Annuler l’exécution {id} remet ces fichiers comme avant elle, et les modifications faites depuis sont perdues.',
+  'Keep my later edits': 'Garder mes modifications ultérieures',
+  'Ticked, it goes back as run {id} found it. What the other session changed in it since is lost.':
+    'Coché, il revient tel que l’exécution {id} l’a trouvé. Ce que l’autre session y a modifié depuis est perdu.',
+  'Takes run {id}’s lines out of these files. Nothing else is touched.':
+    'Retire les lignes de l’exécution {id} de ces fichiers. Rien d’autre n’est touché.',
+  'Ticked, only this run’s lines come out.': 'Coché, seules les lignes de cette exécution sont retirées.',
+  'Ticked, only this run’s lines go in.': 'Coché, seules les lignes de cette exécution sont incluses.',
   'Ticked, the whole file goes in, the other session’s lines too.':
     'Coché, le fichier entier est inclus, avec les lignes de l’autre session.',
   'Outside {section}': 'Hors de {section}',

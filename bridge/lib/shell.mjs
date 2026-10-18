@@ -1,6 +1,7 @@
 // A session's shell commands. Its edit tools name what they change; a shell command names nothing, so the hooks
 // bracket each one (lib/hook.mjs): a snapshot before, one after, and what changed between is the command's.
-// Inside the session's section it is the session's own, line for line. In the sandbox (sandbox.mjs) nothing outside
+// Inside the session's section it is the session's write (run.wrote), taken out on its revert; none of its lines is
+// credited to the agent, which wrote them by no edit step. In the sandbox (sandbox.mjs) nothing outside
 // can change by the command, so only the section is looked at. Without one, what changed outside, in no other
 // session's section, is put back at once and the agent told; what was there is kept, to restore in one click. The
 // window is the whole command: a save of the person's outside every section while it runs is put back too.
@@ -11,7 +12,6 @@ import { line, refused, sameSecret, serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
 import { ROOT } from './repo.mjs';
 import { blobAt, blobNow, computeChanges, pin, restoreFrom, snapshotNow } from './snapshots.mjs';
-import { noteLines } from './agents/lines.mjs';
 import { push, saveRun, working } from './runs.mjs';
 import { lockOfRun } from './sandbox.mjs';
 
@@ -35,7 +35,7 @@ export function shellTokenFits(pathname, token) {
   return !!t && sameSecret(token, t);
 }
 
-/** The snapshot before each shell command under way, by run and tool call. */
+/** When each shell command under way began, and the snapshot then, by run and tool call. */
 const before = new Map();
 /** What a run's snapshots look at: its section in the sandbox, the whole tree without one. */
 const watched = run =>
@@ -43,34 +43,49 @@ const watched = run =>
 
 export function shellStarts(run, tool) {
   return serial(async () => {
-    before.set(`${run.id}:${tool}`, (await snapshotNow(`run ${run.id} before a shell command`, watched(run))).commit);
+    const at = Date.now();
+    before.set(`${run.id}:${tool}`, {
+      at,
+      commit: (await snapshotNow(`run ${run.id} before a shell command`, watched(run))).commit,
+    });
   });
 }
 
 /** Ends a shell command's bracket: returns the files it changed outside the section, now put back. */
 export function shellEnds(run, tool) {
   const key = `${run.id}:${tool}`,
-    from = before.get(key);
+    began = before.get(key);
   before.delete(key);
-  if (!from) return Promise.resolve([]);
+  if (!began) return Promise.resolve([]);
+  const from = began.commit;
   return serial(async () => {
     const sections = watched(run);
     const to = (await snapshotNow(`run ${run.id} after a shell command`, sections)).commit;
     const others = [...working.values()].filter(r => r !== run).flatMap(r => (r.scope?.length ? r.scope : ['/']));
-    const undone = [];
+    const undone = [],
+      wrote = [];
     for (const c of await computeChanges(from, to, { unseen: true })) {
-      if (inScope(run.scope, c.path)) {
-        if ('hunks' in c)
-          noteLines(
-            run,
-            c.path,
-            c.hunks.map(h => h.add.join('\n')),
-          );
-      } else if (!sections && !inScope(others, c.path)) {
+      if (!inScope(run.scope, c.path) && !sections && !inScope(others, c.path)) {
         if ((await blobAt(from, c.path)) === null) fs.rmSync(path.join(ROOT, c.path), { force: true });
         else await restoreFrom(from, [c.path]);
         undone.push(c.path);
+        continue;
       }
+      // What it changed in its own section is the run's write, taken out on its revert (writes.mjs); none of its
+      // lines is the agent's, a command being no edit step (lines.mjs). In another session's section it may be that
+      // session's at the same moment: left to it.
+      if (inScope(run.scope, c.path))
+        wrote.push({
+          start: began.at,
+          at: Date.now(),
+          file: c.path,
+          from: await blobAt(from, c.path),
+          to: await blobAt(to, c.path),
+        });
+    }
+    if (wrote.length) {
+      (run.wrote ??= []).push(...wrote);
+      saveRun(run);
     }
     if (undone.length) {
       // What the command wrote stays in a snapshot of the run's own, to restore (restorePutBack).

@@ -173,7 +173,8 @@ test('live run, review and revert', async ({ page }) => {
     await page.locator('#followChip').click();
     await page.locator('#followMenu [data-follow="new"]').click();
     await expect(page.locator('#scopeRow .chip.fu')).toHaveCount(0);
-    fs.appendFileSync(path.join(repo, 'shared/allowlist.ts'), '// edited after the run\n');
+    const afterRun2 = fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8');
+    fs.writeFileSync(path.join(repo, 'shared/allowlist.ts'), '// edited after the run\n' + afterRun2);
     // Watch mode records the later edit as a run of its own.
     await expect(page.locator('#sideList [data-run="3"]')).toContainText('Edited allowlist.ts', { timeout: 15_000 });
     // A new run does not take over the run being reviewed.
@@ -185,12 +186,17 @@ test('live run, review and revert', async ({ page }) => {
     await page.locator('#conflictKeep').click();
     await expect(page.locator('#conflictDlg')).toHaveCount(0);
     expect(fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8')).toContain('// edited after the run');
-    // Revert anyway restores the file as it was before the run.
+    // Reverted all the same: run 2's lines come out, and the edit made since stays.
     await page.locator('[data-act="revert"]').click();
+    await expect(page.locator('#conflictDlg')).toContainText(
+      'Run 2’s lines come out of every file it changed. The edits made since stay.',
+    );
     await page.locator('#conflictRevert').click();
     await expect(page.locator(TOAST)).toHaveText('Reverted run 2');
-    expect(fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8')).toBe(SEED['shared/allowlist.ts']);
-    expect(git(repo, 'status', '--porcelain')).toBe('');
+    expect(fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8')).toBe(
+      '// edited after the run\n' + SEED['shared/allowlist.ts'],
+    );
+    expect(git(repo, 'status', '--porcelain')).toBe(' M shared/allowlist.ts\n');
 
     // An edit made outside a run, in any editor, becomes a run once the files are quiet (watch mode).
     fs.writeFileSync(
@@ -987,6 +993,11 @@ test.describe('the app on the published 0.2.0 bridge', () => {
       await expect(page.locator('#sideList [data-run="3"]')).toContainText('Edited allowlist.ts', { timeout: 15_000 });
       await page.locator('[data-act="revert"]').click();
       await expect(page.locator('#conflictFiles')).toContainText('shared/allowlist.ts');
+      // This bridge puts whole files back: the dialog says so, as it always did.
+      await expect(page.locator('#conflictDlg')).toContainText(
+        'Reverting run 2 puts these files back as they were before it, and the edits made since are lost.',
+      );
+      await expect(page.locator('#conflictKeep')).toHaveText('Keep my later edits');
       await expect(page.locator('#conflictRevert')).toHaveText('Revert');
       await page.locator('#conflictRevert').click();
       await expect(page.locator(TOAST)).toHaveText('Reverted run 2');
@@ -1676,7 +1687,7 @@ test('bridge keeps deny rules, records raw agent output, and keeps secret files 
     expect(fs.existsSync(path.join(repo, '.loa', 'bridge.mjs'))).toBe(true);
     await runToEnd(b, { agent: 'claude', prompt: 'Name the action and origin', scope: ['shared/'], resumeFrom: null });
     const raw = fs.readFileSync(path.join(repo, '.loa/runs/1.stream.jsonl'), 'utf8').trim().split('\n');
-    expect(raw.map(l => (JSON.parse(l) as { type: string }).type)).toEqual(['system', 'assistant', 'result']);
+    expect(raw.map(l => (JSON.parse(l) as { type: string }).type)).toEqual(['system', 'assistant', 'user', 'result']);
     expect(fs.existsSync(path.join(repo, '.loa/runs/1.stderr.log'))).toBe(true);
     for (const which of ['before', 'after']) {
       const files = git(repo, 'ls-tree', '-r', '--name-only', `refs/loa/runs/1/${which}`);
@@ -1845,6 +1856,8 @@ test('attribution exports to git notes on the last commit, only when asked', asy
     await page.locator('#prompt').fill('Name the action and origin in allowlist errors');
     await page.locator('#prompt').press('Enter');
     await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
+    // Ended, its lines worked out, before it is committed by hand.
+    await expect(page.locator('#sideList [data-run="1"]')).not.toContainText('Working', { timeout: 15_000 });
     git(repo, 'add', '-A');
     git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'the run');
     const head = git(repo, 'rev-parse', 'HEAD').trim();
@@ -2423,7 +2436,8 @@ test.describe('sessions at once', () => {
         await until(b, c.id, 'done');
         const run = await runOf(b, c.id);
         expect(run.changes.map(ch => ch.path)).toEqual(['shared/log.ts']);
-        expect(run.agentLines).toEqual({ 'shared/log.ts': [[1, 1]] });
+        // The run's change, but no line of it the agent's: a command is no edit step.
+        expect(run.agentLines).toEqual({});
         // Outside its section: undone at once, and the agent told why.
         expect(fs.existsSync(path.join(repo, 'notes.md'))).toBe(false);
         expect(run.summary).toContain('notes.md: League of Agents scope lock: a shell command changed notes.md');
@@ -2479,7 +2493,7 @@ test.describe('sessions at once', () => {
   );
 
   onMac(
-    "in the sandbox, Claude Code's shell commands write in its section, credited line for line, and nowhere else",
+    "in the sandbox, Claude Code's shell commands write in its section, credited to no agent, and nowhere else",
     () =>
       twoSessions(async (b, repo) => {
         const prompt = 'Log it. shell:shared/log.ts shell:notes.md shell:apps/console/main.ts';
@@ -2488,7 +2502,7 @@ test.describe('sessions at once', () => {
         await until(b, c.id, 'done');
         const run = await runOf(b, c.id);
         expect(run.changes.map(ch => ch.path)).toEqual(['shared/log.ts']);
-        expect(run.agentLines).toEqual({ 'shared/log.ts': [[1, 1]] });
+        expect(run.agentLines).toEqual({});
         // Refused by the system: never written, so nothing to put back.
         expect(run.summary).toContain('notes.md: EPERM');
         expect(run.summary).toContain('apps/console/main.ts: EPERM');
@@ -6597,10 +6611,12 @@ test.describe('two agents, one checkout', () => {
       await until(b, a.id, 'done');
       expect(paths(await runOf(b, a.id))).toEqual(['a/tax.mjs']);
       expect((await state(b)).runs.map(r => r.agent)).toEqual(['claude', 'cursor', 'cursor']);
-      // Now that both have ended it can be chosen: back to the file as Claude Code's session found it.
+      // Now that both have ended it can be chosen. Only Claude Code's lines would come out, but its rewrite of the
+      // whole file touches Cursor's line: the file stays as it is, and the revert says so.
       const chosen = await call(b, `/api/runs/${a.id}/revert`, { shared: ['a/tax.mjs'] });
-      expect([chosen.status, chosen.body]).toEqual([200, { ok: true }]);
-      expect(read(repo, 'a/tax.mjs')).toBe(seed);
+      expect([chosen.status, chosen.body]).toEqual([200, { ok: true, left: ['a/tax.mjs'] }]);
+      expect(read(repo, 'a/tax.mjs')).toBe(both2);
+      expect(seed).not.toBe(both2);
     }));
 
   test('a shared file a revert left is no leftover when a third session ends later', () =>
@@ -6739,7 +6755,7 @@ test.describe('two agents, one checkout', () => {
         await expect(dlg.locator('#revertFiles li')).toHaveText([
           'a/discount.mjs',
           'b/cart.mjs',
-          `a/tax.mjsShared with run 1Ticked, it goes back as run ${d.id} found it. What the other session changed in it since is lost.`,
+          'a/tax.mjsShared with run 1Ticked, only this run’s lines come out.',
         ]);
         const tick = dlg.locator('[data-include="a/tax.mjs"]');
         await expect(tick).not.toBeChecked();
@@ -6752,8 +6768,8 @@ test.describe('two agents, one checkout', () => {
         await expect(revert).toBeFocused();
         expect(read(repo, 'b/cart.mjs')).not.toBe(cart);
         // The shared file changes again, by hand. Ticked, the revert meets a conflict, and what was chosen is still
-        // chosen when the person reverts all the same: the shared file goes back as run 3 found it.
-        fs.appendFileSync(path.join(repo, 'a/tax.mjs'), '// by hand, later\n');
+        // chosen when the person reverts all the same: run 3's line comes out, and the line by hand stays.
+        fs.writeFileSync(path.join(repo, 'a/tax.mjs'), '// by hand, later\n' + read(repo, 'a/tax.mjs'));
         await revert.click();
         await expect(tick).not.toBeChecked();
         await tick.check();
@@ -6763,7 +6779,7 @@ test.describe('two agents, one checkout', () => {
         await expect(page.locator('#conflictRevert')).toHaveText('Revert');
         await page.locator('#conflictRevert').click();
         await expect(page.locator(TOAST)).toHaveText(`Reverted run ${d.id}`);
-        expect(read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+        expect(read(repo, 'a/tax.mjs')).toBe('// by hand, later\n// written by a session\n');
         expect(read(repo, 'b/cart.mjs')).toBe(cart);
         expect(read(repo, 'a/discount.mjs')).toBe(discount);
         expect(both2).toContain('// edited by cursor');

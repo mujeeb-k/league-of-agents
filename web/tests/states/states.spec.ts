@@ -337,7 +337,7 @@ for (const theme of ['light', 'dark'] as const)
       await page.locator('[data-act="revert"]').click();
       await expect(page.locator('#conflictDlg')).toBeVisible();
       for (const [name, at] of [
-        ['Conflict: Keep my later edits', '#conflictKeep'],
+        ['Conflict: Cancel', '#conflictKeep'],
         ['Conflict: Revert', '#conflictRevert'],
       ] as const)
         rows.set(name, await live(page, page.locator(at)));

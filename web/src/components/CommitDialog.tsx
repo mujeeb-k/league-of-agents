@@ -112,7 +112,9 @@ export function CommitDialog() {
                             ? t('Run {id} is still working. Choose once it ends.', { id: busy })
                             : later
                               ? t('Changed since this run ended, so it can’t go in with it.')
-                              : t('Ticked, the whole file goes in, the other session’s lines too.')}
+                              : !c.whole || c.whole.includes(f)
+                                ? t('Ticked, the whole file goes in, the other session’s lines too.')
+                                : t('Ticked, only this run’s lines go in.')}
                         </span>
                       </span>
                     </label>

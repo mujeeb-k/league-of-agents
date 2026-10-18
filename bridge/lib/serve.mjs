@@ -10,6 +10,7 @@ import { stopSessions } from './sessions.mjs';
 import { copyForHooks, installHooks, removeHooks } from './hooks-install.mjs';
 import { working, loadRuns, pruneRuns, finishRun, interruptLeftover } from './runs.mjs';
 import { watch } from './watch.mjs';
+import { restoreHeld } from './commit.mjs';
 import { emit } from './events.mjs';
 import { createBridgeServer, firstFreePort, listening } from './server.mjs';
 
@@ -32,6 +33,8 @@ export async function serve(hooks) {
   else removeHooks();
   loadRuns();
   pruneRuns();
+  // A commit cut short leaves files held at its version: put back before anything reads the tree.
+  await restoreHeld();
   // Watch mode starts once events can be sent: it says so if it can't start.
   await watch();
   await interruptLeftover();

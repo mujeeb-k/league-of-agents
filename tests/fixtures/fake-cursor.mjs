@@ -6,7 +6,8 @@
 // shellToolCall, which that run didn't make and Cursor's docs don't show: its shape here is assumed.
 //
 // The prompt steers it, one step after another: "read:<path>", "edit:<path>" (appends a line to the file, as an
-// edit tool would), "exec:[<command>]" (runs it and says what it printed), "wait:<name>" (holds the turn until the
+// edit tool would), "insert:<path>:<line>:<name>" (an edit with the result Cursor 2026.10.16 gives),
+// "exec:[<command>]" (runs it and says what it printed), "wait:<name>" (holds the turn until the
 // file .loa/go-<name> exists, so a test can keep two sessions at work at once). With none of them it edits
 // shared/log.ts. Appends its arguments to $FAKE_CURSOR_ARGS.
 import { spawnSync } from 'node:child_process';
@@ -95,7 +96,7 @@ const wait = async name => {
   while (!fs.existsSync(`.loa/go-${name}`)) await new Promise(r => setTimeout(r, 50));
 };
 
-const steps = [...prompt.matchAll(/\b(read|edit|exec|wait):(\[[^\]]*\]|\S+)/g)].map(m => [
+const steps = [...prompt.matchAll(/\b(read|edit|insert|exec|wait):(\[[^\]]*\]|\S+)/g)].map(m => [
   m[1],
   m[2].replace(/^\[|\]$/g, ''),
 ]);
@@ -109,16 +110,37 @@ for (const [what, arg] of steps) {
       return { content, isEmpty: !content, exceededLimit: false, totalLines: content.split('\n').length };
     });
   else if (what === 'edit') {
+    const line = `// edited by cursor in ${session_id}`;
     const write = () => {
       fs.mkdirSync(path.dirname(arg), { recursive: true });
-      fs.appendFileSync(arg, `// edited by cursor in ${session_id}\n`);
+      fs.appendFileSync(arg, `${line}\n`);
     };
     // With FAKE_CURSOR_WRITES_FIRST the file changes before the call is announced, as it may for a reader that
     // hears of a call only after it was made.
     if (process.env.FAKE_CURSOR_WRITES_FIRST) write();
-    await call('editToolCall', { path: abs(arg), streamContent: '' }, () => {
+    await call('editToolCall', { path: abs(arg), streamContent: line }, () => {
       if (!process.env.FAKE_CURSOR_WRITES_FIRST) write();
       return { path: abs(arg), linesAdded: 1, linesRemoved: 0 };
+    });
+  } else if (what === 'insert') {
+    // "insert:<path>:<line>:<name>": the text of .loa/text-<name> put before that line (0-based). Its result as
+    // Cursor 2026.10.16 gives one: the file before and after, and the lines added and removed (a recorded run's).
+    const [file, at, name] = arg.split(':');
+    const before = fs.readFileSync(file, 'utf8');
+    const lines = before.split('\n');
+    const text = fs.readFileSync(`.loa/text-${name}`, 'utf8');
+    const after = [...lines.slice(0, at), text + lines[at], ...lines.slice(Number(at) + 1)].join('\n');
+    await call('editToolCall', { path: abs(file), streamContent: text + lines[at] }, () => {
+      fs.writeFileSync(file, after);
+      return {
+        path: abs(file),
+        linesAdded: text.split('\n').length - 1,
+        linesRemoved: 0,
+        diffString: '',
+        beforeFullFileContent: before,
+        afterFullFileContent: after,
+        message: `The file ${abs(file)} has been updated.`,
+      };
     });
   } else
     await call('shellToolCall', { command: arg }, () => {

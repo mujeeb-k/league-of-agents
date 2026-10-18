@@ -147,6 +147,40 @@ if (named) {
   });
   process.exit(0);
 }
+// "insert:<path>:<line>:<name>" in the prompt: put the text of .loa/text-<name> before that line (0-based) with the
+// Edit tool, its old_string the line and its new_string the text and the line, as Claude Code's Edit would; and
+// "wait:<name>" among them holds until .loa/go-<name> exists. Done in the order the prompt gives them, so a test can
+// say when each edit lands.
+const inserts = [...prompt.matchAll(/\b(insert|wait):(\S+)/g)].map(m => [m[1], m[2]]);
+if (inserts.some(([what]) => what === 'insert')) {
+  const results = [];
+  for (const [n, [what, arg]] of inserts.entries()) {
+    if (what === 'wait') {
+      while (!fs.existsSync(`.loa/go-${arg}`)) await new Promise(r => setTimeout(r, 50));
+      continue;
+    }
+    const [file, at, name] = arg.split(':');
+    const lines = fs.readFileSync(file, 'utf8').split('\n');
+    const text = fs.readFileSync(`.loa/text-${name}`, 'utf8');
+    const id = `toolu_insert_${n}`;
+    const input = { file_path: `${process.cwd()}/${file}`, old_string: lines[at], new_string: text + lines[at] };
+    out({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Edit', input }] } });
+    const payload = { tool_name: 'Edit', tool_input: input, tool_use_id: id, cwd: process.cwd() };
+    const refused = runHooks('PreToolUse', payload);
+    // The edit lands a moment after it is announced, once its hooks have run.
+    await new Promise(r => setTimeout(r, 150));
+    if (!refused)
+      fs.writeFileSync(file, [...lines.slice(0, at), text + lines[at], ...lines.slice(Number(at) + 1)].join('\n'));
+    const content = refused ? `PreToolUse:Edit hook error: [node .loa/bridge.mjs hook pre]: ${refused}` : 'Done';
+    out({
+      type: 'user',
+      message: { content: [{ type: 'tool_result', tool_use_id: id, is_error: !!refused, content }] },
+    });
+    results.push(`${file}: ${refused ? 'refused' : 'edited'}`);
+  }
+  out({ type: 'result', result: results.join('\n'), session_id: 'sess-123', total_cost_usd: 0.0123 });
+  process.exit(0);
+}
 const shells = [...prompt.matchAll(/\bshell:(\S+)/g)].map(m => m[1]);
 if (shells.length) {
   const results = [];
@@ -188,6 +222,7 @@ out({
       // it writes without an edit tool, as a shell command would: no Edit or Write input names them.
       {
         type: 'tool_use',
+        id: 'toolu_edit',
         name: 'Edit',
         input: {
           file_path: process.cwd() + '/shared/allowlist.ts',
@@ -219,11 +254,24 @@ t = t.replace(
   'throw new Error(`ALLOWLIST_VIOLATION: ${action} on ${origin}`);',
 );
 const edit = { file_path: process.cwd() + '/shared/allowlist.ts' };
-if (
+const edited =
   !held ||
-  !runHooks('PreToolUse', { tool_name: 'Edit', tool_input: edit, tool_use_id: 'toolu_edit', cwd: process.cwd() })
-)
-  fs.writeFileSync('shared/allowlist.ts', t);
+  !runHooks('PreToolUse', { tool_name: 'Edit', tool_input: edit, tool_use_id: 'toolu_edit', cwd: process.cwd() });
+if (edited) fs.writeFileSync('shared/allowlist.ts', t);
+// Its result, as Claude Code sends one for every call.
+out({
+  type: 'user',
+  message: {
+    content: [
+      {
+        type: 'tool_result',
+        tool_use_id: 'toolu_edit',
+        is_error: !edited,
+        content: edited ? 'The file has been updated.' : 'Refused.',
+      },
+    ],
+  },
+});
 t = fs.readFileSync('shared/allowlist.ts', 'utf8');
 byCommand('shared/allowlist.ts', t + '\nexport function isEmpty(p: Policy) {\n  return p.origins.length === 0;\n}\n');
 // Refused in a section's sandbox when the file is outside it: Claude Code carries on, and so does this.

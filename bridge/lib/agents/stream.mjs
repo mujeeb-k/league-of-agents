@@ -2,7 +2,7 @@
 import path from 'node:path';
 import { AGENTS } from './registry.mjs';
 import { claudeLoggedOut } from './claude.mjs';
-import { noteWrites } from './lines.mjs';
+import { noteLines, noteWrites } from './lines.mjs';
 import {
   refusedBySystem,
   refusedWrite,
@@ -70,6 +70,19 @@ const callsOf = run => {
   if (!calls.has(run.id)) calls.set(run.id, new Map());
   return calls.get(run.id);
 };
+/** Each Claude Code tool call's run, name and input, by its id, until its result comes. */
+const inputs = new Map();
+/**
+ * A captured terminal turn keeps only the results that failed (hook.mjs lastTurn): its edit calls with none were
+ * made, and what they put in is noted for its attribution.
+ */
+export function noteUnanswered(run) {
+  for (const [id, c] of inputs)
+    if (c.run === run.id) {
+      noteWrites(run, c.name, c.input);
+      inputs.delete(id);
+    }
+}
 /** A tool call of the agent's, as a step for each file it names (or one with none). */
 function called(run, id, act, tool, files) {
   const made = (files.length ? files : [undefined]).map(file => ({ i: step(run, act, tool, file), act, file }));
@@ -97,9 +110,11 @@ function codexStep(run, type, it) {
 }
 /**
  * A Cursor tool call, started then completed: a line of the run's activity, and a step. A call is named by its kind
- * (readToolCall, editToolCall, grepToolCall) with its args, as a recorded run has them
- * (tests/fixtures/agents/cursor); its docs also allow a `function` with a name. A command it runs wasn't recorded:
- * a kind starting with "shell" is taken for one.
+ * (readToolCall, editToolCall, grepToolCall, shellToolCall) with its args, as recorded runs have them
+ * (tests/fixtures/agents/cursor); its docs also allow a `function` with a name. An edit's result is `success`, with
+ * the file before and after it (Cursor 2026.10.16), or `error` when it wasn't made. The bridge's scope lock refused
+ * it (cursor-refused-edit.jsonl): no edit, and the person is asked, as for Claude Code. Any other error (Cursor's own
+ * "Invalid arguments", seen in a real run), or no result at all: no edit, and nothing to ask.
  */
 function cursorStep(run, m) {
   const [kind, call] = Object.entries(m.tool_call ?? {})[0] ?? [];
@@ -116,8 +131,21 @@ function cursorStep(run, m) {
     const label = toolLabel(name.charAt(0).toUpperCase() + name.slice(1), call?.args ?? {});
     push(run, { t: 'tool', text: label, ...toolSaid(act, file[0], call?.args?.command) });
     called(run, m.call_id, act, name, file);
-  } else if (m.subtype === 'completed' && act === 'edit')
-    for (const c of callsOf(run).get(m.call_id) ?? []) stepDone(run, c.i);
+  } else if (m.subtype === 'completed' && act === 'edit') {
+    const result = call?.result ?? {};
+    for (const c of callsOf(run).get(m.call_id) ?? [])
+      if (/League of Agents scope lock/.test(String(result.error?.error ?? ''))) {
+        stepRefused(run, c.i);
+        if (c.file) blocked(run, c.file);
+      } else if (result.success) {
+        stepDone(run, c.i, {
+          before: result.success.beforeFullFileContent,
+          after: result.success.afterFullFileContent,
+        });
+        // The text it put in, as its call names it: what an edit whose start wasn't seen may be credited with.
+        if (c.file && typeof call.args?.streamContent === 'string') noteLines(run, c.file, [call.args.streamContent]);
+      }
+  }
 }
 /** Said on a run whose hook couldn't run (registry.mjs held): nothing holds it, so it is stopped. */
 const HOOK_FAILED = line(
@@ -152,8 +180,10 @@ export function onAgentLine(run, line) {
         const act = actOf(c.name),
           at = typeof file === 'string' ? repoPath(file) : null;
         push(run, { t: 'tool', text: toolLabel(c.name, c.input), ...toolSaid(act, at, c.input?.command) });
-        noteWrites(run, c.name, c.input);
         called(run, c.id, act, c.name, at ? [at] : []);
+        // Noted once its result says it was made; a call with no id gets no result to wait for.
+        if (c.id) inputs.set(c.id, { run: run.id, name: c.name, input: c.input });
+        else noteWrites(run, c.name, c.input);
       }
     }
   } else if (m.type === 'user' && Array.isArray(m.message?.content)) {
@@ -165,6 +195,10 @@ export function onAgentLine(run, line) {
       // A shell command the sandbox refused a write, failed or not (a command may carry on past it). Not a tool the
       // hook refused: that is no write, and is said as the hook worded it.
       if (call?.act !== 'edit' && sandboxed && refusedBySystem(text)) refusedBySandbox(run, text);
+      // What its edit tool put in counts once its result says it was made (lines.mjs, the fallback).
+      const made = inputs.get(c.tool_use_id);
+      inputs.delete(c.tool_use_id);
+      if (made && !c.is_error) noteWrites(run, made.name, made.input);
       if (call?.act === 'edit' && !c.is_error) stepDone(run, call.i);
       if (!c.is_error) continue;
       // Claude Code refused the call because the hook that holds the session couldn't run (registry.mjs held).
