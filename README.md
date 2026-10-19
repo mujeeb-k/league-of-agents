@@ -19,7 +19,7 @@ It runs on your computer, works with the agents you already use, and is open sou
   - **"Stays inside your selection."** On macOS, Hermes and DeepSeek Harness run inside the system's own sandbox: they, and every program they start, can write only inside your selection and to files the repo ignores (build output, installed packages). What the sandbox allows outside the repo is [listed below](#the-sandbox-on-macos).
   - **"Can change files outside your selection. You'll see each one flagged."** Codex and Cursor, every agent where there's no sandbox (Linux, Windows), and for now Claude Code. On macOS the sandbox already holds Claude Code's commands and a hook holds its file tools ([how](#the-sandbox-on-macos)), but its card keeps this wording until that design has passed a security review. Claude Code's edit tools are still blocked outside your selection, and with the hooks on, what its shell commands change outside it is put back.
 
-  When a session tries to change a file outside your selection, the write is blocked and its card asks: "Wants to change <file>". **Allow** adds the file to its selection and the session carries on where it stopped; **Refuse** keeps the file out. If another session is working on that file, the card says which, and Allow waits until that session ends. The hooks are off until you say yes: the first `npx leagueofagents-cli@latest` in a terminal asks once and remembers, and without a terminal they stay off unless you pass `--hooks`. To check, look for `"hooks": true` in `.loa/bridge.json`.
+  When a session tries to change a file outside your selection, the write is blocked and its card asks: "Wants to change <file>". **Allow** adds the file to its selection and the session carries on where it stopped; **Refuse** keeps the file out. If another session is working on that file, the card says which, and Allow waits until that session ends. The hooks are off until you say yes: the first `npx leagueofagents-cli@latest` in a terminal asks once and remembers, and without a terminal they stay off unless you pass `--hooks`. To check, look for `"hooks": true` in the repo's `bridge.json`, in its folder in `~/.config/league-of-agents/repos/`.
 - **Watch the work.** Each session at work has a marker on the file it's reading or editing, on the map and the minimap, and its edits are drawn as they land. Follow a session to have the map move with it. A run's steps are listed in order; click one to see its file as that step left it.
 - **Edit files yourself.** Double-click a file's code to open it in the editor. Saved edits are recorded and can be undone like any agent run.
 - **Update what depends on a change.** Rename a function, then ask the agent to update every file that uses it. The diff of your change goes into the agent's prompt. The map shows each file it touched.
@@ -120,13 +120,14 @@ If your repo has none set up, League of Agents looks for test and typecheck scri
 
 In your repo:
 
-- `.loa/`: run records, the bridge's port and token, a private snapshot index, a copy of the bridge the hooks run, the map's layout, and a log. It's kept out of git through `.git/info/exclude`, and the bridge won't start in a repo that commits it.
-- Snapshots: git commits under private `refs/loa/` refs, stored in `.git/objects`. They never touch your branch or staging area. The bridge never commits or stages on its own. A commit happens only when you click Commit, and only for that session's files.
+- `.loa/bridge.mjs`: one line that loads the bridge's copy for the Claude Code plugin's hooks. It's kept out of git through `.git/info/exclude`, and the bridge won't start in a repo that commits `.loa/`.
+- Nothing else: snapshots and records are kept outside the repo, in your home folder. The bridge never commits or stages on its own. A commit happens only when you click Commit, and only for that session's files.
 - `loa.config.json`, only if you choose to share your checks with your team.
 
 In your home folder:
 
-- `~/.config/league-of-agents/repos/`: one file per repo with the checks you turned on or approved there. It's outside the repo, so nothing a repo contains can allow its own commands.
+- `~/.config/league-of-agents/repos/`: a folder per repo with its run records, the bridge's port and token, its snapshots, a copy of the bridge the hooks run, the map's layout and a log; and a file per repo with the checks you turned on or approved there. It's outside the repo, so nothing a repo contains can allow its own commands, and no git command run in the repo reaches the records: a reset, `git gc` or `git clean` leaves every run's undo as it was.
+- Snapshots: git commits in a repository of League of Agents' own in that folder, which keeps its own copy of every file a snapshot holds. They never touch your branch, your staging area or your refs.
 
 In agent settings, only after you say yes to the hooks:
 
@@ -143,8 +144,8 @@ To remove it:
 | What | How |
 |---|---|
 | Hooks, in all three files | `npx leagueofagents-cli@latest hooks remove`. A file League of Agents created is deleted; a file you had is put back as it was. |
-| Everything in the repo: hooks, `refs/loa/`, `.loa/` and its lines in `.git/info/exclude`, and the checks you allowed for it | `npx leagueofagents-cli@latest uninstall` |
-| Snapshot objects in `.git/objects` | Unreferenced after `uninstall`. Git prunes them on its own after two weeks, or right away with `git gc --prune=now`. |
+| Everything for the repo: hooks, its folder in `~/.config/league-of-agents/repos/`, `.loa/` and its lines in `.git/info/exclude`, and the checks you allowed for it | `npx leagueofagents-cli@latest uninstall` |
+| Snapshots an earlier version kept in `.git/objects` | Unreferenced after `uninstall`. Git prunes them on its own after two weeks, or right away with `git gc --prune=now`. |
 | `loa.config.json` | Delete it, if you created it. |
 | What your browser keeps | Click Disconnect, or clear the site's data for leagueofagents.dev. |
 
@@ -187,10 +188,10 @@ Every session by Claude Code, Hermes or DeepSeek Harness is held by macOS's sand
 What a command can do inside the sandbox:
 
 - **Writes inside the repo, on a selection:** only your selection and files the repo ignores. A lockfile outside the selection that `npm install` would change is refused too, so select the folder that holds the package.
-- **Writes inside the repo, on the whole repository:** any file, including git's own, so the agent can commit. Never git's settings (`.git/config`) or its hooks. Such a session can rewrite git history: it can move or delete branches, tags and commits. It can also delete the objects git stores, the snapshots' among them, and the run can then no longer be undone. The session's card says "Can change any file in this repo. Can't touch the rest of your computer."
+- **Writes inside the repo, on the whole repository:** any file, including git's own, so the agent can commit. Never git's settings (`.git/config`) or its hooks. Such a session can rewrite git history: it can move or delete branches, tags and commits. The snapshots are kept outside the repo, so whatever it does to git, its run can still be undone. The session's card says "Can change any file in this repo. Can't touch the rest of your computer."
 - **Writes outside the repo:** only temp folders and caches (`~/.cache`, `~/Library/Caches`, `~/.npm`), and for Hermes and DeepSeek Harness their own folders (`~/.hermes`, `~/.dsh`).
 - **Reads:** nothing in your home folder except the repo, those caches, git's settings (`~/.gitconfig`, `~/.config/git`), the programs it runs (Node, the agent's own install, and the folders on your `PATH`), and for Hermes and DeepSeek Harness their own folders. Your SSH keys, keychains, browser profiles, Claude Code's own folder (`~/.claude`) and other repos in your home folder can't be read. When a command is refused a path, the session's card names it.
-- **Never written, even inside those:** the bridge's token (`.loa/bridge.json` and its log, which can't be read either), the bridge's own code, your git settings and your repo's git hooks, the bridge's approved checks (`~/.config/league-of-agents`), and the agents' settings and hook files (Claude Code's `settings.json` and `settings.local.json`, Codex's `config.toml` and `hooks.json`, Cursor's `hooks.json`, Hermes's `config.yaml` and `hooks/`). The folders that hold them, and your repo's, can't be moved or replaced.
+- **Never written, even inside those:** League of Agents' own folder (`~/.config/league-of-agents`: the runs, the snapshots and the bridge's token, which can't be read either, and the checks you approved), the bridge's own code, your git settings and your repo's git hooks, and the agents' settings and hook files (Claude Code's `settings.json` and `settings.local.json`, Codex's `config.toml` and `hooks.json`, Cursor's `hooks.json`, Hermes's `config.yaml` and `hooks/`). The folders that hold them, and your repo's, can't be moved or replaced.
 - **Commands run without asking, network included.** The sandbox limits files, not the network: a session can send what it can read, your repo included, anywhere. Use agents and prompts you trust.
 - **Files the repo ignores stay writable,** such as installed packages in `node_modules`. What later runs them, such as your checks, a git hook or a dev server, runs what the session wrote, outside the sandbox.
 - **Folders outside your home folder** (other disks, `/opt`, `/usr/local`) can be read as any program of yours can.
@@ -215,7 +216,7 @@ League of Agents never uploads your code anywhere. Your code goes only to the ag
 
 **Keep secrets in files git ignores.** A file git ignores is never in a snapshot: that is the protection, so a secret belongs in `.gitignore`. As a safety net, not a guarantee, snapshots also leave out any file not yet committed with one of these names, in any folder and whatever the case of its letters: `.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.kdbx`, `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `.npmrc`, `.pypirc`, `.netrc`, `.git-credentials`, `.htpasswd`, `credentials.json`, `secrets.json`, `secrets.yaml`, `secrets.yml`, `service-account*.json`, `*.tfvars`. A secret under any other name, in a file git doesn't ignore, is snapshotted like any file. A file already committed is in your repo's history, and snapshots include it.
 
-Snapshots stay on your computer unless you send them: `git push`, `git push --all` and `git push --tags` never include `refs/loa/`, but `git push --mirror` sends every ref, `refs/loa/` included, and so does copying the `.git` folder. Run `uninstall` first if you mirror a repo.
+Snapshots stay on your computer: they are in no ref of your repo, so no push sends them, `git push --mirror` included, and neither does copying the `.git` folder.
 
 ## Limits
 
@@ -223,7 +224,7 @@ Snapshots stay on your computer unless you send them: `git push`, `git push --al
 - Remote machines, SSH and dev containers aren't supported. League of Agents must run on the same computer as your browser.
 - A map shows up to 5,000 code files, and the first 400 lines of each on its card; a file opens in full, before, after and diff. In a larger repository you pick a folder to map, and can change it at any time. Files over 16 MB aren't on the map.
 - Non-code files, such as images, are in snapshots and undo, but not on the map.
-- Files git ignores and new files that usually hold secrets are never in a snapshot and never make a run on their own. An agent's own activity is different: what it reads, prints or edits is kept in `.loa/runs/` on your computer, so if an agent opens a secret file, its content can be there. `uninstall` removes it.
+- Files git ignores and new files that usually hold secrets are never in a snapshot and never make a run on their own. An agent's own activity is different: what it reads, prints or edits is kept in its runs, in `~/.config/league-of-agents/repos/` on your computer, so if an agent opens a secret file, its content can be there. `uninstall` removes it.
 - Inside a session, agents run commands without asking, network included, and a session can send the repo's contents out over the network. On macOS the sandbox limits which files a session reads and writes ([the list](#the-sandbox-on-macos)); it does not limit the network. Runs on Linux and Windows, Codex and Cursor everywhere, and Claude Code older than 2.1.295 are not sandboxed.
 - In a Claude Code session the sandbox holds (macOS, Claude Code 2.1.295 or later), tools added through MCP are refused.
 - In a session on a selection, an editable install (`pip install -e .`) is refused: it writes an `egg-info` folder at the top of the repo, outside the selection. Without the lock, Claude Code's own permission check refuses install commands altogether.

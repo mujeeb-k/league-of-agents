@@ -6,8 +6,8 @@ League of Agents runs a small local server, the bridge, inside a git repo on you
 - Read every file in the repo it was started in, and show it on the map.
 - Write files there: saving an edit from the editor, and reverting a run.
 - Start the agent CLIs installed on this machine (Claude Code, Codex) inside the repo, with the prompt and scope you give.
-- Snapshot the working tree into private `refs/loa/` refs. It never commits to your branch, moves HEAD or touches staging.
-- With your consent, add hooks to Claude Code's and Codex's settings in the repo and to your own `~/.cursor/hooks.json`. Each hook runs `.loa/bridge.mjs` when you send a prompt.
+- Snapshot the working tree into a git repository of its own, in `~/.config/league-of-agents/repos/`, outside the repo. It never commits to your branch, moves HEAD, touches staging or adds refs to your repo.
+- With your consent, add hooks to Claude Code's and Codex's settings in the repo and to your own `~/.cursor/hooks.json`. Each hook runs the bridge's copy in League of Agents' folder for the repo when you send a prompt.
 
 Whoever can call its API can do all of this, so the API is the thing to protect.
 
@@ -18,7 +18,7 @@ Whoever can call its API can do all of this, so the API is the thing to protect.
 
 ## What protects it
 - **Three credentials, each for one job.**
-  - **The bridge's token:** 24 random characters, new on every start, kept in `.loa/bridge.json`. The command line and the hooks use it. It is never in a link and never printed.
+  - **The bridge's token:** 24 random characters, new on every start, kept in `bridge.json` in League of Agents' folder for the repo. The command line and the hooks use it. It is never in a link and never printed.
   - **A link's code:** each link the bridge or `status` prints ends in `#t=` and a code that works once. The fragment is never sent to a server, and the app takes it out of the address bar as it loads. A link left in browser history, terminal scrollback or the bridge's log opens nothing once used, and unused codes die with the bridge.
   - **A browser's session token:** the page exchanges the code for a token of its own, kept in that browser's storage for that origin, so a reload or a second tab reconnects. It is sent only in the `Authorization` header, never in a URL. It can't ask for new links.
   All three end when the bridge stops.
@@ -26,16 +26,16 @@ Whoever can call its API can do all of this, so the API is the thing to protect.
 - **The Origin header.** A browser always says which site a script runs on. Only these may call the API: the app the bridge serves itself, and the hosted app it links to (`https://leagueofagents.dev`, or what `--web` sets; a preview deployment only when the bridge is started with `--web <its address>`). With `--local`, only the app the bridge serves. Every other site gets 403 before the token is read, preflight requests included. CORS headers go only to those sites.
 - **No form or image tricks.** A request a page makes with no Origin (an image, a link, a form) carries `Sec-Fetch-Site: cross-site`, and gets 403 on the API.
 - **Wrong tokens.** A wrong token, or a link code that isn't one, is answered more slowly each time: 100 ms, doubling up to 5 s. The right token is never slowed or refused because of them, so a program on this machine that sends wrong ones can't lock you out. The token is far too long to guess.
-- **The token's folder is private.** `.loa/`, where `bridge.json` keeps the token and the bridge's log keeps the links it printed, is set to be readable by your account only (0700) at every start, so other accounts on the machine can't read it.
+- **The token's folder is private.** League of Agents' folder for the repo, where `bridge.json` keeps the token and the bridge's log keeps the links it printed, is set to be readable by your account only (0700) at every start, so other accounts on the machine can't read it.
 - **A cloned repo's commands don't run by themselves.** Checks committed in a repo's `loa.config.json` run only after you approve that exact list, and wait for you again whenever it changes. Your approvals are kept in your home folder, outside the repo, and the bridge won't start in a repo that commits `.loa/`, so a repo can't approve its own checks or hand the bridge runs or settings. Agents come only from your own settings too: an added Agent Client Protocol harness is listed in `~/.config/league-of-agents/agents.json`, never in a repo, so a repo can't name a command for the bridge to start.
 - **No secrets in snapshots.** Untracked files with names that usually hold secrets (`.env`, `.env.*`, keys, credentials; the full list is in the README, under Privacy and security) never enter a snapshot.
 
 ## What League of Agents doesn't defend against
-- **Anything already running as you.** A program running under your account can read `.loa/bridge.json` (the token), your agent settings and the repo itself. The bridge can't protect against it, and neither can any local tool.
-- **A changed `.loa/bridge.mjs`.** The hooks run this file on every prompt, and Cursor's run it for every workspace. Anyone who can write to the repo's `.loa/` folder can run code when you send a prompt. It has your user's permissions, like the repo's own scripts.
+- **Anything already running as you.** A program running under your account can read `bridge.json` (the token), your agent settings and the repo itself. The bridge can't protect against it, and neither can any local tool.
+- **A changed copy of the bridge.** The hooks run it on every prompt (the copy in League of Agents' folder, and for the Claude Code plugin the one line in the repo's `.loa/bridge.mjs` that loads it), and Cursor's run theirs for every workspace. Anyone who can write to those can run code when you send a prompt. It has your user's permissions, like the repo's own scripts.
 - **What the agent does.** Agents run with their own permissions. The scope lock blocks Claude Code's edits outside the scope while a run is live. For other agents it only reports them afterwards. Review each run before keeping it.
 - **A trusted site that is compromised.** If leagueofagents.dev or a deployment of this project served harmful code, that code could call your bridge while it runs with your token in the page.
-- **Shared machines.** Other people's accounts on the same machine can reach `127.0.0.1`. They still need the token, and `.loa/` is closed to them. Your repository's own files are as open to them as your folder permissions make them.
+- **Shared machines.** Other people's accounts on the same machine can reach `127.0.0.1`. They still need the token, and League of Agents' folder is closed to them. Your repository's own files are as open to them as your folder permissions make them.
 
 ## Reporting a problem
 See `SECURITY.md`.
