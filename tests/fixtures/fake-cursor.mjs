@@ -80,7 +80,9 @@ async function call(kind, callArgs, work) {
     });
   const startedAtMs = String(now());
   event('started', { [kind]: { args: callArgs }, hookAdditionalContexts: [], toolCallId: id, startedAtMs });
-  if (kind === 'editToolCall') await new Promise(r => setTimeout(r, 150));
+  // An edit lands a while after its call is announced, as Cursor's do: long enough that a bridge under load hears
+  // the call first.
+  if (kind === 'editToolCall') await new Promise(r => setTimeout(r, 500));
   const success = work();
   event('completed', {
     [kind]: { args: callArgs, result: { success } },
