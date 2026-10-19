@@ -19,7 +19,7 @@ import { stepsOf } from '../lib/live';
 import { money } from '../lib/util';
 import { notifying, toggleNotifying } from '../state/notices';
 import { cn } from '@/lib/utils';
-import { BetaTag, CheckBadge, commandBlockedText, containedText, Dot, FilePath, Stat, Tip } from './bits';
+import { BetaTag, CheckBadge, commandBlockedText, Dot, FilePath, Stat, Tip } from './bits';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { FileIcon } from './FileIcon';
 import { Button } from './ui/button';
@@ -246,9 +246,6 @@ function RunRow({ r }: { r: Run }) {
         </div>
         {running && r.scope?.length && r.stays !== undefined ? (
           <p className="reach mt-1 text-xs text-muted-foreground text-pretty">{reachOf(r.stays, !!r.asks)}</p>
-        ) : null}
-        {running && !r.scope?.length && r.contained ? (
-          <p className="reach mt-1 text-xs text-muted-foreground text-pretty">{containedText()}</p>
         ) : null}
         {running ? <Asks r={r} /> : null}
         {r.blockedPaths?.map(p => (

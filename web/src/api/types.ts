@@ -50,8 +50,6 @@ export interface AgentInfo {
   stays?: boolean;
   /** On a section, not kept inside, but its edits outside are asked first (Cursor with the hooks in). */
   asks?: boolean;
-  /** On the whole repository, whether the system keeps it inside the repo (bridges from 0.2.0). */
-  contained?: boolean;
 }
 
 /**
@@ -153,8 +151,6 @@ export interface RunDTO {
   stays?: boolean;
   /** On a section: its edits outside asked first, as AgentInfo.asks said when it started. */
   asks?: boolean;
-  /** A run on the whole repository the system keeps inside the repo (macOS's sandbox; bridges from 0.2.0). */
-  contained?: boolean;
   /** A shell command of it tried to write outside its section, and the sandbox refused. */
   commandBlocked?: boolean;
   /** Paths outside the repo a command or tool of the session tried to open and the sandbox refused, ~ for home. */

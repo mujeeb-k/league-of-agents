@@ -571,8 +571,6 @@ const catalogue: Catalogue = {
   'Tried to open {path}. Blocked.': '试图打开 {path}。已阻止。',
   'Checking…': '正在检查…',
   '{agent} is still being checked. Try again in a moment.': '仍在检查 {agent}。请稍后重试。',
-  "Can change any file in this repo. Can't touch the rest of your computer.":
-    '可以改动这个仓库中的任何文件。无法触碰你电脑上的其他内容。',
   'A command tried to write a protected file or outside this repo. Blocked.':
     '有命令试图写入受保护的文件或这个仓库之外。已阻止。',
   'Changed outside every section while others worked: {files}': '其他会话工作期间，在所有分区之外改动：{files}',

@@ -138,7 +138,6 @@ export interface Run {
   stays?: boolean;
   /** On a section: its edits outside asked first. */
   asks?: boolean;
-  contained?: boolean;
   /** A shell command of it tried to write outside its section, and the sandbox refused. */
   commandBlocked?: boolean;
   blockedPaths?: string[];

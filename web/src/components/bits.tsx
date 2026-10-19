@@ -172,9 +172,6 @@ export const commandBlockedText = (scoped: boolean) =>
     ? t('A command tried to write outside your selection. Blocked.')
     : t('A command tried to write a protected file or outside this repo. Blocked.');
 
-/** Where a session on the whole repository can change files, when the system keeps it inside the repo. */
-export const containedText = () => t("Can change any file in this repo. Can't touch the rest of your computer.");
-
 /** A tooltip naming what a control does and its shortcut. */
 export function Tip({ label, keys, children }: { label: string; keys?: string; children: React.ReactElement }) {
   return (

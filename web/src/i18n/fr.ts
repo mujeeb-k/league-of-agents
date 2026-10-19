@@ -614,8 +614,6 @@ const catalogue: Catalogue = {
   'Checking…': 'Vérification…',
   '{agent} is still being checked. Try again in a moment.':
     '{agent} est encore en cours de vérification. Réessayez dans un instant.',
-  "Can change any file in this repo. Can't touch the rest of your computer.":
-    'Peut modifier n’importe quel fichier de ce dépôt. Ne peut pas toucher au reste de votre ordinateur.',
   'A command tried to write a protected file or outside this repo. Blocked.':
     'Une commande a essayé d’écrire dans un fichier protégé ou en dehors de ce dépôt. Bloqué.',
   'Changed outside every section while others worked: {files}':
