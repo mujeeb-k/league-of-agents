@@ -1807,60 +1807,28 @@ test("colored by author: agent lines marked, a command's said so, and a line sho
   }
 });
 
-// What git records, read only, for lines no kept run wrote: a Git AI note (Git AI Standard v3.0.0, written here
-// by hand to its spec) gives lines to an agent session or a person; a Co-authored-by trailer naming an agent covers
-// a whole commit, so its lines are only mixed.
-test('colored by author: Git AI notes and co-author trailers label lines no run wrote', async ({ page }) => {
+// What git records, read only, for lines no kept run wrote: a Co-authored-by trailer naming an agent covers a whole
+// commit, so its lines are only mixed.
+test('colored by author: co-author trailers label lines no run wrote', async ({ page }) => {
   const repo = makeRepo();
   const commit = (msg: string) =>
     git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', msg);
-  fs.writeFileSync(
-    path.join(repo, 'shared/noted.ts'),
-    'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n',
-  );
-  git(repo, 'add', '-A');
-  commit('noted');
-  const note = [
-    'shared/noted.ts',
-    '  s_0123456789abcd::t_0123456789abcd 1-2',
-    '  h_0123456789abcd 3',
-    '---',
-    JSON.stringify({
-      schema_version: 'authorship/3.0.0',
-      base_commit_sha: git(repo, 'rev-parse', 'HEAD').trim(),
-      prompts: {},
-      sessions: { s_0123456789abcd: { agent_id: { tool: 'cursor', id: 'conv-1', model: 'gpt-5' } } },
-      humans: { h_0123456789abcd: { author: 'Ana <ana@example.test>' } },
-    }),
-  ].join('\n');
-  git(repo, 'notes', '--ref=ai', 'add', '-m', note, 'HEAD');
   fs.writeFileSync(path.join(repo, 'shared/paired.ts'), 'export const d = 4;\n');
   git(repo, 'add', '-A');
   commit('paired\n\nCo-authored-by: Claude <noreply@anthropic.com>');
   const b = await startBridge(repo, FAKE_CLAUDE, {}, ['--no-hooks']);
   try {
-    const lines = (await call(b, '/api/authors?path=shared/noted.ts')).body.lines as {
+    const lines = (await call(b, '/api/authors?path=shared/paired.ts')).body.lines as {
       author: string;
       source?: string;
     }[];
-    expect(lines.map(l => `${l.author}/${l.source}`)).toEqual(['agent/git-ai', 'agent/git-ai', 'human/git-ai']);
+    expect(lines.map(l => `${l.author}/${l.source}`)).toEqual(['mixed/trailer']);
     await page.goto(linkFor(b));
     await expect(page.locator('#conn')).toHaveText('Live');
     await page.keyboard.press('c');
-    const open = async (q: string) => {
-      await page.keyboard.press('ControlOrMeta+p');
-      await page.keyboard.type(q);
-      await page.keyboard.press('Enter');
-    };
-    await open('noted.ts');
-    const noted = page.locator('.card[data-path="shared/noted.ts"]');
-    await expect(noted.locator('.ln.au-agent')).toHaveCount(2);
-    await expect(noted.locator('.ln.au-human')).toHaveCount(1);
-    await noted.locator('.ln.au-human').click();
-    await expect(page.locator('#authorLine')).toContainText('says Ana <ana@example.test> wrote it.');
-    await noted.locator('.ln.au-agent').first().click();
-    await expect(page.locator('#authorLine')).toContainText('says an agent wrote it: cursor · gpt-5.');
-    await open('paired.ts');
+    await page.keyboard.press('ControlOrMeta+p');
+    await page.keyboard.type('paired.ts');
+    await page.keyboard.press('Enter');
     const paired = page.locator('.card[data-path="shared/paired.ts"]');
     await expect(paired.locator('.ln.au-mixed')).toHaveCount(1);
     await paired.locator('.ln.au-mixed').click();
@@ -1868,87 +1836,7 @@ test('colored by author: Git AI notes and co-author trailers label lines no run 
       'names an agent as co-author (Claude <noreply@anthropic.com>)',
     );
     // Read only: no note or ref was written.
-    expect(git(repo, 'for-each-ref', 'refs/notes/').trim().split('\n')).toHaveLength(1);
-  } finally {
-    b.stop();
-    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
-  }
-});
-
-// Exported only on a click, after a dialog that says where it goes: an Agent Trace record (spec 0.1.0) in
-// refs/notes/agent-trace, and a Git AI log (Git AI Standard v3.0.0) in refs/notes/ai, never over one already there.
-test('attribution exports to git notes on the last commit, only when asked', async ({ page }) => {
-  const repo = makeRepo(),
-    b = await startBridge(repo, FAKE_CLAUDE, {}, ['--no-hooks']);
-  try {
-    await page.goto(linkFor(b));
-    await expect(page.locator('#conn')).toHaveText('Live');
-    await page.locator('#prompt').fill('Name the action and origin in allowlist errors');
-    await page.locator('#prompt').press('Enter');
-    await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
-    // Ended, its lines worked out, before it is committed by hand.
-    await expect(page.locator('#sideList [data-run="1"]')).not.toContainText('Working', { timeout: 15_000 });
-    git(repo, 'add', '-A');
-    git(repo, '-c', 'user.name=t', '-c', 'user.email=t@example.test', 'commit', '-qm', 'the run');
-    const head = git(repo, 'rev-parse', 'HEAD').trim();
-    const lines = fs.readFileSync(path.join(repo, 'shared/allowlist.ts'), 'utf8').split('\n');
-    const line = lines.findIndex(l => l.includes('${action}')) + 1;
-    // The isEmpty its command appended, from the blank line before it: the session's too.
-    const from = lines.findIndex(l => l.includes('isEmpty')),
-      to = from + 3;
     expect(git(repo, 'for-each-ref', 'refs/notes/')).toBe('');
-    const exportAs = async (name: string) => {
-      await page.keyboard.press('ControlOrMeta+k');
-      await page.keyboard.type(name);
-      await page.keyboard.press('Enter');
-      await expect(page.locator('#exportDlg')).toContainText('Write attribution to a git note?');
-      await page.locator('#exportWrite').click();
-    };
-    await exportAs('as Agent Trace');
-    await expect(page.locator(TOAST)).toContainText(`to refs/notes/agent-trace on ${head.slice(0, 8)}`);
-    const trace = JSON.parse(git(repo, 'notes', '--ref=agent-trace', 'show', 'HEAD')) as {
-      version: string;
-      vcs: { type: string; revision: string };
-      files: {
-        path: string;
-        conversations: {
-          contributor: { type: string; model_id?: string };
-          ranges: { start_line: number; end_line: number }[];
-        }[];
-      }[];
-    };
-    expect(trace.version).toBe('0.1.0');
-    expect(trace.vcs).toEqual({ type: 'git', revision: head });
-    const ai = trace.files
-      .find(f => f.path === 'shared/allowlist.ts')!
-      .conversations.find(c => c.contributor.type === 'ai')!;
-    expect(ai.contributor.model_id).toBe('anthropic/claude-sonnet-5-5');
-    expect(ai.ranges).toEqual([
-      { start_line: line, end_line: line },
-      { start_line: from, end_line: to },
-    ]);
-    expect(git(repo, 'notes', '--ref=agent-trace', 'show', 'HEAD')).not.toContain('Name the action');
-    await exportAs('as a Git AI note');
-    await expect(page.locator(TOAST)).toContainText(`to refs/notes/ai on ${head.slice(0, 8)}`);
-    const [attest, meta] = git(repo, 'notes', '--ref=ai', 'show', 'HEAD').split('\n---\n');
-    expect(attest!.split('\n')[0]).toBe('shared/allowlist.ts');
-    expect(attest!.split('\n')[1]).toMatch(new RegExp(`^  s_[0-9a-f]{14}::t_[0-9a-f]{14} ${line},${from}-${to}$`));
-    const m = JSON.parse(meta!) as {
-      schema_version: string;
-      base_commit_sha: string;
-      sessions: Record<string, { agent_id: unknown }>;
-    };
-    expect(m.schema_version).toBe('authorship/3.0.0');
-    expect(m.base_commit_sha).toBe(head);
-    expect(Object.values(m.sessions)[0]!.agent_id).toEqual({
-      tool: 'claude',
-      id: 'sess-123',
-      model: 'claude-sonnet-5-5',
-    });
-    // Never over a Git AI log already there.
-    await exportAs('as a Git AI note');
-    await expect(page.locator(TOAST)).toContainText('already has a Git AI note');
-    expect(git(repo, 'log', '--oneline', '-1', 'HEAD').trim()).toContain('the run');
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });

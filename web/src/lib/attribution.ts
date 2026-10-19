@@ -23,8 +23,8 @@ export interface Owner {
   how?: 'command';
   /** For a shared line: the runs that wrote the file at once, 0 for the person. */
   with?: number[];
-  /** For a line no kept run wrote: what git records about it (a Git AI note, or a co-author trailer). */
-  source?: 'git-ai' | 'trailer';
+  /** For a line no kept run wrote: what git records about it (a co-author trailer). */
+  source?: 'trailer';
   by?: string;
   commit?: string;
 }
@@ -170,21 +170,4 @@ export function shareOf(owners: Owner[]): Record<Author, number> {
   const n: Record<Author, number> = { agent: 0, human: 0, mixed: 0, shared: 0, unknown: 0 };
   for (const o of owners) n[o.author]++;
   return n;
-}
-
-/** A file's lines as runs of the same author and run, 1-based, for writing to a git note (bridge exportAttribution). */
-export interface AuthorRange {
-  start: number;
-  end: number;
-  author: Author;
-  run: number | null;
-}
-export function rangesOf(owners: Owner[]): AuthorRange[] {
-  const out: AuthorRange[] = [];
-  owners.forEach((o, i) => {
-    const last = out.at(-1);
-    if (last && last.author === o.author && last.run === o.run && last.end === i) last.end = i + 1;
-    else out.push({ start: i + 1, end: i + 1, author: o.author, run: o.run });
-  });
-  return out;
 }

@@ -25,10 +25,6 @@ const catalogue: Catalogue = {
   'That run no longer exists on the bridge.': 'Esa ejecución ya no existe en el puente.',
   "The bridge couldn't do that. Try again, or restart the bridge if it keeps happening.":
     'El puente no pudo hacerlo. Inténtalo de nuevo o reinicia el puente si sigue pasando.',
-  'Wrote attribution for {n} files to {ref} on {commit}': {
-    one: 'Autoría de {n} archivo escrita en {ref} en {commit}',
-    other: 'Autoría de {n} archivos escrita en {ref} en {commit}',
-  },
   'Connected to {repo}': 'Conectado a {repo}',
   'Lost the bridge connection. Showing the last state.':
     'Se perdió la conexión con el puente. Se muestra el último estado.',
@@ -119,14 +115,6 @@ const catalogue: Catalogue = {
   'Saving now would replace these lines with yours:': 'Guardar ahora reemplazaría estas líneas por las tuyas:',
   'Use the file on disk': 'Usar el archivo del disco',
   'Save mine anyway': 'Guardar el mío de todos modos',
-  "Who wrote each line, for files unchanged since the last commit, as an Agent Trace record, in {ref} on that commit. Your branch and staging area aren't touched, and no prompt is written.":
-    'Quién escribió cada línea, en los archivos sin cambios desde el último commit, como un registro Agent Trace, en {ref} en ese commit. Tu rama y el área de staging no se tocan, y no se escribe ningún prompt.',
-  "Who wrote each line, for files unchanged since the last commit, as a Git AI authorship log with the lines agents wrote, in {ref} on that commit. Your branch and staging area aren't touched, and no prompt is written.":
-    'Quién escribió cada línea, en los archivos sin cambios desde el último commit, como un registro de autoría de Git AI con las líneas que escribieron agentes, en {ref} en ese commit. Tu rama y el área de staging no se tocan, y no se escribe ningún prompt.',
-  'Write attribution to a git note?': '¿Escribir la autoría en una nota de git?',
-  "Git doesn't fetch or push notes unless you name them, and doesn't carry them through a rebase or an amend unless notes.rewriteRef is set.":
-    'Git no trae ni envía notas a menos que las nombres, y no las conserva en un rebase o un amend a menos que notes.rewriteRef esté definido.',
-  'Write the note': 'Escribir la nota',
   'Show all': 'Mostrar todo',
   'Working…': 'Trabajando…',
   'No reply recorded.': 'No se registró ninguna respuesta.',
@@ -188,13 +176,6 @@ const catalogue: Catalogue = {
   Mixed: 'Mixto',
   Shared: 'Compartida',
   Unknown: 'Desconocido',
-  "Git AI's note on commit {commit} says {who} wrote it.":
-    'La nota de Git AI en el commit {commit} dice que la escribió {who}.',
-  'a person': 'una persona',
-  "Git AI's note on commit {commit} says an agent wrote it: {who}.":
-    'La nota de Git AI en el commit {commit} dice que la escribió un agente: {who}.',
-  "Git AI's note on commit {commit} says an agent wrote it.":
-    'La nota de Git AI en el commit {commit} dice que la escribió un agente.',
   "Commit {commit} names an agent as co-author ({who}). It covers the whole commit, not lines, so this line is at most partly the agent's.":
     'El commit {commit} nombra a un agente como coautor ({who}). Eso abarca todo el commit, no líneas, así que esta línea es como mucho en parte del agente.',
   '{agent} wrote it by a command.': '{agent} lo escribió con un comando.',
@@ -285,8 +266,6 @@ const catalogue: Catalogue = {
   'Color by author': 'Colorear por autor',
   'Keep run': 'Conservar la ejecución',
   'Close run': 'Cerrar la ejecución',
-  'Write attribution for the last commit as Agent Trace': 'Escribir la autoría del último commit como Agent Trace',
-  'Write attribution for the last commit as a Git AI note': 'Escribir la autoría del último commit como nota de Git AI',
   'Open run {id}: {title}': 'Abrir la ejecución {id}: {title}',
   'Show or hide the sidebar': 'Mostrar u ocultar la barra lateral',
   'Show or hide the inspector': 'Mostrar u ocultar el inspector',
@@ -416,7 +395,6 @@ const catalogue: Catalogue = {
   'League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized.':
     'League of Agents nunca sube tu código a ningún sitio. Tu código va solo al agente que autorizaste.',
   Language: 'Idioma',
-  Attribution: 'Autoría',
   Panels: 'Paneles',
   Theme: 'Tema',
   Bridge: 'Puente',
@@ -463,13 +441,6 @@ const catalogue: Catalogue = {
   'Wait for the run to finish': 'Espera a que termine la ejecución',
   'A run is in progress. Remove the hooks once it finishes.':
     'Hay una ejecución en curso. Quita los hooks cuando termine.',
-  'There is no commit yet.': 'Todavía no hay ningún commit.',
-  'No file as the last commit has it has lines from a kept run.':
-    'Ningún archivo, tal como está en el último commit, tiene líneas de una ejecución conservada.',
-  'This commit already has a Git AI note; League of Agents never writes over it.':
-    'Este commit ya tiene una nota de Git AI; League of Agents nunca la sobrescribe.',
-  'No line from a kept run was written by an agent.':
-    'Ninguna línea de una ejecución conservada fue escrita por un agente.',
   'A map of your repo for Claude Code, Codex, Cursor, Hermes and DeepSeek Harness. Select files or lines, give your agent a task, then review its changes.':
     'Un mapa de tu repositorio para Claude Code, Codex, Cursor, Hermes y DeepSeek Harness. Selecciona archivos o líneas, dale una tarea a tu agente y revisa sus cambios.',
   "A map of a repository with an agent's changes marked.":

@@ -1,7 +1,6 @@
 // Live connection to the local bridge.
 import { applyView, flyFile, flyRun, openingView, personMoves } from '../lib/camera';
 import { buildModel, specFromPaths } from '../lib/model';
-import { authorsOf, rangesOf } from '../lib/attribution';
 import { carryRenames, type SavedLayout } from '../lib/layout';
 import { renamesOf } from '../lib/renames';
 import { bridgeNames } from '../lib/constants';
@@ -248,31 +247,6 @@ export async function mapFolder(root: string) {
   } finally {
     st.busy = null;
     renderAll();
-  }
-}
-
-/** Writes who wrote each line to a git note on the last commit, once the person has said yes (ExportDialog). */
-export async function exportAttribution(format: 'agent-trace' | 'git-ai') {
-  const c = S.CONN;
-  if (!c) return;
-  await ensureDetails();
-  const now = new Map([...S.FILES.values()].filter(f => !f.gone).map(f => [f.path, f.base]));
-  const files = Object.fromEntries([...authorsOf(S.RUNS, now, S.RECORDED)].map(([p, o]) => [p, rangesOf(o)]));
-  try {
-    const r = await bridge.exportAttribution(c, format, files);
-    toast(
-      tn(
-        r.files,
-        'Wrote attribution for {n} file to {ref} on {commit}',
-        'Wrote attribution for {n} files to {ref} on {commit}',
-        {
-          ref: r.ref,
-          commit: r.commit.slice(0, 8),
-        },
-      ),
-    );
-  } catch (e) {
-    toast(explain(e));
   }
 }
 

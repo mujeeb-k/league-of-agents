@@ -595,15 +595,6 @@ const authorName = (a: Author) =>
 function authorText(o: Owner, run: Run | null): string {
   const { author } = o,
     who = run ? agentOf(run.agent).name : '';
-  if (o.source === 'git-ai')
-    return author === 'human'
-      ? t("Git AI's note on commit {commit} says {who} wrote it.", {
-          commit: o.commit ?? '',
-          who: o.by || t('a person'),
-        })
-      : o.by
-        ? t("Git AI's note on commit {commit} says an agent wrote it: {who}.", { commit: o.commit ?? '', who: o.by })
-        : t("Git AI's note on commit {commit} says an agent wrote it.", { commit: o.commit ?? '' });
   if (o.source === 'trailer')
     return t(
       "Commit {commit} names an agent as co-author ({who}). It covers the whole commit, not lines, so this line is at most partly the agent's.",

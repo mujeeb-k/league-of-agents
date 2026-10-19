@@ -24,9 +24,6 @@ const catalogue: Catalogue = {
   'That run no longer exists on the bridge.': '桥接程序上已不存在该运行。',
   "The bridge couldn't do that. Try again, or restart the bridge if it keeps happening.":
     '桥接程序无法完成此操作。请重试；如果一直这样，请重启桥接程序。',
-  'Wrote attribution for {n} files to {ref} on {commit}': {
-    other: '已将 {n} 个文件的作者信息写入 {commit} 上的 {ref}',
-  },
   'Connected to {repo}': '已连接到 {repo}',
   'Lost the bridge connection. Showing the last state.': '与桥接程序的连接已断开。显示最后的状态。',
   Reconnected: '已重新连接',
@@ -111,14 +108,6 @@ const catalogue: Catalogue = {
   'Saving now would replace these lines with yours:': '现在保存会用你的内容替换这些行：',
   'Use the file on disk': '使用磁盘上的文件',
   'Save mine anyway': '仍然保存我的',
-  "Who wrote each line, for files unchanged since the last commit, as an Agent Trace record, in {ref} on that commit. Your branch and staging area aren't touched, and no prompt is written.":
-    '以 Agent Trace 记录的形式，写下自上次提交以来未改动的文件中每一行的作者，写入该提交上的 {ref}。不会触碰你的分支和暂存区，也不会写入任何提示词。',
-  "Who wrote each line, for files unchanged since the last commit, as a Git AI authorship log with the lines agents wrote, in {ref} on that commit. Your branch and staging area aren't touched, and no prompt is written.":
-    '以 Git AI 作者日志的形式（包含代理写的行），写下自上次提交以来未改动的文件中每一行的作者，写入该提交上的 {ref}。不会触碰你的分支和暂存区，也不会写入任何提示词。',
-  'Write attribution to a git note?': '把作者信息写入 git note？',
-  "Git doesn't fetch or push notes unless you name them, and doesn't carry them through a rebase or an amend unless notes.rewriteRef is set.":
-    '除非你指明，git 不会拉取或推送 notes；除非设置了 notes.rewriteRef，rebase 或 amend 时也不会保留它们。',
-  'Write the note': '写入 note',
   'Show all': '显示全部',
   'Working…': '进行中…',
   'No reply recorded.': '没有记录到回复。',
@@ -174,11 +163,6 @@ const catalogue: Catalogue = {
   Mixed: '混合',
   Shared: '共享',
   Unknown: '未知',
-  "Git AI's note on commit {commit} says {who} wrote it.": '提交 {commit} 上的 Git AI note 说是 {who} 写的。',
-  'a person': '某个人',
-  "Git AI's note on commit {commit} says an agent wrote it: {who}.":
-    '提交 {commit} 上的 Git AI note 说是一个代理写的：{who}。',
-  "Git AI's note on commit {commit} says an agent wrote it.": '提交 {commit} 上的 Git AI note 说是一个代理写的。',
   "Commit {commit} names an agent as co-author ({who}). It covers the whole commit, not lines, so this line is at most partly the agent's.":
     '提交 {commit} 把一个代理列为共同作者（{who}）。这适用于整个提交而非具体的行，所以这一行最多只部分属于该代理。',
   '{agent} wrote it by a command.': '{agent} 通过命令写的。',
@@ -264,8 +248,6 @@ const catalogue: Catalogue = {
   'Color by author': '按作者着色',
   'Keep run': '保留运行',
   'Close run': '关闭运行',
-  'Write attribution for the last commit as Agent Trace': '把上次提交的作者信息写成 Agent Trace',
-  'Write attribution for the last commit as a Git AI note': '把上次提交的作者信息写成 Git AI note',
   'Open run {id}: {title}': '打开运行 {id}：{title}',
   'Show or hide the sidebar': '显示或隐藏侧边栏',
   'Show or hide the inspector': '显示或隐藏检查器',
@@ -383,7 +365,6 @@ const catalogue: Catalogue = {
   'League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized.':
     'League of Agents 从不把你的代码上传到任何地方。你的代码只会交给你授权的代理。',
   Language: '语言',
-  Attribution: '作者信息',
   Panels: '面板',
   Theme: '主题',
   Bridge: '桥接程序',
@@ -429,12 +410,6 @@ const catalogue: Catalogue = {
     '{agent} 未登录。请运行 claude auth login，然后重试。',
   'Wait for the run to finish': '请等待运行结束',
   'A run is in progress. Remove the hooks once it finishes.': '有运行正在进行。等它结束后再移除 hooks。',
-  'There is no commit yet.': '还没有任何提交。',
-  'No file as the last commit has it has lines from a kept run.':
-    '按上次提交中的版本，没有任何文件含有已保留运行写的行。',
-  'This commit already has a Git AI note; League of Agents never writes over it.':
-    '此提交已有 Git AI note；League of Agents 从不覆盖它。',
-  'No line from a kept run was written by an agent.': '已保留运行中的行没有一行是代理写的。',
   'A map of your repo for Claude Code, Codex, Cursor, Hermes and DeepSeek Harness. Select files or lines, give your agent a task, then review its changes.':
     '你的代码仓库的地图，适用于 Claude Code、Codex、Cursor、Hermes 和 DeepSeek Harness。选择文件或代码行，给代理一个任务，然后审查它的改动。',
   "A map of a repository with an agent's changes marked.": '一个代码仓库的地图，标出了代理的改动。',

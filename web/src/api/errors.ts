@@ -37,10 +37,6 @@ export const BY_CODE: Record<string, string> = {
   answered: 'That was already answered.',
   'wait-for-run': 'Wait for the run to finish',
   'hooks-run-active': 'A run is in progress. Remove the hooks once it finishes.',
-  'no-commit': 'There is no commit yet.',
-  'no-kept-lines': 'No file as the last commit has it has lines from a kept run.',
-  'note-exists': 'This commit already has a Git AI note; League of Agents never writes over it.',
-  'no-agent-lines': 'No line from a kept run was written by an agent.',
 };
 
 export function explain(e: unknown): string {

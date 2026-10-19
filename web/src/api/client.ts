@@ -15,7 +15,6 @@ import type {
   StateResponse,
   StepDTO,
 } from './types';
-import type { AuthorRange } from '../lib/attribution';
 import type { SavedLayout } from '../lib/layout';
 
 export class BridgeError extends Error {
@@ -105,11 +104,6 @@ export const bridge = {
     request<{ files: { path: string; total: number; lines: string[] }[] }>(c, '/api/heads', {
       method: 'POST',
       body: { paths },
-    }),
-  exportAttribution: (c: Conn, format: string, files: Record<string, AuthorRange[]>) =>
-    request<{ ref: string; commit: string; files: number }>(c, '/api/attribution/export', {
-      method: 'POST',
-      body: { format, files },
     }),
   authors: (c: Conn, path: string) =>
     request<{ lines: RecordedLine[] }>(c, `/api/authors?path=${encodeURIComponent(path)}`),

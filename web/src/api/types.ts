@@ -181,8 +181,8 @@ export interface TurnSummary {
 export interface RecordedLine {
   text: string;
   author: 'agent' | 'human' | 'mixed' | 'unknown';
-  /** A Git AI note on the commit, or a Co-authored-by trailer naming an agent. */
-  source?: 'git-ai' | 'trailer';
+  /** A Co-authored-by trailer naming an agent. */
+  source?: 'trailer';
   /** The agent and model, the person, or the co-author named. */
   by?: string;
   commit: string;

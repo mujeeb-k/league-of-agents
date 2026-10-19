@@ -3,7 +3,6 @@ import { CommitDialog } from './components/CommitDialog';
 import { MapPicker } from './components/MapPicker';
 import { ConflictDialog } from './components/ConflictDialog';
 import { RevertDialog } from './components/RevertDialog';
-import { ExportDialog } from './components/ExportDialog';
 import { ConnectDialog } from './components/ConnectDialog';
 import { IconSprite } from './components/FileIcon';
 import { Inspector } from './components/Inspector';
@@ -34,7 +33,6 @@ export function App() {
       <RevertDialog />
       <CommitDialog />
       <MapPicker />
-      <ExportDialog />
       <Palette />
       <Toasts />
     </TooltipProvider>

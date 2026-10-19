@@ -25,10 +25,6 @@ const catalogue: Catalogue = {
   'That run no longer exists on the bridge.': 'Cette exécution n’existe plus sur le pont.',
   "The bridge couldn't do that. Try again, or restart the bridge if it keeps happening.":
     'Le pont n’a pas pu le faire. Réessayez, ou redémarrez le pont si cela se répète.',
-  'Wrote attribution for {n} files to {ref} on {commit}': {
-    one: 'Attribution de {n} fichier écrite dans {ref} sur {commit}',
-    other: 'Attribution de {n} fichiers écrite dans {ref} sur {commit}',
-  },
   'Connected to {repo}': 'Connecté à {repo}',
   'Lost the bridge connection. Showing the last state.': 'Connexion au pont perdue. Dernier état affiché.',
   Reconnected: 'Reconnecté',
@@ -117,14 +113,6 @@ const catalogue: Catalogue = {
   'Saving now would replace these lines with yours:': 'Enregistrer maintenant remplacerait ces lignes par les vôtres :',
   'Use the file on disk': 'Utiliser le fichier sur le disque',
   'Save mine anyway': 'Enregistrer le mien quand même',
-  "Who wrote each line, for files unchanged since the last commit, as an Agent Trace record, in {ref} on that commit. Your branch and staging area aren't touched, and no prompt is written.":
-    'Qui a écrit chaque ligne, pour les fichiers inchangés depuis le dernier commit, sous forme d’enregistrement Agent Trace, dans {ref} sur ce commit. Votre branche et la zone de préparation ne sont pas touchées, et aucun prompt n’est écrit.',
-  "Who wrote each line, for files unchanged since the last commit, as a Git AI authorship log with the lines agents wrote, in {ref} on that commit. Your branch and staging area aren't touched, and no prompt is written.":
-    'Qui a écrit chaque ligne, pour les fichiers inchangés depuis le dernier commit, sous forme de journal d’auteurs Git AI avec les lignes écrites par des agents, dans {ref} sur ce commit. Votre branche et la zone de préparation ne sont pas touchées, et aucun prompt n’est écrit.',
-  'Write attribution to a git note?': 'Écrire l’attribution dans une note git ?',
-  "Git doesn't fetch or push notes unless you name them, and doesn't carry them through a rebase or an amend unless notes.rewriteRef is set.":
-    'Git ne récupère ni ne pousse les notes sans que vous les nommiez, et ne les conserve pas lors d’un rebase ou d’un amend sauf si notes.rewriteRef est défini.',
-  'Write the note': 'Écrire la note',
   'Show all': 'Tout afficher',
   'Working…': 'En cours…',
   'No reply recorded.': 'Aucune réponse enregistrée.',
@@ -188,13 +176,6 @@ const catalogue: Catalogue = {
   Mixed: 'Mixte',
   Shared: 'Partagée',
   Unknown: 'Inconnu',
-  "Git AI's note on commit {commit} says {who} wrote it.":
-    'La note Git AI du commit {commit} indique que {who} l’a écrite.',
-  'a person': 'une personne',
-  "Git AI's note on commit {commit} says an agent wrote it: {who}.":
-    'La note Git AI du commit {commit} indique qu’un agent l’a écrite : {who}.',
-  "Git AI's note on commit {commit} says an agent wrote it.":
-    'La note Git AI du commit {commit} indique qu’un agent l’a écrite.',
   "Commit {commit} names an agent as co-author ({who}). It covers the whole commit, not lines, so this line is at most partly the agent's.":
     'Le commit {commit} nomme un agent comme co-auteur ({who}). Cela vaut pour tout le commit, pas pour des lignes, donc cette ligne est au plus en partie celle de l’agent.',
   '{agent} wrote it by a command.': '{agent} l’a écrit avec une commande.',
@@ -285,8 +266,6 @@ const catalogue: Catalogue = {
   'Color by author': 'Colorer par auteur',
   'Keep run': 'Garder l’exécution',
   'Close run': 'Fermer l’exécution',
-  'Write attribution for the last commit as Agent Trace': 'Écrire l’attribution du dernier commit en Agent Trace',
-  'Write attribution for the last commit as a Git AI note': 'Écrire l’attribution du dernier commit en note Git AI',
   'Open run {id}: {title}': 'Ouvrir l’exécution {id} : {title}',
   'Show or hide the sidebar': 'Afficher ou masquer la barre latérale',
   'Show or hide the inspector': 'Afficher ou masquer l’inspecteur',
@@ -415,7 +394,6 @@ const catalogue: Catalogue = {
   'League of Agents never uploads your code anywhere. Your code goes only to the agent you authorized.':
     'League of Agents n’envoie jamais votre code nulle part. Votre code va seulement à l’agent que vous avez autorisé.',
   Language: 'Langue',
-  Attribution: 'Attribution',
   Panels: 'Panneaux',
   Theme: 'Thème',
   Bridge: 'Pont',
@@ -462,13 +440,6 @@ const catalogue: Catalogue = {
   'Wait for the run to finish': 'Attends la fin de l’exécution',
   'A run is in progress. Remove the hooks once it finishes.':
     'Une exécution est en cours. Retire les hooks une fois qu’elle est terminée.',
-  'There is no commit yet.': 'Il n’y a encore aucun commit.',
-  'No file as the last commit has it has lines from a kept run.':
-    'Aucun fichier, tel que le dernier commit le contient, n’a de lignes d’une exécution conservée.',
-  'This commit already has a Git AI note; League of Agents never writes over it.':
-    'Ce commit a déjà une note Git AI ; League of Agents ne l’écrase jamais.',
-  'No line from a kept run was written by an agent.':
-    'Aucune ligne d’une exécution conservée n’a été écrite par un agent.',
   'A map of your repo for Claude Code, Codex, Cursor, Hermes and DeepSeek Harness. Select files or lines, give your agent a task, then review its changes.':
     'Une carte de votre dépôt pour Claude Code, Codex, Cursor, Hermes et DeepSeek Harness. Sélectionnez des fichiers ou des lignes, confiez une tâche à votre agent, puis relisez ses changements.',
   "A map of a repository with an agent's changes marked.":

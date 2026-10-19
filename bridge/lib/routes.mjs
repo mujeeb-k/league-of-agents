@@ -22,7 +22,7 @@ import { noteUnanswered, onAgentLine } from './agents/stream.mjs';
 import { editHookInstalled, removeHooks } from './hooks-install.mjs';
 import { codeFiles, folders, inFolder, mapMax, readTree, hashOf, repoFile, treeEntry } from './files.mjs';
 import { showAt } from './snapshots.mjs';
-import { recordedAuthors, exportAttribution } from './authorship.mjs';
+import { recordedAuthors } from './authorship.mjs';
 import { runs, working, saveRun, publicRun, fullRun, beginRun, finishRun, push, revertRun } from './runs.mjs';
 import { armIdle, capturedRun, ownWrite, writeConfig, watchOff } from './watch.mjs';
 import { seq, events, waiters, emit, emitRun } from './events.mjs';
@@ -387,17 +387,7 @@ async function runFileBefore({ params, url }) {
 }
 
 /**
- * Writes attribution to a git note on HEAD, only when the person asks (exportAttribution).
- * @param {Request} request
- * @returns {Promise<Reply>}
- */
-async function exportNote({ body }) {
-  const b = await body();
-  const r = await exportAttribution(b.format === 'git-ai' ? 'git-ai' : 'agent-trace', b.files);
-  return [r.error ? 409 : 200, r];
-}
-/**
- * Authorship git records for a file at HEAD: Git AI notes and co-author trailers (recordedAuthors).
+ * Authorship git records for a file at HEAD: co-author trailers (recordedAuthors).
  * @param {Request} request
  * @returns {Promise<Reply>}
  */
@@ -586,7 +576,6 @@ export const ROUTES = [
   ['GET', /^\/api\/runs\/(\d+)\/steps\/(\d+)$/, stepFile],
   ['GET', /^\/api\/runs\/(\d+)\/commit$/, commitInfo],
   ['POST', /^\/api\/runs\/(\d+)\/commit$/, commit],
-  ['POST', '/api/attribution/export', exportNote],
   ['GET', '/api/authors', authors],
   ['GET', '/api/layout', getLayout],
   ['POST', '/api/layout', saveLayout],
