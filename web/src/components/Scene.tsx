@@ -186,8 +186,8 @@ function ZoneAsk({ run, w }: { run: number; w: Want }) {
   const held = !w.ask && !!holderOf(r, w.path);
   return (
     <span className="zask" {...(w.ask ? { 'data-ask': w.ask } : { 'data-want': w.path })}>
-      <span className="said" title={wantSaid(r, w)}>
-        {wantSaid(r, w)}
+      <span className="said" title={wantSaid(r, w, false)}>
+        {wantSaid(r, w, false)}
       </span>
       <span className="acts">
         <button

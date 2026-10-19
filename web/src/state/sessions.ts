@@ -33,12 +33,19 @@ export const lockChoice = (scope: string[]) =>
 /** The writes a session at work asked to make outside its section, not yet answered. */
 export const asking = (r: Run) => (r.status === 'running' ? (r.wants ?? []).filter(w => !w.answer) : []);
 /**
- * What a session asks, in a line, with which session asks it, wherever it is shown: a file to change, a command to
- * run, or a tool to use.
+ * What a session asks, in a line: a file to change, a command to run, or a tool to use. With which session asks it,
+ * on its card and in a notice; on the map, under the label that already names the session, without (`named` false).
  */
-export const wantSaid = (r: Run, w: Want) => {
+export const wantSaid = (r: Run, w: Want, named = true) => {
   const who = { agent: agentOf(r.agent).name, id: r.id };
-  return !w.ask || (w.path && w.tool !== 'Bash')
+  const change = !w.ask || (w.path && w.tool !== 'Bash');
+  if (!named)
+    return change
+      ? t('Wants to change {file}', { file: w.path })
+      : w.tool === 'Bash'
+        ? t('Wants to run {command}', { command: w.said ?? '' })
+        : t('Wants to use {tool}', { tool: w.tool ?? '' });
+  return change
     ? t('{agent} in run {id} wants to change {file}', { ...who, file: w.path })
     : w.tool === 'Bash'
       ? t('{agent} in run {id} wants to run {command}', { ...who, command: w.said ?? '' })

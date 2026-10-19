@@ -635,5 +635,8 @@ const catalogue: Catalogue = {
   '{agent} in run {id} wants to change {file}': '{agent} na execução {id} quer mudar {file}',
   '{agent} in run {id} wants to run {command}': '{agent} na execução {id} quer executar {command}',
   '{agent} in run {id} wants to use {tool}': '{agent} na execução {id} quer usar {tool}',
+  'Wants to change {file}': 'Quer mudar {file}',
+  'Wants to run {command}': 'Quer executar {command}',
+  'Wants to use {tool}': 'Quer usar {tool}',
 };
 export default catalogue;

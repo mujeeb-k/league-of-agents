@@ -5836,7 +5836,7 @@ test('what a session asks is on the map and in the run as on its card, Allow and
       .body as unknown as RunDTO;
     // On the map, on the session's label; and in the run, which a phone shows below the map, in view.
     await expect(page.locator(`#sels .zone[data-run="${id}"] [data-ask]`)).toContainText(
-      `Claude Code in run ${id} wants to run printf asked > asked.txt`,
+      'Wants to run printf asked > asked.txt',
       { timeout: 15_000 },
     );
     const ask = page.locator('#insp [data-ask]');
