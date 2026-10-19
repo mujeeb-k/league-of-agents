@@ -43,7 +43,7 @@ npx leagueofagents-cli@latest
 What happens next:
 
 1. League of Agents starts in the background and opens your repo as a map in your browser.
-2. In Chrome, Edge, Brave and Arc, it opens on leagueofagents.dev. The browser asks once to let the site reach your computer: choose Allow. In Safari and Firefox, it opens the local app, which needs no permission.
+2. In Chrome, it opens on leagueofagents.dev. Chrome asks once to let the site reach your computer: choose Allow.
 3. Select a file, describe a change, and press Enter.
 
 <details>
@@ -60,8 +60,8 @@ What happens next:
 
 ### Requirements
 
-- macOS. Linux passes the full test suite, but hasn't been tried with a real agent yet. Windows isn't supported yet.
-- git. On a Mac, this comes with Apple's command line developer tools: `xcode-select --install`. On Linux, from your package manager.
+- macOS and Chrome. Other browsers, Linux and Windows aren't supported yet.
+- git, which comes with Apple's command line developer tools: `xcode-select --install`.
 - Node 20 or later
 - A git repository
 - One agent installed and logged in, to run agents from the map: see [Set up an agent](#set-up-an-agent). Without one, changes from any editor still show up.
@@ -223,7 +223,7 @@ Snapshots stay on your computer: they are in no ref of your repo, so no push sen
 
 ## Limits
 
-- macOS. Linux passes the full test suite in CI, but hasn't been tried with a real agent yet; there, it opens the local app. Windows isn't supported yet.
+- macOS and Chrome only, for now. Other browsers, Linux and Windows aren't supported yet.
 - Remote machines, SSH and dev containers aren't supported. League of Agents must run on the same computer as your browser.
 - A map shows up to 5,000 code files, and the first 400 lines of each on its card; a file opens in full, before, after and diff. In a larger repository you pick a folder to map, and can change it at any time. Files over 16 MB aren't on the map.
 - Non-code files, such as images, are in snapshots and undo, but not on the map.
@@ -235,7 +235,6 @@ Snapshots stay on your computer: they are in no ref of your repo, so no push sen
 - Runs on sections that don't overlap work at the same time; a run on the whole repository works alone.
 - Shell commands. Hermes runs them without asking, except ones it judges dangerous, which League of Agents refuses. On macOS, on a section, both Hermes and DeepSeek Harness run inside the section's sandbox, so no command can write outside it; DeepSeek Harness then runs in its full-access mode, since its own sandbox can't start inside another. Elsewhere DeepSeek Harness runs them read-only, so a command that writes is refused. What a command changes inside the section is flagged as not made by the agent's edit tools while other sessions work, since only edit tools name the files they change. Revert undoes it.
 - It keeps the newest 500 runs, and every run from the last 30 days. Older runs are deleted, with their snapshots.
-- The website needs Chrome, Edge, Brave or Arc. Safari and Firefox use the local app instead.
 
 ## Commands and options
 

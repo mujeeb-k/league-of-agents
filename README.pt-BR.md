@@ -48,7 +48,7 @@ npx leagueofagents-cli@latest
 O que acontece em seguida:
 
 1. League of Agents inicia em segundo plano e abre seu repositório como um mapa no navegador.
-2. No Chrome, Edge, Brave e Arc, ele abre em leagueofagents.dev. O navegador pede uma vez para deixar o site alcançar seu computador: escolha Permitir. No Safari e no Firefox, ele abre o app local, que não precisa de permissão.
+2. No Chrome, ele abre em leagueofagents.dev. O Chrome pede uma vez para deixar o site alcançar seu computador: escolha Permitir.
 3. Selecione um arquivo, descreva uma mudança e pressione Enter.
 
 <details>
@@ -65,8 +65,8 @@ O que acontece em seguida:
 
 ### Requisitos
 
-- macOS. O Linux passa em toda a suíte de testes, mas ainda não foi experimentado com um agente de verdade. O Windows ainda não é suportado.
-- git. No Mac, ele vem com as ferramentas de linha de comando para desenvolvedores da Apple: `xcode-select --install`. No Linux, pelo seu gerenciador de pacotes.
+- macOS e Chrome. Outros navegadores, o Linux e o Windows ainda não são suportados.
+- git, que vem com as ferramentas de linha de comando para desenvolvedores da Apple: `xcode-select --install`.
 - Node 20 ou mais recente
 - Um repositório git
 - Um agente instalado e com login feito, para rodar agentes a partir do mapa: veja [Configurar um agente](#configurar-um-agente). Sem nenhum, mudanças de qualquer editor continuam aparecendo.
@@ -230,7 +230,7 @@ Os snapshots ficam no seu computador: eles não estão em nenhuma ref do seu rep
 
 ## Limites
 
-- macOS. O Linux passa em toda a suíte de testes na CI, mas ainda não foi experimentado com um agente de verdade; nele, o app local é aberto. O Windows ainda não é suportado.
+- Só macOS e Chrome, por enquanto. Outros navegadores, o Linux e o Windows ainda não são suportados.
 - Máquinas remotas, SSH e dev containers não são suportados. O League of Agents precisa rodar no mesmo computador que o seu navegador.
 - Um mapa mostra até 5.000 arquivos de código, e as primeiras 400 linhas de cada um no cartão dele; um arquivo abre por inteiro, em antes, depois e diff. Em um repositório maior, você escolhe uma pasta para mapear, e pode trocá-la a qualquer momento. Arquivos com mais de 16 MB não aparecem no mapa.
 - Arquivos que não são de código, como imagens, entram nos snapshots e no desfazer, mas não aparecem no mapa.
@@ -242,7 +242,6 @@ Os snapshots ficam no seu computador: eles não estão em nenhuma ref do seu rep
 - Execuções em seções que não se sobrepõem trabalham ao mesmo tempo; uma execução no repositório inteiro trabalha sozinha.
 - Comandos de shell. O Hermes os roda sem perguntar, exceto os que considera perigosos, que o League of Agents recusa. No macOS, em uma seção, tanto o Hermes quanto o DeepSeek Harness rodam dentro do sandbox da seção, então nenhum comando pode gravar fora dela; o DeepSeek Harness roda então no modo de acesso total, já que o sandbox dele não consegue iniciar dentro de outro. Nos outros casos, o DeepSeek Harness os roda em modo somente leitura, então um comando que grava é recusado. O que um comando muda dentro da seção é sinalizado como não feito pelas ferramentas de edição do agente enquanto outras sessões trabalham, já que só as ferramentas de edição informam os arquivos que mudam. Reverter desfaz isso.
 - Ele guarda as 500 execuções mais recentes, e todas as execuções dos últimos 30 dias. Execuções mais antigas são apagadas, junto com seus snapshots.
-- O site precisa do Chrome, Edge, Brave ou Arc. O Safari e o Firefox usam o app local.
 
 ## Comandos e opções
 

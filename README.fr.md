@@ -48,7 +48,7 @@ npx leagueofagents-cli@latest
 Ensuite :
 
 1. League of Agents démarre en arrière-plan et ouvre votre dépôt sous forme de carte dans votre navigateur.
-2. Dans Chrome, Edge, Brave et Arc, il s’ouvre sur leagueofagents.dev. Le navigateur demande une fois de laisser le site joindre votre ordinateur : choisissez Autoriser. Dans Safari et Firefox, il ouvre l’application locale, qui n’a besoin d’aucune autorisation.
+2. Dans Chrome, il s’ouvre sur leagueofagents.dev. Chrome demande une fois de laisser le site joindre votre ordinateur : choisissez Autoriser.
 3. Sélectionnez un fichier, décrivez un changement et appuyez sur Entrée.
 
 <details>
@@ -65,8 +65,8 @@ Ensuite :
 
 ### Prérequis
 
-- macOS. Linux passe toute la suite de tests, mais n’a pas encore été essayé avec un vrai agent. Windows n’est pas encore pris en charge.
-- git. Sur un Mac, il est fourni avec les outils de développement en ligne de commande d’Apple : `xcode-select --install`. Sous Linux, via votre gestionnaire de paquets.
+- macOS et Chrome. Les autres navigateurs, Linux et Windows ne sont pas encore pris en charge.
+- git, fourni avec les outils de développement en ligne de commande d’Apple : `xcode-select --install`.
 - Node 20 ou plus récent
 - Un dépôt git
 - Un agent installé et connecté, pour lancer des agents depuis la carte : voir [Configurer un agent](#configurer-un-agent). Sans agent, les changements faits dans n’importe quel éditeur apparaissent quand même.
@@ -230,7 +230,7 @@ Les instantanés restent sur votre ordinateur : ils ne sont dans aucune ref de v
 
 ## Limites
 
-- macOS. Linux passe toute la suite de tests en CI, mais n’a pas encore été essayé avec un vrai agent ; il y ouvre l’application locale. Windows n’est pas encore pris en charge.
+- macOS et Chrome uniquement, pour l’instant. Les autres navigateurs, Linux et Windows ne sont pas encore pris en charge.
 - Les machines distantes, SSH et les dev containers ne sont pas pris en charge. League of Agents doit tourner sur le même ordinateur que votre navigateur.
 - Une carte affiche jusqu’à 5 000 fichiers de code, et les 400 premières lignes de chacun sur sa carte ; un fichier s’ouvre en entier, avant, après et diff. Dans un dépôt plus grand, vous choisissez un dossier à cartographier, et pouvez en changer à tout moment. Les fichiers de plus de 16 Mo ne sont pas sur la carte.
 - Les fichiers qui ne sont pas du code, comme les images, sont dans les instantanés et dans l’annulation, mais pas sur la carte.
@@ -242,7 +242,6 @@ Les instantanés restent sur votre ordinateur : ils ne sont dans aucune ref de v
 - Les exécutions sur des sections qui ne se chevauchent pas travaillent en même temps ; une exécution sur tout le dépôt travaille seule.
 - Les commandes shell. Hermes les lance sans demander, sauf celles qu’il juge dangereuses, que League of Agents refuse. Sous macOS, sur une section, Hermes et DeepSeek Harness tournent tous deux dans le bac à sable de la section, donc aucune commande ne peut écrire en dehors ; DeepSeek Harness tourne alors dans son mode accès complet, puisque son propre bac à sable ne peut pas démarrer dans un autre. Ailleurs, DeepSeek Harness les lance en lecture seule, donc une commande qui écrit est refusée. Ce qu’une commande change dans la section est signalé comme n’étant pas fait par les outils d’édition de l’agent pendant que d’autres sessions travaillent, puisque seuls les outils d’édition nomment les fichiers qu’ils modifient. L’annulation de l’exécution le défait.
 - Il conserve les 500 exécutions les plus récentes, et toutes celles des 30 derniers jours. Les exécutions plus anciennes sont supprimées, avec leurs instantanés.
-- Le site web nécessite Chrome, Edge, Brave ou Arc. Safari et Firefox utilisent l’application locale à la place.
 
 ## Commandes et options
 

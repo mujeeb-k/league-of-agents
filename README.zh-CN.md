@@ -48,7 +48,7 @@ npx leagueofagents-cli@latest
 接下来会发生什么：
 
 1. League of Agents 在后台启动，并在你的浏览器中把你的仓库打开为一张地图。
-2. 在 Chrome、Edge、Brave 和 Arc 中，它会在 leagueofagents.dev 上打开。浏览器会询问一次是否允许此网站访问你的电脑：请选择允许。在 Safari 和 Firefox 中，它会打开本地应用，不需要任何权限。
+2. 在 Chrome 中，它会在 leagueofagents.dev 上打开。Chrome 会询问一次是否允许此网站访问你的电脑：请选择允许。
 3. 选择一个文件，描述一个改动，然后按 Enter。
 
 <details>
@@ -65,8 +65,8 @@ npx leagueofagents-cli@latest
 
 ### 系统要求
 
-- macOS。Linux 能通过完整的测试套件，但还没有用真实的代理试过。暂不支持 Windows。
-- git。在 Mac 上，它随 Apple 的命令行开发者工具一起提供：`xcode-select --install`。在 Linux 上，通过你的包管理器安装。
+- macOS 和 Chrome。暂不支持其他浏览器、Linux 和 Windows。
+- git，它随 Apple 的命令行开发者工具一起提供：`xcode-select --install`。
 - Node 20 或更高版本
 - 一个 git 仓库
 - 一个已安装并登录的代理，用于从地图运行代理：见[设置代理](#设置代理)。没有的话，来自任何编辑器的改动仍会显示出来。
@@ -230,7 +230,7 @@ League of Agents 从不把你的代码上传到任何地方。你的代码只会
 
 ## 限制
 
-- macOS。Linux 能在 CI 中通过完整的测试套件，但还没有用真实的代理试过；在 Linux 上，它会打开本地应用。暂不支持 Windows。
+- 目前仅支持 macOS 和 Chrome。暂不支持其他浏览器、Linux 和 Windows。
 - 不支持远程机器、SSH 和开发容器。League of Agents 必须和你的浏览器运行在同一台电脑上。
 - 一张地图最多显示 5,000 个代码文件，每个文件的卡片上显示前 400 行；文件打开后可以完整查看，包括之前、之后和差异。在更大的仓库中，你选择一个文件夹来绘制地图，并且可以随时更改。超过 16 MB 的文件不会出现在地图上。
 - 非代码文件（比如图片）包含在快照和撤销中，但不会出现在地图上。
@@ -242,7 +242,6 @@ League of Agents 从不把你的代码上传到任何地方。你的代码只会
 - 在互不重叠的分区上的运行会同时工作；在整个仓库上的运行则单独工作。
 - Shell 命令。Hermes 运行命令时不会询问，只有它认为危险的命令会询问，而 League of Agents 会拒绝这些命令。在 macOS 上，在某个分区上运行时，Hermes 和 DeepSeek Harness 都在该分区的沙箱中运行，所以任何命令都无法写入分区之外；这时 DeepSeek Harness 以它的完全访问模式运行，因为它自己的沙箱无法在另一个沙箱中启动。在其他地方，DeepSeek Harness 以只读方式运行命令，所以会写入的命令会被拒绝。在有其他会话工作时，命令在分区内改动的内容会被标出为不是由代理的编辑工具做出的，因为只有编辑工具会指明它们改动的文件。可以用“撤销”撤回。
 - 它保留最新的 500 次运行，以及最近 30 天内的所有运行。更早的运行会连同其快照一起删除。
-- 网站需要 Chrome、Edge、Brave 或 Arc。Safari 和 Firefox 则使用本地应用。
 
 ## 命令和选项
 

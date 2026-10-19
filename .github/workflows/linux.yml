@@ -3,10 +3,8 @@
 # The visual baselines are macOS renders and stay on the Mac; the perf suite is run by hand.
 name: Linux
 
+# Run by hand only, for now: League of Agents supports macOS and Chrome first.
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
