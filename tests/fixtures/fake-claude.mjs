@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 const args = process.argv.slice(2);
 // Its version, as `claude --version` prints it: one that refuses a tool call when a hook marked so can't run
 // (2.1.295), unless FAKE_CLAUDE_VERSION names another.
@@ -192,11 +193,13 @@ if (shells.length) {
   const results = [];
   for (const [i, arg] of shells.entries()) {
     // "shell:<path>:<name>": the command then holds until .loa/go-<name> exists, as a long one (a test run) would.
-    // "shell:<path>:<name>:late": it holds first, and writes once let go.
+    // "shell:<path>:<name>:late": it holds first, and writes once let go. It marks that it has begun with .at-<name>
+    // beside the file (inside the section, so a held command may write it), for a test to wait on.
     const [file, until, late] = arg.split(':');
     const write = `printf '// written by a shell command\\n' >> ${file}`,
       hold = until ? `until [ -f .loa/go-${until} ]; do sleep 0.05; done` : '';
-    const command = !hold ? write : late ? `${hold} && ${write}` : `${write} && ${hold}`;
+    const begun = `: > ${path.posix.join(path.posix.dirname(file), `.at-${until}`)}`;
+    const command = !hold ? write : late ? `${begun} && ${hold} && ${write}` : `${write} && ${hold}`;
     const payload = { tool_name: 'Bash', tool_input: { command }, tool_use_id: `toolu_shell_${i}`, cwd: process.cwd() };
     out({
       type: 'assistant',

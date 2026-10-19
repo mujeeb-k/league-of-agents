@@ -579,7 +579,10 @@ test("a command another session's edit lands in: each keeps its own line", async
   const { repo, b, start, go } = await twoSessions();
   const SHELL = '// written by a shell command';
   try {
+    // The command's mark that it has begun, which git ignores: Cursor's edit lands while it runs.
+    fs.appendFileSync(path.join(repo, '.git/info/exclude'), '.at-*\n');
     const claude = await start('claude', ['a/'], 'Run the tests. shell:a/tax.mjs:d:late');
+    await expect.poll(() => fs.existsSync(path.join(repo, 'a/.at-d')), { timeout: 15_000 }).toBe(true);
     const cursor = await start('cursor', ['b/'], 'Add a daily summary. insert:a/tax.mjs:1:comment');
     const two = await ended(b, cursor);
     go('d');
