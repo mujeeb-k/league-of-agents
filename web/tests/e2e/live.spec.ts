@@ -994,6 +994,10 @@ test.describe('the app on the published 0.2.0 bridge', () => {
       await ask(page, 'Same change again');
       await expect(page.locator('#runbar b')).toHaveText('Run 2', { timeout: 15_000 });
       await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
+      // After the run has ended: an edit made while it still works is the run's, and makes no run of its own.
+      await expect
+        .poll(async () => ((await call(b, '/api/runs/2')).body as unknown as RunDTO).status, { timeout: 15_000 })
+        .toBe('done');
       fs.appendFileSync(path.join(repo, 'shared/allowlist.ts'), '// edited after the run\n');
       await expect(page.locator('#sideList [data-run="3"]')).toContainText('Edited allowlist.ts', { timeout: 15_000 });
       await page.locator('[data-act="revert"]').click();
@@ -2972,7 +2976,8 @@ test.describe('sessions at once', () => {
     twoSessions(async (b, repo) => {
       const file = path.join(repo, '.git/config'),
         config = fs.readFileSync(file);
-      const h = (await start(b, [], 'edit:.GIT/config')).body as unknown as RunDTO;
+      // Named as git names it: on Linux's disk, .GIT would be another folder.
+      const h = (await start(b, [], 'edit:.git/config')).body as unknown as RunDTO;
       try {
         await until(b, h.id, 'failed');
         expect(fs.readFileSync(file).equals(config)).toBe(false);
