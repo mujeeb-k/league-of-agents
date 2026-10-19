@@ -12,7 +12,8 @@ import { line, refused, sameSecret, serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
 import { ROOT, storeAsync } from './repo.mjs';
 import { blobAt, blobNow, computeChanges, pin, restoreFrom, snapshotNow } from './snapshots.mjs';
-import { push, saveRun, working } from './runs.mjs';
+import { push, runs, saveRun, working } from './runs.mjs';
+import { stepsOf } from './steps.mjs';
 import { lockOfRun } from './sandbox.mjs';
 
 /**
@@ -64,8 +65,15 @@ export function shellEnds(run, tool) {
     const others = [...working.values()].filter(r => r !== run).flatMap(r => (r.scope?.length ? r.scope : ['/']));
     const undone = [],
       wrote = [];
+    // Another session's edit while the command ran, wherever it landed: never the command's to put back.
+    const editedMeanwhile = file =>
+      [...runs.values()].some(
+        r =>
+          r !== run &&
+          stepsOf(r).some(st => st?.act === 'edit' && st.file === file && !st.refused && (st.end ?? st.at) >= began.at),
+      );
     for (const c of await computeChanges(from, to, { unseen: true })) {
-      if (!inScope(run.scope, c.path) && !sections && !inScope(others, c.path)) {
+      if (!inScope(run.scope, c.path) && !sections && !inScope(others, c.path) && !editedMeanwhile(c.path)) {
         if ((await blobAt(from, c.path)) === null) fs.rmSync(path.join(ROOT, c.path), { force: true });
         else await restoreFrom(from, [c.path]);
         undone.push(c.path);
