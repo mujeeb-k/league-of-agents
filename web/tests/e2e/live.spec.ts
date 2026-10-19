@@ -3506,6 +3506,19 @@ test.describe('sessions at once, in the app', () => {
       await expect(page.locator('#sels .zone.ended')).toHaveCount(0);
     }));
 
+  test('a stopped session ends its turn as its agent stops it, before the bridge would end the agent', async ({
+    page,
+  }) =>
+    withHermes(page, async repo => {
+      await folder(page, 'shared').click();
+      await run(page, 'edit:shared/log.ts wait:a');
+      await expect(running(page)).toHaveCount(1);
+      await page.locator('#sideList [data-run="1"] [data-stop]').click();
+      await expect(page.locator('#sels .zone.ended b')).toHaveText('Run 1 · Hermes · Cancelled', { timeout: 10_000 });
+      // Its turn ended as cancelled: it wasn't held until the bridge stopped the agent 3 s later.
+      expect(fs.readFileSync(acpLogOf(repo), 'utf8')).toMatch(/^end cancelled$/m);
+    }));
+
   test('a session that hits its rate limit says so, on its section, its card and in the inspector', async ({ page }) =>
     withHermes(page, async () => {
       await page.locator('#agentBtn').click();

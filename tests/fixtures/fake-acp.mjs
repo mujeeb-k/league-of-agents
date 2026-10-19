@@ -39,6 +39,8 @@ const ask = (method, params) =>
     send({ id, method, params });
   });
 let cancelled = null;
+/** Set by session/cancel: a turn held by "wait:" or "hold:" stops then, as a harness stops its turn. */
+let stopped = false;
 const model = {
   id: 'model',
   name: 'Model',
@@ -48,10 +50,11 @@ const model = {
   options: [{ group: 'fake', name: 'Fake', options: [{ value: '["fake","fake-model-1"]', name: 'fake-model-1' }] }],
 };
 
-/** "wait:<name>" holds the turn until the file .loa/go-<name> exists. */
+/** "wait:<name>" holds the turn until the file .loa/go-<name> exists, or the turn is cancelled: true then. */
 async function held(text) {
   const hold = /\bwait:(\S+)/.exec(text)?.[1];
-  if (hold) while (!fs.existsSync(`.loa/go-${hold}`)) await new Promise(r => setTimeout(r, 20));
+  if (hold) while (!stopped && !fs.existsSync(`.loa/go-${hold}`)) await new Promise(r => setTimeout(r, 20));
+  return stopped;
 }
 
 async function turn(sessionId, text) {
@@ -203,7 +206,8 @@ async function turn(sessionId, text) {
   if (edits.length) {
     // "hold:<name>": wait before the edits, as "wait:" does after them.
     const before = /\bhold:(\S+)/.exec(text)?.[1];
-    if (before) while (!fs.existsSync(`.loa/go-${before}`)) await new Promise(r => setTimeout(r, 20));
+    if (before) while (!stopped && !fs.existsSync(`.loa/go-${before}`)) await new Promise(r => setTimeout(r, 20));
+    if (stopped) return 'cancelled';
     cost();
     for (const [i, file] of edits.entries()) {
       const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
@@ -213,8 +217,7 @@ async function turn(sessionId, text) {
     }
     // It says so before any hold, as a harness carries on talking after an edit.
     say(sessionId, ` Edited ${edits.join(', ')}.`);
-    await held(text);
-    return 'end_turn';
+    return (await held(text)) ? 'cancelled' : 'end_turn';
   }
   if (/outside/.test(text) && (await permit('edit-out', 'outside.txt', '', 'written outside the scope\n')))
     try {
@@ -228,7 +231,7 @@ async function turn(sessionId, text) {
     fs.writeFileSync(FILE, before + line + '\n');
     update(sessionId, { sessionUpdate: 'tool_call_update', toolCallId: 'edit-1', status: 'completed' });
   }
-  await held(text);
+  if (await held(text)) return 'cancelled';
   say(sessionId, `Added reviewedBy to ${FILE}.`);
   return 'end_turn';
 }
@@ -263,8 +266,13 @@ readline.createInterface({ input: process.stdin }).on('line', async l => {
   } else if (m.method === 'session/prompt') {
     const text = m.params.prompt.map(p => p.text).join('\n');
     fs.appendFileSync(LOG, `prompt ${JSON.stringify(text)}\n`);
+    stopped = false;
     // Steered by the prompt itself, below the scope the bridge writes above it.
-    reply({ stopReason: await turn(m.params.sessionId, text.split('\n\n').at(-1)) });
-  } else if (m.method === 'session/cancel') cancelled?.();
-  else if (m.id !== undefined) send({ id: m.id, error: { code: -32601, message: 'Method not found' } });
+    const stopReason = await turn(m.params.sessionId, text.split('\n\n').at(-1));
+    fs.appendFileSync(LOG, `end ${stopReason}\n`);
+    reply({ stopReason });
+  } else if (m.method === 'session/cancel') {
+    stopped = true;
+    cancelled?.();
+  } else if (m.id !== undefined) send({ id: m.id, error: { code: -32601, message: 'Method not found' } });
 });
