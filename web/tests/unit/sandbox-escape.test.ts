@@ -1,8 +1,9 @@
 // What a session on a section can't do, tried in the sandbox that holds it (bridge/lib/sandbox.mjs). A Claude Code
 // session's commands are run as they really run: handed to its hook, which rewrites them to start inside the sandbox
 // (bridge/lib/hook.mjs hold), and its file tools are put to the same hook. The section is all it is held to (owner,
-// 2026-10-18): it reads what it would anywhere, but for the bridge's token and the Keychain's files. Tried: writing
-// outside the section, reading the token or the Keychain, writing outside the repo but to temp, breaking out of the
+// 2026-10-18): it reads what it would anywhere, but for the bridge's token, the Keychain's files and the browsers'
+// profiles, which hold the app's login. Tried: writing outside the section, reading the token, the Keychain or a
+// browser's profile, writing outside the repo but to temp, breaking out of the
 // rewritten command line, and swapping a folder for one of its own so that something which runs later, outside the
 // sandbox, reads its files instead.
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -16,13 +17,29 @@ import { tagged } from '../support/leftovers';
 
 const LIB = path.join(__dirname, '../../../bridge/lib');
 
-/** What is planted in the Keychain's files: no command's output may hold it. */
+/** What is planted in the Keychain's files and the browsers' profiles: no command's output may hold it. */
 const MARKER = 'loa-marker-4c1d8e02ab';
 /** Files in a home folder a session may read, as anywhere. */
-const PRIVATE = [
-  '.ssh/id_ed25519',
-  'Library/Application Support/Google/Chrome/Default/Cookies',
-  'code/other/.git/config',
+const PRIVATE = ['.ssh/id_ed25519', 'code/other/.git/config'];
+/**
+ * Where each browser keeps what it holds of a person's logins, League of Agents' own among them: no session reads
+ * these. Each holds the marker.
+ */
+const BROWSERS = [
+  'Library/Application Support/Google/Chrome/Default/Local Storage/leveldb/000003.log',
+  'Library/Application Support/Google/Chrome/Profile 1/Cookies',
+  'Library/Application Support/Google/Chrome Canary/Default/Local Storage/leveldb/000003.log',
+  'Library/Application Support/Chromium/Default/Local Storage/leveldb/000003.log',
+  'Library/Application Support/Microsoft Edge/Default/Local Storage/leveldb/000003.log',
+  'Library/Application Support/BraveSoftware/Brave-Browser/Default/Local Storage/leveldb/000003.log',
+  'Library/Application Support/Arc/User Data/Default/Local Storage/leveldb/000003.log',
+  'Library/Application Support/Vivaldi/Default/Local Storage/leveldb/000003.log',
+  'Library/Application Support/com.operasoftware.Opera/Local Storage/leveldb/000003.log',
+  'Library/Application Support/Firefox/Profiles/abc.default-release/webappsstore.sqlite',
+  'Library/Safari/LocalStorage/http_127.0.0.1_43210.localstorage',
+  'Library/Containers/com.apple.Safari/Data/Library/WebKit/WebsiteData/LocalStorage/x.sqlite3',
+  'Library/WebKit/WebsiteData/LocalStorage/x.sqlite3',
+  'Library/Cookies/Cookies.binarycookies',
 ];
 
 type Session = { base: string; home: string; repo: string };
@@ -66,8 +83,10 @@ function withSession<T>(
     fs.mkdirSync(path.dirname(path.join(home, f)), { recursive: true });
     fs.writeFileSync(path.join(home, f), 'readable\n');
   }
-  for (const f of ['Library/Keychains/login.keychain-db', 'Library/Keychains/other.keychain-db'])
+  for (const f of ['Library/Keychains/login.keychain-db', 'Library/Keychains/other.keychain-db', ...BROWSERS]) {
+    fs.mkdirSync(path.dirname(path.join(home, f)), { recursive: true });
     fs.writeFileSync(path.join(home, f), `${MARKER}\n`);
+  }
   // Another repo's bridge, running: its key, which would let a session drive that bridge, and its log of links, in
   // League of Agents' folder for that repo, and where a bridge before this one kept them, in the repo.
   for (const dir of [loaOf(home, path.join(home, 'code/other')), path.join(home, 'code/other/.loa')]) {
@@ -240,17 +259,33 @@ describe.runIf(process.platform === 'darwin')('a session on a section, in its sa
     ).toEqual({ venv: true, packages: true, notIgnored: false, asFile: false, other: false });
   });
 
-  it('reads the home folder as it would anywhere, but for the Keychain', () => {
+  it("reads the home folder as it would anywhere, but for the Keychain and the browsers' profiles", () => {
     expect(
       attempt({
         key: 'cat "$HOME/.ssh/id_ed25519"',
-        browser: 'cat "$HOME/Library/Application Support/Google/Chrome/Default/Cookies"',
         otherRepo: 'cat "$HOME/code/other/.git/config"',
         list: 'ls "$HOME"',
         copy: 'cp "$HOME/.ssh/id_ed25519" src/key',
         keychain: 'grep -r loa-marker "$HOME/Library/Keychains"',
       }),
-    ).toEqual({ key: true, browser: true, otherRepo: true, list: true, copy: true, keychain: false });
+    ).toEqual({ key: true, otherRepo: true, list: true, copy: true, keychain: false });
+  });
+
+  it("can't read any browser's profile, where the app's login is kept", () => {
+    const each = Object.fromEntries(BROWSERS.map(f => [f, `cat "$HOME/${f}"`]));
+    expect(
+      attempt({
+        ...each,
+        copy: `cp "$HOME/${BROWSERS[0]}" src/copy`,
+        search: 'grep -r loa-marker "$HOME/Library"',
+        list: 'ls "$HOME/Library/Application Support/Google/Chrome/Default"',
+      }),
+    ).toEqual({
+      ...Object.fromEntries(BROWSERS.map(f => [f, false])),
+      copy: false,
+      search: false,
+      list: false,
+    });
   });
 
   it("reads the repo, git's settings and Claude Code's own folder", () => {
@@ -340,6 +375,13 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
         list: ['Glob', { pattern: '**/*.txt' }],
         listHome: ['Glob', { pattern: '~/.ssh/*' }],
         listAbove: ['Glob', { pattern: '../../home/**' }],
+        ...Object.fromEntries(
+          BROWSERS.map(f => [f, ['Read', { file_path: `~/${f}` }] as [string, Record<string, string>]]),
+        ),
+        searchBrowser: ['Grep', { pattern: 'loa-marker', path: '~/Library/Application Support/Google' }],
+        searchLibrary: ['Grep', { pattern: 'loa-marker', path: '~/Library' }],
+        listBrowser: ['Glob', { pattern: '*', path: '~/Library/Safari' }],
+        apps: ['Read', { file_path: '~/Library/Application Support/Code/User/settings.json' }],
       }),
     ).toEqual({
       inside: true,
@@ -356,6 +398,12 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
       list: true,
       listHome: true,
       listAbove: false,
+      ...Object.fromEntries(BROWSERS.map(f => [f, false])),
+      searchBrowser: false,
+      searchLibrary: false,
+      listBrowser: false,
+      // Other apps' settings are read as anywhere.
+      apps: true,
     });
   });
 
@@ -459,7 +507,7 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
 describe.runIf(process.platform === 'darwin')('a Hermes session, whole inside the sandbox', () => {
   const hermes = (commands: Record<string, string>) => attempt(commands, { agent: 'hermes' });
 
-  it('reads what it would anywhere but the Keychain, writes its own folder, and nowhere else outside the repo but temp', () => {
+  it("reads what it would anywhere but the Keychain and the browsers' profiles, writes its own folder, and nowhere else outside the repo but temp", () => {
     expect(
       hermes({
         inside: 'echo x >> src/a.txt',
@@ -470,6 +518,8 @@ describe.runIf(process.platform === 'darwin')('a Hermes session, whole inside th
         notes: 'touch "$HOME/notes"',
         key: 'cat "$HOME/.ssh/id_ed25519"',
         keychain: 'cat "$HOME/Library/Keychains/login.keychain-db"',
+        browser: `cat "$HOME/${BROWSERS[0]}"`,
+        browsers: 'grep -r loa-marker "$HOME/Library"',
         bridge: 'cat "$HOME"/.config/league-of-agents/repos/*/bridge.json',
         earlier: 'cat "$HOME/code/other/.loa/bridge.json"',
         temp: `touch ${PROBE} && rm ${PROBE}`,
@@ -483,6 +533,8 @@ describe.runIf(process.platform === 'darwin')('a Hermes session, whole inside th
       notes: false,
       key: true,
       keychain: false,
+      browser: false,
+      browsers: false,
       bridge: false,
       earlier: false,
       temp: true,

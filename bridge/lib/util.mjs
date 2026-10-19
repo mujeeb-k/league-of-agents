@@ -15,6 +15,24 @@ export const loaOf = (root, home = os.homedir()) =>
     crypto.createHash('sha256').update(realish(root)).digest('hex').slice(0, 32),
   );
 
+/**
+ * Where the browsers on a Mac keep their profiles, in the home folder: their logins, the app's among them. A session
+ * held to a section reads none of them (sandbox.mjs, hook.mjs hold).
+ */
+export const BROWSER_PROFILES = [
+  ...['Chrome', 'Chrome Beta', 'Chrome Dev', 'Chrome Canary'].map(c => `Library/Application Support/Google/${c}`),
+  ...['', ' Beta', ' Dev', ' Canary'].map(c => `Library/Application Support/Microsoft Edge${c}`),
+  ...['Chromium', 'BraveSoftware', 'Arc', 'Vivaldi', 'com.operasoftware.Opera', 'com.operasoftware.OperaGX'].map(
+    b => `Library/Application Support/${b}`,
+  ),
+  ...['Firefox', 'zen', 'Orion'].map(b => `Library/Application Support/${b}`),
+  'Library/Safari',
+  'Library/Containers/com.apple.Safari',
+  'Library/WebKit',
+  'Library/Cookies',
+  'Library/HTTPStorages',
+];
+
 export function readJson(p, d) {
   try {
     return JSON.parse(fs.readFileSync(p, 'utf8'));

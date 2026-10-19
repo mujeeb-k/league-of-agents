@@ -13,7 +13,7 @@ import { execFile, execFileSync } from 'node:child_process';
 import { LOA, ROOT, git, gitAsync } from './repo.mjs';
 import { scopeEntry } from './scope.mjs';
 import { BRIDGE_DIR } from './paths.mjs';
-import { realish, refused } from './util.mjs';
+import { BROWSER_PROFILES, realish, refused } from './util.mjs';
 
 const SANDBOX_EXEC = process.env.LOA_SANDBOX_EXEC || '/usr/bin/sandbox-exec';
 
@@ -353,8 +353,9 @@ export async function prepareSandbox(run) {
     `(allow file-write* ${[...allow, each(state)].join(' ')})`,
     ...(folders.length ? [`(allow file-write-create ${folders.join(' ')})`] : []),
     `(deny file-write* ${deny.join(' ')})`,
-    // A bridge's key, and the Keychain's files: no session reads either (the Keychain is used through macOS, not read).
-    `(deny file-read* ${token} ${add('subpath', path.join(home, 'Library/Keychains'))})`,
+    // A bridge's key, the Keychain's files and the browsers' profiles, which hold the app's login: no session reads
+    // any of them (the Keychain is used through macOS, not read).
+    `(deny file-read* ${token} ${['Library/Keychains', ...BROWSER_PROFILES].map(p => add('subpath', path.join(home, p))).join(' ')})`,
   ].join('\n');
   const args = [SANDBOX_EXEC, '-p', profile, ...params.flatMap(([k, v]) => ['-D', `${k}=${v}`])];
   // Confirmed before the agent starts inside it: a profile the system won't take starts nothing.

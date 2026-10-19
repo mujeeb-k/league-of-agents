@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import readline from 'node:readline';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { loaOf, readJson, realish, splitLines } from './util.mjs';
+import { BROWSER_PROFILES, loaOf, readJson, realish, splitLines } from './util.mjs';
 import { inScope, rangeKept } from './scope.mjs';
 
 /** Runs started by an agent's own hooks, by agent: Claude Code and Codex in a terminal, Cursor in its editor. */
@@ -211,6 +211,10 @@ function hold(data, cwd) {
       const keychain = path.join(h.home, 'Library/Keychains');
       if (under(p, keychain) || (tool !== 'Read' && READS.test(tool) && under(keychain, p)))
         block(`${p} holds the Keychain's files, which a session started from the map never reads.`);
+      // Each browser's profile, which holds its logins, the app's among them, and a search of a folder that holds one.
+      for (const b of BROWSER_PROFILES.map(b => path.join(h.home, b)))
+        if (under(p, b) || (tool !== 'Read' && READS.test(tool) && under(b, p)))
+          block(`${p} holds a browser's profile, with its logins, which a session started from the map never reads.`);
       if (!EDITS.test(tool)) continue;
       const held =
         h.git.some(d => under(p, d)) || h.never.some(([kind, at]) => (kind === 'subpath' ? under(p, at) : p === at));

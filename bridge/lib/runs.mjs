@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { line, logError, readJson, refused, splitLines, serial } from './util.mjs';
+import { BROWSER_PROFILES, line, logError, readJson, refused, splitLines, serial } from './util.mjs';
 import { inScope, rangeKept, scopeEntry } from './scope.mjs';
 import { ROOT, RUNS_DIR, unpin } from './repo.mjs';
 import { linesOf } from './agents/lines.mjs';
@@ -321,8 +321,12 @@ export function refusedBySandbox(run, text) {
     run.blockedPaths.push(shown);
     push(run, { t: 'deny', text: `Tried to open ${shown}. Blocked.`, say: 'path-blocked', outside: shown });
   }
-  // The Keychain and League of Agents' own folder stay closed with the lock off too: only the rest is the lock's.
-  const always = [path.join(home, 'Library/Keychains'), path.join(home, '.config/league-of-agents')];
+  // The Keychain, the browsers' profiles and League of Agents' own folder: turning the lock off is not offered for
+  // these, only for the rest.
+  const always = [
+    ...['Library/Keychains', ...BROWSER_PROFILES].map(p => path.join(home, p)),
+    path.join(home, '.config/league-of-agents'),
+  ];
   if (outside.some(p => !always.some(a => p === a || p.startsWith(a + path.sep)))) lockRefused(run);
   saveRun(run);
   emitRun(run);
