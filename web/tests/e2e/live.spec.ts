@@ -81,6 +81,10 @@ test.afterEach(({ browserName }, info) => {
   for (const r of records) process.stdout.write(`Its records: ${r}\n`);
 });
 const onMac = SANDBOX ? test : test.skip;
+/** Turns the composer's lock on, where the sandbox can hold the agent picked: it starts off. */
+const lockOn = async (page: Page) => {
+  if (SANDBOX) await page.locator('#lockBtn[aria-pressed="false"]').click();
+};
 
 // Keep the sidebar open: these tests use it at every zoom.
 test.beforeEach(({ page }) =>
@@ -1877,7 +1881,7 @@ test('an ACP harness (Hermes): asks before editing, reports its model, is refuse
     // Found once `hermes acp --check` passes; the state names it and says nothing of its command.
     await expect
       .poll(async () => ((await api('/api/state')).body as unknown as StateResponse).agents.hermes)
-      .toEqual({ name: 'Hermes', available: true, stays: SANDBOX });
+      .toEqual({ name: 'Hermes', available: true, stays: SANDBOX, lockable: SANDBOX });
     const first = await runToEnd(b, {
       agent: 'hermes',
       prompt: 'Record who reviewed it',
@@ -3720,7 +3724,14 @@ test.describe('sessions at once, in the app', () => {
         // With nothing selected, the session is on the whole repository: nothing holds it, and nothing is said.
         await expect(page.locator('#reach')).toHaveCount(0);
         await folder(page, 'shared').click();
-        await expect(page.locator('#reach')).toHaveText(SANDBOX ? STAYS : FLAGGED);
+        // Where the sandbox can hold it, the lock is the person's to choose, off at first.
+        if (SANDBOX) {
+          await expect(page.locator('#reach')).toHaveText(
+            'Not locked: it works as in a terminal. Changes outside your selection are flagged.',
+          );
+          await lockOn(page);
+          await expect(page.locator('#reach')).toHaveText('Locked to your selection.');
+        } else await expect(page.locator('#reach')).toHaveText(FLAGGED);
         await page.locator('#agentBtn').click();
         await page.locator('#agentMenu [data-agent="codex"]').click();
         await expect(page.locator('#reach')).toHaveText(FLAGGED);
@@ -3747,6 +3758,7 @@ test.describe('sessions at once, in the app', () => {
   }) =>
     withHermes(page, async (repo, b) => {
       await folder(page, 'apps').click();
+      await lockOn(page);
       await run(page, 'edit:apps/console/main.ts wait:a');
       await expect(running(page)).toHaveCount(1);
       await page.keyboard.press('Escape');
@@ -3787,6 +3799,7 @@ test.describe('sessions at once, in the app', () => {
     async ({ page }) =>
       withHermes(page, async repo => {
         await folder(page, 'shared').click();
+        await lockOn(page);
         await run(page, 'exec: printf n > notes.md\nedit:shared/log.ts wait:a');
         const line = page.locator('#sideList [data-run="1"] .blocked');
         await expect(line).toHaveText('A command tried to write outside your selection. Blocked.', { timeout: 15_000 });
@@ -3985,6 +3998,7 @@ test.describe('sessions at once, in the app', () => {
       await folder(page, 'shared').click();
       await folder(page, 'apps').click({ modifiers: ['Shift'] });
       await expect(page.locator('#scopeRow .chip:not(.all) > span')).toHaveText(['shared/', 'apps/']);
+      await lockOn(page);
       // One prompt for the sections together stays one run; "a session each" splits it.
       await page.locator('#prompt').fill('Add a header comment. wait:a');
       await page.locator('#eachBtn').click();
@@ -4055,7 +4069,7 @@ test('harnesses the person adds in their own settings are listed by name and run
   const b = await startBridge(repo);
   try {
     const agents = ((await call(b, '/api/state')).body as unknown as StateResponse).agents;
-    expect(agents.goose).toEqual({ name: 'Goose', available: true, stays: false });
+    expect(agents.goose).toEqual({ name: 'Goose', available: true, stays: false, lockable: false });
     expect(agents.claude!.name).toBe('Claude Code');
     expect(agents.dsh?.name).not.toBe('Mine too');
     expect(Object.keys(agents)).not.toContain('Not an id');
@@ -4730,6 +4744,9 @@ test('lines selected in the editor scope a live run; changes outside them are fl
     await page.goto(linkFor(b));
     await expect(page.locator('#conn')).toHaveText('Live');
     await page.keyboard.press('0');
+    await page.locator('.fr[data-path="shared/allowlist.ts"]').click();
+    // The lock, chosen while the file is selected, holds for the lines picked next.
+    await lockOn(page);
     await page.locator('.fr[data-path="shared/allowlist.ts"]').click();
     await page.keyboard.press('Enter');
     await expect(page.locator('#editor .cm-content')).toBeFocused();
