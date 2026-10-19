@@ -57,8 +57,11 @@ it('names a folder, a file of its own in /tmp and a bridge left behind, removes 
   await new Promise(r => setTimeout(r, 300));
   const left = end(root);
   expect(left).toEqual([
-    `left behind: ${path.dirname(repo)}`,
-    `left behind: ${tagged('probe')}`,
+    // What it holds, to tell what wrote it.
+    expect.stringMatching(
+      new RegExp(`^left behind: ${path.dirname(repo)} \\(holding .*sample-repo/\\.loa/bridge\\.mjs`),
+    ),
+    `left behind: ${tagged('probe')} (holding a file)`,
     expect.stringMatching(new RegExp(`^still running: ${ours.pid} .*bridge\\.mjs$`)),
   ]);
   await gone(ours);

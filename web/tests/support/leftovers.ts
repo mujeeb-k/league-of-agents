@@ -76,6 +76,16 @@ export function end(root: string): string[] {
       .map(n => path.join(root, n)),
     ...inTmp.map(n => path.join('/tmp', n)),
   ];
+  // What each holds, to tell what wrote it: removed before this returns.
+  const held = left.map(p => {
+    try {
+      return fs.statSync(p).isDirectory()
+        ? (fs.readdirSync(p, { recursive: true }) as string[]).slice(0, 12).join(', ')
+        : 'a file';
+    } catch {
+      return '';
+    }
+  });
   const alive = running(root);
   for (const [pid] of alive)
     try {
@@ -84,7 +94,10 @@ export function end(root: string): string[] {
       /* gone meanwhile */
     }
   for (const p of [root, ...inTmp.map(n => path.join('/tmp', n))]) fs.rmSync(p, { recursive: true, force: true });
-  return [...left.map(p => `left behind: ${p}`), ...alive.map(([pid, args]) => `still running: ${pid} ${args}`)];
+  return [
+    ...left.map((p, i) => `left behind: ${p}${held[i] ? ` (holding ${held[i]})` : ''}`),
+    ...alive.map(([pid, args]) => `still running: ${pid} ${args}`),
+  ];
 }
 
 /** Fails the run when it left something, naming each. */
