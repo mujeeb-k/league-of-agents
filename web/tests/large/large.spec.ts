@@ -9,8 +9,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import type { StateResponse } from '../../src/api/types';
-import { git, linkFor, startBridge, storeGit } from '../support/live';
+import { git, linkFor, startBridge, storeGit, reportRecords } from '../support/live';
 import { ZOOMS, checkLevel, zoomTo } from '../support/zoom';
+
+reportRecords();
 
 const REPO = process.env.LOA_LARGE_REPO ?? '';
 const OUT = path.resolve('test-results/large');

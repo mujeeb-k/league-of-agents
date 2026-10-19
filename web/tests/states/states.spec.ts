@@ -3,8 +3,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { linkFor, makeRepo, sharedFileBridge, startBridge } from '../support/live';
+import { linkFor, makeRepo, sharedFileBridge, startBridge, reportRecords } from '../support/live';
 import { APP } from '../support/targets';
+
+reportRecords();
 
 const OUT = path.resolve('test-results/states');
 const STATES = ['default', 'hover', 'pressed', 'focus', 'disabled', 'loading', 'selected'] as const;

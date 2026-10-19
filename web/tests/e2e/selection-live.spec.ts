@@ -17,8 +17,11 @@ import {
   makeRepo,
   startBridge,
   type Bridge,
+  reportRecords,
 } from '../support/live';
 import { TOAST } from '../support/targets';
+
+reportRecords();
 
 const FILE = 'shared/allowlist.ts';
 // Lines 3 to 5 of the seeded file: loadPolicy.

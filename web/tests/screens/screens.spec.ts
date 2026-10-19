@@ -16,8 +16,11 @@ import {
   sharedFileBridge,
   startBridge,
   type Bridge,
+  reportRecords,
 } from '../support/live';
 import { APP, TOAST } from '../support/targets';
+
+reportRecords();
 
 const OUT = path.resolve('test-results/screens');
 const SIZES = [

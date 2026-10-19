@@ -5,7 +5,9 @@ import { chromium, expect, test, type BrowserContext } from '@playwright/test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { codeFor, makeRepo, startBridge, type Bridge } from '../support/live';
+import { codeFor, makeRepo, startBridge, type Bridge, reportRecords } from '../support/live';
+
+reportRecords();
 
 const SITE = 'https://leagueofagents.dev';
 const DIST = path.resolve('dist');

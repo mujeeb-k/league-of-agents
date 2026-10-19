@@ -4,9 +4,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { FAKE_ACP, call, git, linkFor, loaOf, startBridge, type Bridge } from '../support/live';
+import { FAKE_ACP, call, git, linkFor, loaOf, startBridge, type Bridge, reportRecords } from '../support/live';
 import { APP } from '../support/targets';
 import fr from '../../src/i18n/fr';
+
+reportRecords();
 
 const OUT = path.resolve('test-results/perf');
 const FRAME = 1000 / 60;

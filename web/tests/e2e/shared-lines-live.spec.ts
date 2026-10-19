@@ -21,7 +21,10 @@ import {
   loaOf,
   startBridge,
   type Bridge,
+  reportRecords,
 } from '../support/live';
+
+reportRecords();
 
 /** a/tax.mjs as the two-sections test bed has it. */
 const ORIGINAL = [

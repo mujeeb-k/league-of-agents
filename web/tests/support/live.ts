@@ -6,6 +6,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { test } from '@playwright/test';
 import { APP } from './targets';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -175,6 +176,34 @@ function waitGone(group: number) {
 /** Where the stand-in Hermes logs what it was asked, for a repo (tests/fixtures/fake-acp.mjs). */
 export const acpLogOf = (repo: string) => path.join(path.dirname(repo), 'fake-acp.log');
 
+/**
+ * Where a stopped bridge's records are kept until its test has passed (keptRecords): its runs, with each one's raw
+ * agent output, and its log. A test that fails leaves them in test-results/, which CI keeps.
+ */
+const RECORDS = path.join(REPO_ROOT, 'web/test-results/records');
+const kept: string[] = [];
+function keepRecords(repo: string, port: number) {
+  const from = loaOf(repo),
+    to = path.join(RECORDS, `${path.basename(path.dirname(repo))}-${port}`);
+  if (!fs.existsSync(from) || kept.includes(to)) return;
+  for (const f of ['runs', 'bridge.log'])
+    if (fs.existsSync(path.join(from, f))) fs.cpSync(path.join(from, f), path.join(to, f), { recursive: true });
+  kept.push(to);
+}
+/** The records the test's bridges left: removed once it has passed, said where they are when it failed. */
+export function keptRecords(passed: boolean) {
+  const out = kept.splice(0);
+  if (passed) for (const d of out) fs.rmSync(d, { recursive: true, force: true });
+  return passed ? [] : out;
+}
+/** For a suite with no failure report of its own: a failed test says where its bridges' records are. */
+export function reportRecords() {
+  test.afterEach(({ browserName }, info) => {
+    for (const r of keptRecords(info.status === info.expectedStatus))
+      process.stdout.write(`Its records, ${browserName}: ${r}\n`);
+  });
+}
+
 /** The bridges a test started, for its failure to show what they printed (startedBridges). */
 const started: Bridge[] = [];
 /** The bridges started since last asked, and forgotten: what a failed test reports. */
@@ -244,6 +273,7 @@ export async function startBridge(
         /* already gone */
       }
       waitGone(proc.pid!);
+      keepRecords(repo, port);
     },
   };
   started.push(b);

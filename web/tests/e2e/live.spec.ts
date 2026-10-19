@@ -27,6 +27,7 @@ import {
   git,
   codeFor,
   homeOf,
+  keptRecords,
   linkFor,
   startedBridges,
   makeRepo,
@@ -70,11 +71,13 @@ const SANDBOX = process.platform === 'darwin';
 // answering on CI shows why.
 test.afterEach(({ browserName }, info) => {
   const bridges = startedBridges();
+  const records = keptRecords(info.status === info.expectedStatus);
   if (info.status === info.expectedStatus) return;
   for (const b of bridges)
     process.stdout.write(
       `Bridge on port ${b.port}, ${browserName} (${b.proc.exitCode === null ? 'running' : `exited ${b.proc.exitCode}`}):\n${b.output()}\n`,
     );
+  for (const r of records) process.stdout.write(`Its records: ${r}\n`);
 });
 const onMac = SANDBOX ? test : test.skip;
 

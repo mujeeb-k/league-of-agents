@@ -20,6 +20,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # The end-to-end tests in two halves, on two machines at once.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    name: test (${{ matrix.shard }} of 2)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,12 +51,12 @@ jobs:
             ip link set lo up
             exec sudo -u "$1" env "PATH=$2" "HOME=$3" CI=true sh -c "
               if curl -sS -m 5 -o /dev/null https://registry.npmjs.org; then echo the network is reachable; exit 1; fi
-              npx playwright test --project app --project live --project webkit --project firefox --project motion"
-          ' sh "$USER" "$PATH" "$HOME"
+              npx playwright test --project app --project live --project webkit --project firefox --project motion --shard $4/2"
+          ' sh "$USER" "$PATH" "$HOME" "${{ matrix.shard }}"
         working-directory: web
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: test-results-${{ matrix.shard }}
           path: web/test-results/
           retention-days: 7
