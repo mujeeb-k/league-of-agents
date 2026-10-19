@@ -51,7 +51,7 @@ export function openRepo({ stopOld = false } = {}) {
     console.error(`League of Agents keeps its records in ${ours}, which is inside this repo.`);
     process.exit(1);
   }
-  // It holds the token (bridge.json, and the links in bridge.log): only this user may open it.
+  // It holds the token (bridge.json): only this user may open it.
   fs.mkdirSync(LOA, { recursive: true, mode: 0o700 });
   fs.chmodSync(LOA, 0o700);
   RUNS_DIR = path.join(LOA, 'runs');
