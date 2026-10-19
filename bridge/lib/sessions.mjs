@@ -78,7 +78,8 @@ export async function startSession(run, read = {}) {
           before: read[e.path] ?? fs.readFileSync(path.join(ROOT, e.path), 'utf8'),
         };
     // Each run's own: Claude Code's hooks find it by the environment the run starts them with.
-    fs.writeFileSync(scopeFileOf(run), JSON.stringify({ scope: run.scope || [], ranges }));
+    // With the lock off nothing holds it to the section: the hooks see none (hook.mjs).
+    fs.writeFileSync(scopeFileOf(run), JSON.stringify({ scope: run.lock === false ? [] : run.scope || [], ranges }));
   } catch (e) {
     push(run, line('err', 'not-started', `Couldn't start: ${e.message}`, { why: e.message }));
     return end(run, 'failed');

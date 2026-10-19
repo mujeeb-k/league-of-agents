@@ -7,6 +7,7 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import {
   AGENT_FIXTURES,
+  FAKE_ACP,
   FAKE_CLAUDE,
   REPLAY_AGENT,
   call,
@@ -244,6 +245,37 @@ test('live screens', async ({ page }) => {
 });
 
 // Two sessions in one checkout, and a file both edited: on its row in the review list, and in Revert and Commit.
+// The lock in the composer, on and off, and a refusal of the lock's, with the way on.
+test('the lock', async ({ page }) => {
+  test.setTimeout(120_000);
+  const repo = makeRepo();
+  const b = await startBridge(repo, FAKE_CLAUDE, { LOA_HERMES_BIN: FAKE_ACP }, ['--no-hooks']);
+  try {
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+    await expect(page.locator('#lockBtn')).toHaveAttribute('aria-pressed', 'true');
+    await shoot(page, 'lock-on', PHONE);
+    await page.locator('#lockBtn').click();
+    await shoot(page, 'lock-off', PHONE);
+    await page.locator('#lockBtn').click();
+    await page.keyboard.press('Escape');
+    await expect
+      .poll(
+        async () =>
+          ((await call(b, '/api/state')).body.agents as Record<string, { available: boolean }>).hermes?.available,
+      )
+      .toBe(true);
+    const held = (await call(b, '/api/runs', { agent: 'hermes', prompt: 'edit:.git/config', scope: ['shared/'] }))
+      .body as unknown as { id: number };
+    await expect(page.locator(`#unlock-${held.id}`)).toBeVisible({ timeout: 15_000 });
+    await shoot(page, 'lock-refused', PHONE);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 test('a shared file', async ({ page }) => {
   test.setTimeout(120_000);
   const { b, repo, cursor } = await sharedFileBridge();

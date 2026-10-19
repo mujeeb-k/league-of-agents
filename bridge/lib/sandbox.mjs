@@ -62,7 +62,7 @@ function sandboxStarts() {
  * @returns {'sandbox' | 'refuse' | 'none'}
  */
 export function lockOfRun(run) {
-  if (!run.scope?.length) return 'none';
+  if (!run.scope?.length || run.lock === false) return 'none';
   if (!(holdsAgent(run) || (run.agent === 'claude' && claudeHeld)) || !HAS_SANDBOX) return 'none';
   if (sandboxStarts()) return 'sandbox';
   return 'refuse';

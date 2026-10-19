@@ -1,5 +1,5 @@
 // Floating composer: scope chips, agent picker, prompt. Built on shadcn/ui.
-import { ArrowUp, ChevronDown } from 'lucide-react';
+import { ArrowUp, ChevronDown, Lock, LockOpen } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { agentOf } from '../lib/constants';
 import { examplePrompt } from '../lib/examplePrompt';
@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { Textarea } from './ui/textarea';
+import { Toggle } from './ui/toggle';
 import { BetaTag, Dot, Spinner, Tip } from './bits';
 import { CopyCommand } from './ConnectDialog';
 import { ScopeChip } from './ScopeChip';
@@ -343,8 +344,10 @@ export function Composer() {
         </div>
         <AgentPicker />
       </div>
-      {/* With a selection: whether the agent picked stays inside it. */}
-      {!blocked && st.sel.size && stays !== undefined ? (
+      {/* With a selection: whether the agent picked stays inside it, or the lock for it, the person's to choose. */}
+      {!blocked && st.sel.size && S.CONN && S.LIVE_AGENTS?.[st.agent]?.lockable ? (
+        <LockRow />
+      ) : !blocked && st.sel.size && stays !== undefined ? (
         <p id="reach" className="px-1 pb-2 text-right text-xs text-muted-foreground text-pretty">
           {reachOf(stays, !!(S.CONN && S.LIVE_AGENTS?.[st.agent]?.asks))}
         </p>
@@ -395,6 +398,41 @@ export function Composer() {
           </Button>
         </Tip>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The lock, for an agent the sandbox can hold on a section: on, the session is held to the selection, and what that
+ * turns off is said; off, it works as in a terminal, and what it changes outside is flagged after.
+ */
+function LockRow() {
+  const on = !st.lockOff;
+  return (
+    <div id="lockRow" className="flex items-start gap-2 px-1 pb-2">
+      <p id="reach" className="min-w-0 flex-1 pt-1.5 text-right text-xs text-muted-foreground text-pretty">
+        {!on
+          ? t('Not locked: it works as in a terminal. Changes outside your selection are flagged.')
+          : st.agent === 'claude'
+            ? t("Locked to your selection. Off for it: this repo's Claude Code settings and hooks, and MCP tools.")
+            : t('Locked to your selection.')}
+      </p>
+      <Tip label={on ? t('Let it work as in a terminal') : t('Hold it to your selection')}>
+        <Toggle
+          id="lockBtn"
+          size="sm"
+          variant="outline"
+          pressed={on}
+          className="shrink-0 gap-1.5 px-2.5 aria-pressed:border-transparent aria-pressed:bg-primary aria-pressed:text-primary-foreground aria-pressed:hover:bg-primary/90 aria-pressed:hover:text-primary-foreground"
+          onPressedChange={pressed => {
+            st.lockOff = !pressed;
+            renderComposer();
+          }}
+        >
+          {on ? <Lock /> : <LockOpen />}
+          {t('Lock')}
+        </Toggle>
+      </Tip>
     </div>
   );
 }

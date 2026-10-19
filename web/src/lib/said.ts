@@ -36,6 +36,8 @@ const SAID: Record<string, (a: Args) => string> = {
   'not-launched': a => t('Could not start {command}: {why}', a),
   'check-port-busy': a => t('Skipped: port {port} is in use. Stop the running server first.', a),
   'check-stopped': a => t('Stopped after {seconds} s', a),
+  'lock-why': () =>
+    t('The lock refused it: this session is held to its section. Continue with the lock off to allow it.'),
 };
 
 /** The codes worded here (a test holds them against the codes the bridge sends). */

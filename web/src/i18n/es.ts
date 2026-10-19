@@ -656,5 +656,17 @@ const catalogue: Catalogue = {
   'Edited {file} and {n} more': '{file} y {n} más editados',
   "The hook that holds this session couldn't run, so the session was stopped.":
     'El hook que contiene esta sesión no pudo ejecutarse, así que la sesión se detuvo.',
+  'The lock refused it: this session is held to its section. Continue with the lock off to allow it.':
+    'El bloqueo lo rechazó: esta sesión está limitada a su sección. Continúa sin el bloqueo para permitirlo.',
+  'The lock on its section refused it.': 'El bloqueo de su sección lo rechazó.',
+  'Continue with the lock off': 'Continuar sin el bloqueo',
+  'Not locked: it works as in a terminal. Changes outside your selection are flagged.':
+    'Sin bloqueo: trabaja como en una terminal. Los cambios fuera de tu selección se señalan.',
+  "Locked to your selection. Off for it: this repo's Claude Code settings and hooks, and MCP tools.":
+    'Bloqueado a tu selección. Desactivados para ella: los ajustes y hooks de Claude Code de este repositorio, y las herramientas MCP.',
+  'Locked to your selection.': 'Bloqueado a tu selección.',
+  'Let it work as in a terminal': 'Dejar que trabaje como en una terminal',
+  'Hold it to your selection': 'Limitarla a tu selección',
+  Lock: 'Bloqueo',
 };
 export default catalogue;

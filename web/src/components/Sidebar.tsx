@@ -10,7 +10,7 @@ import type { DirNode, Run, Tab } from '../lib/types';
 import { S, dom, st } from '../state/app';
 import { drafts, openEditor } from '../state/editing';
 import { applyPanels, holdSide, panels, setPinned, sideVisibleAt } from '../state/panels';
-import { isOffline, runAction, selectRun, stopSessions, toggleSel } from '../state/actions';
+import { continueUnlocked, isOffline, runAction, selectRun, stopSessions, toggleSel } from '../state/actions';
 import { renderSel, renderSide, useRegion } from '../state/render';
 import { asking, endedAs, reachOf, sessionColour, sessionsCost, workingRuns } from '../state/sessions';
 import { follow } from '../state/watch';
@@ -257,6 +257,27 @@ function RunRow({ r }: { r: Run }) {
         ))}
         {r.commandBlocked ? (
           <p className="blocked mt-1 text-xs text-ink2 text-pretty">{commandBlockedText(!!r.scope?.length)}</p>
+        ) : null}
+        {/* The lock refused what no answer could allow: one line why, and, once it ended, the way on. */}
+        {r.lockRefused ? (
+          <div className="lockWhy mt-1 text-xs text-ink2">
+            <p className="text-pretty">{t('The lock on its section refused it.')}</p>
+            {running || r.reverted ? null : (
+              <Button
+                size="xs"
+                variant="outline"
+                id={`unlock-${r.id}`}
+                className="mt-1.5"
+                disabled={!!st.busy || isOffline()}
+                onClick={e => {
+                  e.stopPropagation();
+                  void continueUnlocked(r);
+                }}
+              >
+                {t('Continue with the lock off')}
+              </Button>
+            )}
+          </div>
         ) : null}
         {running ? null : (
           <>

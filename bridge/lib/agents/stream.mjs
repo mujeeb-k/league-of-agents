@@ -16,7 +16,7 @@ import {
 import { launch } from './process.mjs';
 import { shellAccess } from '../shell.mjs';
 import { line } from '../util.mjs';
-import { blocked, push, refusedBySandbox } from '../runs.mjs';
+import { blocked, lockRefused, push, refusedBySandbox } from '../runs.mjs';
 import { step, stepDone, stepRefused } from '../steps.mjs';
 import { lockOfRun } from '../sandbox.mjs';
 import { emit } from '../events.mjs';
@@ -222,7 +222,11 @@ export function onAgentLine(run, line) {
       if (call?.act === 'edit' && call.file && refusedWrite(text, sandboxed)) {
         stepRefused(run, call.i);
         blocked(run, call.file);
-      } else push(run, toolError(text));
+      } else {
+        push(run, toolError(text));
+        // A tool the hold refuses on a section, or a write it never lets one make (hook.mjs hold).
+        if (/can't be used in a session on a section|is never changed by a session/.test(text)) lockRefused(run);
+      }
     }
   } else if (m.type === 'system' && m.subtype === 'post_turn_summary') {
     // Claude Code's own verdict on the turn: completed or blocked, and what it needs from you. A later

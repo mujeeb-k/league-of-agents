@@ -18,7 +18,7 @@ import { startDemoSessions, stopDemoSession } from '../demo/sessions';
 import { toast } from '../ui/toast';
 import { S, dom, st } from './app';
 import { checkSelection, ed, rangeScope, sending } from './editing';
-import { MAX_SESSIONS, opensOnFinish, seen, workingRuns } from './sessions';
+import { MAX_SESSIONS, lockChoice, opensOnFinish, seen, workingRuns } from './sessions';
 import {
   renderAll,
   renderComposer,
@@ -317,6 +317,7 @@ export function send(): Promise<void> {
       prompt: v,
       scope,
       resumeFrom: fu?.id ?? null,
+      lock: lockChoice(scope),
       lines: held ? { [held.path]: held.anchor.text.join('\n') } : undefined,
       context: held
         ? { [held.path]: { before: held.anchor.before, after: held.anchor.after, twin: held.anchor.twin } }
@@ -371,6 +372,18 @@ async function startLive(conn: Conn, body: StartRunBody) {
   }
 }
 
+/**
+ * Continues a session the lock refused something, with the lock off: a follow-up on its section and its agent's own
+ * session, told to carry on.
+ */
+export function continueUnlocked(r: Run) {
+  if (!S.CONN || isOffline()) return sendQueue;
+  const conn = S.CONN;
+  const body = { agent: r.agent, prompt: 'Carry on.', scope: r.scope ?? [], resumeFrom: r.id, lock: false };
+  sendQueue = sendQueue.then(() => startLive(conn, body));
+  return sendQueue;
+}
+
 /** Sections that can't run now, in words: whose they are, or which other picked section holds them. */
 function clashText(c: Clash): string {
   if (c.run === undefined)
@@ -419,7 +432,17 @@ export async function sendEach() {
   const ids: number[] = [];
   try {
     for (const s of sections)
-      ids.push((await bridge.startRun(conn, { agent: st.agent, prompt: v, scope: [s], resumeFrom: null })).id);
+      ids.push(
+        (
+          await bridge.startRun(conn, {
+            agent: st.agent,
+            prompt: v,
+            scope: [s],
+            resumeFrom: null,
+            lock: lockChoice([s]),
+          })
+        ).id,
+      );
     toast(t('{agent} started runs {ids}', { agent, ids: listOf(ids) }));
   } catch (e) {
     // Started one by one: say which did, and why the rest didn't.

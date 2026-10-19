@@ -5,7 +5,7 @@ import { VERSION } from '../paths.mjs';
 import { inScope } from '../scope.mjs';
 import { ROOT } from '../repo.mjs';
 import { line, realish } from '../util.mjs';
-import { blocked, push, refusedBySandbox } from '../runs.mjs';
+import { blocked, lockRefused, push, refusedBySandbox } from '../runs.mjs';
 import { step, stepDone, stepRefused, stepsOf } from '../steps.mjs';
 import { lockOfRun } from '../sandbox.mjs';
 import { emit } from '../events.mjs';
@@ -267,9 +267,11 @@ function permitAcp(run, tool, options) {
   const edit = isEdit(tool);
   // Any case: macOS's disk doesn't tell .LOA from .loa, or .GIT from .git.
   const never = r =>
-    ourFolder(r) || (insideRepo(r) && (/^\.loa(\/|$)/i.test(r) || (!!run.scope?.length && /^\.git(\/|$)/i.test(r))));
+    ourFolder(r) || (insideRepo(r) && (/^\.loa(\/|$)/i.test(r) || (locked(run) && /^\.git(\/|$)/i.test(r))));
   const key = edit && rel.some(never);
-  const outside = edit && run.scope?.length ? rel.filter(r => !insideRepo(r) || !inScope(run.scope, r)) : [];
+  // Git's folder is refused for the lock alone: with it off, the session may write there.
+  if (key && !rel.some(r => ourFolder(r) || /^\.loa(\/|$)/i.test(r))) lockRefused(run);
+  const outside = edit && locked(run) ? rel.filter(r => !insideRepo(r) || !inScope(run.scope, r)) : [];
   const ok = !key && !outside.length;
   const option = options.find(o => (ok ? /^allow/ : /^reject/).test(o.kind));
   const asked = outside.filter(insideRepo);
@@ -281,6 +283,8 @@ function permitAcp(run, tool, options) {
   }
   return option ? { outcome: 'selected', optionId: option.optionId } : { outcome: 'cancelled' };
 }
+/** A session held to its section: it has one, and the person left the lock on. */
+const locked = run => !!run.scope?.length && run.lock !== false;
 const insideRepo = r => !!r && r !== '..' && !r.startsWith('../') && !path.isAbsolute(r);
 /** Whether a path, as the repo names it, is in League of Agents' own folder, in any case. */
 const ourFolder = r => {

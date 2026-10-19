@@ -165,6 +165,7 @@ async function startRun({ body }) {
     scope: found.scope,
     resumeFrom: parent?.id ?? null,
     sessionId: parent?.agent === b.agent ? parent.sessionId : null,
+    lock: b.lock !== false,
   });
   await startSession(run, found.read);
   return [200, publicRun(run)];

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { readJson, onPath } from '../util.mjs';
 import { HOOKS, LOA } from '../repo.mjs';
 import { acpConnector } from './acp.mjs';
-import { saidHeld, setClaudeHeld } from '../sandbox.mjs';
+import { lockOfRun, saidHeld, setClaudeHeld } from '../sandbox.mjs';
 import { streamConnector } from './stream.mjs';
 
 export const BIN = {
@@ -93,6 +93,8 @@ export function loadAgents() {
 function markHeld() {
   for (const id of [...Object.keys(STREAMED), ...Object.keys(ACP)]) {
     AGENTS[id].stays = saidHeld({ agent: id, scope: ['/'] });
+    // Whether the person may choose to lock a session of it to its section (the composer's switch).
+    AGENTS[id].lockable = lockOfRun({ agent: id, scope: ['/'] }) === 'sandbox';
   }
 }
 /**
@@ -141,7 +143,7 @@ const bracket = () =>
  * runs twice and a command's two brackets are one (shellStarts keeps the later, shellEnds the first).
  */
 const unheld = run =>
-  run.scope?.length
+  run.scope?.length && run.lock !== false
     ? {
         disableAllHooks: false,
         hooks: {

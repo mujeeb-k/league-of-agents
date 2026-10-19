@@ -25,6 +25,10 @@ export const reachOf = (stays: boolean, asks = false) =>
       ? t('Asks before editing outside your selection; its commands can still change files there.')
       : t("Can change files outside your selection. You'll see each one flagged.");
 
+/** Whether a session about to start on `scope` is locked to it: the person's choice, where the agent can be. */
+export const lockChoice = (scope: string[]) =>
+  scope.length && S.LIVE_AGENTS?.[st.agent]?.lockable ? !st.lockOff : undefined;
+
 /** The writes a session at work asked to make outside its section, not yet answered. */
 export const asking = (r: Run) => (r.status === 'running' ? (r.wants ?? []).filter(w => !w.answer) : []);
 /** What a session asks, in a line: a file to change, a command to run, or a tool to use. */

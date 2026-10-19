@@ -84,15 +84,19 @@ const title = s => {
 };
 
 /**
- * @param {{ agent: string; prompt?: string; scope?: string[]; resumeFrom?: number | null; sessionId?: string | null }} opts
+ * @param {{ agent: string; prompt?: string; scope?: string[]; resumeFrom?: number | null; sessionId?: string | null;
+ *   lock?: boolean }} opts
  */
-export function newRun({ agent, prompt = '', scope = [], resumeFrom = null, sessionId = null }) {
+export function newRun({ agent, prompt = '', scope = [], resumeFrom = null, sessionId = null, lock = true }) {
   return {
     id: nextId(),
     agent,
     title: title(prompt),
     prompt: prompt || '',
     scope,
+    // The person's choice for a session on a section: off, it works as in a terminal, and its changes outside the
+    // section are flagged after.
+    lock: lock === false ? false : undefined,
     resumeFrom,
     sessionId,
     status: 'running',
@@ -121,7 +125,8 @@ export function beginRun(opts) {
     // Said on its card: whether the system keeps it inside its section.
     if (run.scope.length) run.stays = saidHeld(run);
     // Cursor's edits outside it are asked first while the hooks it runs are in: its commands aren't held.
-    if (run.scope.length && run.agent === 'cursor' && !run.stays && editHookInstalled()) run.asks = true;
+    if (run.scope.length && run.lock !== false && run.agent === 'cursor' && !run.stays && editHookInstalled())
+      run.asks = true;
     // Its colour on the map while it works: the first one free, kept with the run so every window and a reload
     // show the same.
     const taken = new Set([...working.values()].map(r => r.slot));
@@ -262,6 +267,7 @@ export function blocked(run, file) {
 export function commandBlocked(run) {
   if (run.commandBlocked) return;
   run.commandBlocked = true;
+  if (run.scope?.length) lockRefused(run);
   // On the whole repository there is no selection: what it may not write is a protected file, or outside the repo.
   push(
     run,
@@ -275,6 +281,23 @@ export function commandBlocked(run) {
   );
   saveRun(run);
   emitRun(run);
+}
+/**
+ * Something the lock refused that no answer could allow while it holds the session (a tool that would reach past it,
+ * a write to git's folder or past the section by a command): said once, with why, and the session can be continued
+ * with the lock off (the app's button starts that follow-up).
+ */
+export function lockRefused(run) {
+  if (run.lockRefused || !run.scope?.length || run.lock === false) return;
+  run.lockRefused = true;
+  push(
+    run,
+    line(
+      'deny',
+      'lock-why',
+      'The lock refused it: this session is held to its section. Continue with the lock off to allow it.',
+    ),
+  );
 }
 /**
  * A command or tool the sandbox refused, as its output says. A path outside the repo it names (the home folder is
@@ -298,6 +321,9 @@ export function refusedBySandbox(run, text) {
     run.blockedPaths.push(shown);
     push(run, { t: 'deny', text: `Tried to open ${shown}. Blocked.`, say: 'path-blocked', outside: shown });
   }
+  // The Keychain and League of Agents' own folder stay closed with the lock off too: only the rest is the lock's.
+  const always = [path.join(home, 'Library/Keychains'), path.join(home, '.config/league-of-agents')];
+  if (outside.some(p => !always.some(a => p === a || p.startsWith(a + path.sep)))) lockRefused(run);
   saveRun(run);
   emitRun(run);
 }

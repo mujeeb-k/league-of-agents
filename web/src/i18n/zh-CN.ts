@@ -609,5 +609,17 @@ const catalogue: Catalogue = {
   'Edited {file} and {n} more': '编辑了 {file} 和另外 {n} 个文件',
   "The hook that holds this session couldn't run, so the session was stopped.":
     '约束此会话的钩子无法运行，因此会话已停止。',
+  'The lock refused it: this session is held to its section. Continue with the lock off to allow it.':
+    '锁拒绝了它：此会话被限制在它的分区内。关闭锁继续即可允许。',
+  'The lock on its section refused it.': '分区上的锁拒绝了它。',
+  'Continue with the lock off': '关闭锁并继续',
+  'Not locked: it works as in a terminal. Changes outside your selection are flagged.':
+    '未加锁：它像在终端里一样工作。选区之外的改动会被标出。',
+  "Locked to your selection. Off for it: this repo's Claude Code settings and hooks, and MCP tools.":
+    '已锁定在你的选区内。对它关闭：此仓库的 Claude Code 设置和 hooks，以及 MCP 工具。',
+  'Locked to your selection.': '已锁定在你的选区内。',
+  'Let it work as in a terminal': '让它像在终端里一样工作',
+  'Hold it to your selection': '把它限制在你的选区内',
+  Lock: '锁',
 };
 export default catalogue;

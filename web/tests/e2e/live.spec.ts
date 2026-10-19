@@ -2971,6 +2971,78 @@ test.describe('sessions at once', () => {
       expect(fs.readFileSync(path.join(repo, '.git/config')).equals(config)).toBe(true);
     }));
 
+  // The lock is chosen in the composer, for a selection and an agent the sandbox can hold: on, it says what is off.
+  (SANDBOX ? test : test.skip)(
+    "the composer's lock: on, it says what it turns off; off, the session starts unlocked",
+    async ({ page }) => {
+      const repo = makeRepo(),
+        b = await startBridge(repo, FAKE_CLAUDE, {}, ['--no-hooks']);
+      try {
+        await page.goto(linkFor(b));
+        await expect(page.locator('#conn')).toHaveText('Live');
+        await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+        const lock = page.locator('#lockBtn');
+        await expect(lock).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('#reach')).toHaveText(
+          "Locked to your selection. Off for it: this repo's Claude Code settings and hooks, and MCP tools.",
+        );
+        await lock.click();
+        await expect(lock).toHaveAttribute('aria-pressed', 'false');
+        await expect(page.locator('#reach')).toHaveText(
+          'Not locked: it works as in a terminal. Changes outside your selection are flagged.',
+        );
+        await page.locator('#prompt').fill('Name the action');
+        await page.locator('#prompt').press('Enter');
+        await expect.poll(async () => (await runsOf(b))[0]?.lock).toBe(false);
+      } finally {
+        b.stop();
+        fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+      }
+    },
+  );
+
+  // The lock is the person's to choose for each session on a section. Off, the session works as in a terminal: nothing
+  // it does is refused for the section, and what it changes outside is flagged after.
+  onMac("with the lock off, a session on a section isn't held: its edit outside goes through, and is flagged", () =>
+    twoSessions(async (b, repo) => {
+      const h = (
+        await call(b, '/api/runs', {
+          agent: 'hermes',
+          prompt: 'edit:apps/console/main.ts',
+          scope: ['shared/'],
+          lock: false,
+        })
+      ).body as unknown as RunDTO;
+      await until(b, h.id, 'done');
+      const run = await runOf(b, h.id);
+      expect(run.lock).toBe(false);
+      expect(run.wants ?? []).toEqual([]);
+      expect(fs.readFileSync(path.join(repo, 'apps/console/main.ts'), 'utf8')).toContain('// edited in');
+      expect(run.outOfScope).toEqual(['apps/console/main.ts']);
+    }),
+  );
+
+  // What the lock refuses that no answer could allow (here, git's folder) is said once, with why, and the session is
+  // continued with the lock off from its card.
+  onMac("the lock's refusal says why, and its card continues the session with the lock off", ({ page }) =>
+    twoSessions(async b => {
+      await page.goto(linkFor(b));
+      await expect(page.locator('#conn')).toHaveText('Live');
+      const h = (await start(b, ['shared/'], 'edit:.git/config')).body as unknown as RunDTO;
+      await until(b, h.id, 'done');
+      const run = await runOf(b, h.id);
+      expect(run.lockRefused).toBe(true);
+      expect(run.stream?.filter(e => e.say === 'lock-why').length).toBe(1);
+      const card = page.locator(`#sideList [data-run="${h.id}"]`);
+      await expect(card.locator('.lockWhy')).toContainText('The lock on its section refused it.');
+      await card.locator(`#unlock-${h.id}`).click();
+      await expect.poll(async () => (await state(b)).runs.find(r => r.resumeFrom === h.id)?.lock).toBe(false);
+      const next = (await state(b)).runs.find(r => r.resumeFrom === h.id)!;
+      expect([next.agent, next.scope, next.prompt]).toEqual(['hermes', ['shared/'], 'Carry on.']);
+      await until(b, next.id, 'done');
+    }),
+  );
+
   // On the whole repository nothing is enforced (VISION 30): the harness may write git's folder as in a terminal.
   // Here that breaks git's config, so git can't read the repo when the run ends: the run ends all the same, said why.
   test('on the whole repository an ACP harness may edit the git folder; a run git then cannot read still ends, said why', () =>

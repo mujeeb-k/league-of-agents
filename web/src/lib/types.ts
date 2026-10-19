@@ -140,6 +140,10 @@ export interface Run {
   asks?: boolean;
   /** A shell command of it tried to write outside its section, and the sandbox refused. */
   commandBlocked?: boolean;
+  /** Started with the lock off, by the person's choice. */
+  lock?: boolean;
+  /** The lock refused something no answer could allow. */
+  lockRefused?: boolean;
   blockedPaths?: string[];
   startedAt?: number;
   endedAt?: number | null;

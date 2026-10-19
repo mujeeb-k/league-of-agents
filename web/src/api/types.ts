@@ -50,6 +50,8 @@ export interface AgentInfo {
   stays?: boolean;
   /** On a section, not kept inside, but its edits outside are asked first (Cursor with the hooks in). */
   asks?: boolean;
+  /** On a section, whether the person may lock a session of it to the section (bridges after 0.2.0). */
+  lockable?: boolean;
 }
 
 /**
@@ -160,6 +162,10 @@ export interface RunDTO {
   asks?: boolean;
   /** A shell command of it tried to write outside its section, and the sandbox refused. */
   commandBlocked?: boolean;
+  /** On a section, started with the lock off by the person: nothing held it there (bridges after 0.2.0). */
+  lock?: boolean;
+  /** The lock refused something no answer could allow: it may be continued with the lock off. */
+  lockRefused?: boolean;
   /** Paths outside the repo a command or tool of the session tried to open and the sandbox refused, ~ for home. */
   blockedPaths?: string[];
 }
@@ -284,6 +290,8 @@ export interface StartRunBody {
   prompt: string;
   scope: string[];
   resumeFrom: number | null;
+  /** On a section, whether the session is locked to it, as the person chose (bridges before 0.3.0 ignore it). */
+  lock?: boolean;
   /** For each file scoped to lines, the text of those lines: the bridge finds them by it (bridges before 0.1.2 ignore it). */
   lines?: Record<string, string>;
   /**
