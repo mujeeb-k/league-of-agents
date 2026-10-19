@@ -5512,8 +5512,11 @@ test('bridge security: wrong tokens and unknown link codes slow down; the right 
   const state = (t: string | null) =>
     fetch(`http://127.0.0.1:${port}/api/state`, t === null ? {} : { headers: { authorization: 'Bearer ' + t } });
   try {
-    loa('start', '--port', port, '--no-open', '--no-hooks');
+    const printed = loa('start', '--port', port, '--no-open', '--no-hooks');
     const first = token();
+    // The link is printed to the terminal that started it, and not to the log, which anything of this account reads.
+    expect(printed).toMatch(/#t=[\w-]+/);
+    expect(fs.readFileSync(path.join(loaOf(repo), 'bridge.log'), 'utf8')).not.toContain('#t=');
     // The token's folder is closed to other accounts on this machine.
     expect(fs.statSync(loaOf(repo)).mode & 0o077).toBe(0);
     // So are the files that hold it, on their own: its settings, and the log its links are printed to.

@@ -228,9 +228,13 @@ export function createBridgeServer(port) {
   });
   return server;
 }
-/** Says where the bridge is, once it listens. */
+/**
+ * Says where the bridge is, once it listens. Started in the background (`start`), its output is the log, which
+ * anything on this computer may read: its links aren't printed there, and `start` prints its own to the terminal.
+ */
 export function listening(port) {
-  const local = linkOf({ port, code: linkCode() });
+  const logged = !!process.env.LOA_LOGGED;
+  const local = logged ? 'the link `start` printed' : linkOf({ port, code: linkCode() });
   console.log(`\n  League of Agents bridge\n  repo    ${ROOT}`);
   console.log(
     `  agents  ${Object.entries(AGENTS)
@@ -240,7 +244,7 @@ export function listening(port) {
   );
   if (AGENTS.claude.problem) console.log(`  ${CLAUDE_FIX[AGENTS.claude.problem]}`);
   console.log(`\n  Open    ${local}`);
-  if (WEB_URL)
+  if (WEB_URL && !logged)
     console.log(`  or      ${siteLinkOf({ port, code: linkCode() })}   (Chrome or Edge, allow local network access)`);
   console.log('');
 }

@@ -107,7 +107,7 @@ export async function startInBackground(hooks) {
   // (`--local`, `--web`). Bridges before 0.2.0 don't record theirs: they let the site in.
   if (already?.locked || (already && (already.web ?? SITE) !== WEB_URL)) await stopBridge(false);
   else if (already) await open(already);
-  // Its links are in it: for this account alone.
+  // Its output, for this account alone; no link is printed in it (server.mjs listening).
   const log = fs.openSync(path.join(LOA, 'bridge.log'), 'w', 0o600);
   fs.chmodSync(path.join(LOA, 'bridge.log'), 0o600);
   const pass = argv.filter(a => !['start', '--hooks', '--no-hooks', '--no-open'].includes(a));
@@ -115,7 +115,7 @@ export async function startInBackground(hooks) {
     cwd: ROOT,
     detached: true,
     stdio: ['ignore', log, log],
-    env: { ...process.env, LOA_MANAGED: '' },
+    env: { ...process.env, LOA_MANAGED: '', LOA_LOGGED: '1' },
   });
   child.unref();
   // A first start reads the whole repository: seconds for a large one. Waited for while the bridge runs, and said so.
