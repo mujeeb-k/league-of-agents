@@ -2973,7 +2973,7 @@ test.describe('sessions at once', () => {
 
   // The lock is chosen in the composer, for a selection and an agent the sandbox can hold: on, it says what is off.
   (SANDBOX ? test : test.skip)(
-    "the composer's lock: on, it says what it turns off; off, the session starts unlocked",
+    "the composer's lock: off as it starts; on, it says what it turns off, and the session starts locked",
     async ({ page }) => {
       const repo = makeRepo(),
         b = await startBridge(repo, FAKE_CLAUDE, {}, ['--no-hooks']);
@@ -2982,18 +2982,28 @@ test.describe('sessions at once', () => {
         await expect(page.locator('#conn')).toHaveText('Live');
         await page.locator('.frame[data-dir="shared"] > .flabel b').click();
         const lock = page.locator('#lockBtn');
-        await expect(lock).toHaveAttribute('aria-pressed', 'true');
-        await expect(page.locator('#reach')).toHaveText(
-          "Locked to your selection. Off for it: this repo's Claude Code settings and hooks, and MCP tools.",
-        );
-        await lock.click();
         await expect(lock).toHaveAttribute('aria-pressed', 'false');
         await expect(page.locator('#reach')).toHaveText(
           'Not locked: it works as in a terminal. Changes outside your selection are flagged.',
         );
+        await lock.click();
+        await expect(lock).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.locator('#reach')).toHaveText(
+          "Locked to your selection. Off for it: this repo's Claude Code settings and hooks, and MCP tools.",
+        );
         await page.locator('#prompt').fill('Name the action');
         await page.locator('#prompt').press('Enter');
-        await expect.poll(async () => (await runsOf(b))[0]?.lock).toBe(false);
+        await expect.poll(async () => (await runsOf(b))[0]?.status).toBeTruthy();
+        expect((await runsOf(b))[0]?.lock).toBeUndefined();
+        // Off again, the next session starts unlocked.
+        await page.keyboard.press('Escape');
+        await expect.poll(async () => (await runsOf(b))[0]?.status).not.toBe('running');
+        await page.locator('.frame[data-dir="shared"] > .flabel b').click();
+        await lock.click();
+        await expect(lock).toHaveAttribute('aria-pressed', 'false');
+        await page.locator('#prompt').fill('Name it again');
+        await page.locator('#prompt').press('Enter');
+        await expect.poll(async () => (await runsOf(b)).find(r => r.id === 2)?.lock).toBe(false);
       } finally {
         b.stop();
         fs.rmSync(path.dirname(repo), { recursive: true, force: true });

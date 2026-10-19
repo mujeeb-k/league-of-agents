@@ -254,11 +254,10 @@ test('the lock', async ({ page }) => {
     await page.goto(linkFor(b));
     await expect(page.locator('#conn')).toHaveText('Live');
     await page.locator('.frame[data-dir="shared"] > .flabel b').click();
-    await expect(page.locator('#lockBtn')).toHaveAttribute('aria-pressed', 'true');
-    await shoot(page, 'lock-on', PHONE);
-    await page.locator('#lockBtn').click();
+    await expect(page.locator('#lockBtn')).toHaveAttribute('aria-pressed', 'false');
     await shoot(page, 'lock-off', PHONE);
     await page.locator('#lockBtn').click();
+    await shoot(page, 'lock-on', PHONE);
     await page.keyboard.press('Escape');
     await expect
       .poll(

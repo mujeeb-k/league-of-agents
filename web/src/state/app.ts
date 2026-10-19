@@ -75,8 +75,11 @@ export const st = {
   mode: 'after' as Mode,
   sel: new Set<string>(),
   agent: 'claude',
-  /** The composer's lock switch, off: a session started on a section isn't held to it (Composer.tsx LockRow). */
-  lockOff: false,
+  /**
+   * The composer's lock switch, off (as it starts): a session started on a section isn't held to it; on, it is
+   * (Composer.tsx LockRow).
+   */
+  lockOff: true,
   v: { x: 0, y: 0, s: 0.2 } as View,
   hover: null as string | null,
   tab: 'files' as Tab,
