@@ -23,6 +23,8 @@ import { TOAST } from '../support/targets';
 
 reportRecords();
 
+/** The section lock's sandbox is macOS's own, and on unless LOA_SANDBOX turns it off (bridge/lib/sandbox.mjs). */
+const SANDBOX = process.platform === 'darwin' && process.env.LOA_SANDBOX !== 'off';
 const FILE = 'shared/allowlist.ts';
 // Lines 3 to 5 of the seeded file: loadPolicy.
 const SELECTED = SEED[FILE]!.split('\n').slice(2, 5);
@@ -346,7 +348,7 @@ test('each agent is told to edit only inside the scope; one whose writes outside
       // Held by the sandbox (on a Mac), it is told the rules first.
       const rules = claude!.find(a => a.includes('Scope for this task'))!.split('Scope for this task')[0];
       expect(rules).toBe(
-        process.platform === 'darwin'
+        SANDBOX
           ? 'Rules for this session:\n' +
               '- Install dependencies, tools and language runtimes only into the ignored folders at the top of this project (such as ' +
               '.venv or node_modules). Never into the home folder or a temp folder: writes to the home folder are refused, ' +

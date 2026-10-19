@@ -45,6 +45,12 @@ jobs:
           done
       - run: npx playwright test --project app --project live --project webkit --project firefox --project motion
         working-directory: web
+      # The live suite again with the sandbox off: the path every system without one takes (Linux, Windows), where
+      # commands are bracketed by hooks instead of held, run here too.
+      - run: npx playwright test --project live
+        working-directory: web
+        env:
+          LOA_SANDBOX: 'off'
       # The package itself, as `npx leagueofagents-cli` installs it: packed here, installed from the tarball into an
       # empty folder, and its bridge put through the two-agent scenarios in a freshly generated repo.
       - name: Pack, install from the tarball, and run two agents in one checkout

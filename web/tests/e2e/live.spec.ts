@@ -65,8 +65,8 @@ function gitRows(repo: string, file: string) {
     .filter(l => l.length > 1);
 }
 
-/** The section lock's sandbox is macOS's own (bridge/lib/sandbox.mjs): its tests run on a Mac. */
-const SANDBOX = process.platform === 'darwin';
+/** The section lock's sandbox is macOS's own, and on unless LOA_SANDBOX turns it off (bridge/lib/sandbox.mjs). */
+const SANDBOX = process.platform === 'darwin' && process.env.LOA_SANDBOX !== 'off';
 
 // A test that fails says what its bridges printed and whether they were still running: a bridge that stopped
 // answering on CI shows why.
@@ -3176,9 +3176,7 @@ test.describe('sessions at once', () => {
       expect(await permissionOf({ PROBE_VERSION: version }, [])).toEqual(FLAGGED);
     }
     for (const version of ['2.1.295', '2.2.0', '3.0.1'])
-      expect(await permissionOf({ PROBE_VERSION: version }, ['shared/'])).toEqual(
-        process.platform === 'darwin' ? HELD : FLAGGED,
-      );
+      expect(await permissionOf({ PROBE_VERSION: version }, ['shared/'])).toEqual(SANDBOX ? HELD : FLAGGED);
   });
   onMac(
     "a sandbox that can't start starts no session on a section; a whole-repository run starts, not held",
