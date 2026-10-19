@@ -326,6 +326,68 @@ test("Cursor's card says it asks before editing outside, and its refused edit is
   }
 });
 
+// While a commit holds a file at its version (the commit's swap, for a pre-commit hook), something else writes it: the
+// commit stops, nothing is committed, the swap is undone, and the person is told. Here the "something else" is the
+// repo's own pre-commit hook, appending a line it doesn't stage, as an editor or a terminal agent would.
+test('something writing a file while the commit holds it stops the commit, and every file goes back', async () => {
+  const { repo, b, start, go } = await twoSessions();
+  try {
+    const claude = await start('claude', ['a/'], CLAUDE_PROMPT);
+    const cursor = await start('cursor', ['b/'], CURSOR_PROMPT);
+    go('one');
+    await ended(b, claude);
+    go('two');
+    await ended(b, cursor);
+    const hook = path.join(repo, '.git/hooks/pre-commit');
+    fs.writeFileSync(hook, "#!/bin/sh\nprintf '// by someone else\\n' >> a/tax.mjs\n");
+    fs.chmodSync(hook, 0o755);
+    const head = git(repo, 'rev-parse', 'HEAD').trim();
+    const staged = git(repo, 'diff', '--cached', '--name-only');
+    const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
+    expect.soft([done.status, done.body.code]).toEqual([409, 'commit-interrupted']);
+    expect.soft(done.body.args).toEqual({ files: 'a/tax.mjs' });
+    // Nothing committed, nothing staged that wasn't, and the file as both runs left it, the other write kept on top.
+    expect.soft(git(repo, 'rev-parse', 'HEAD').trim()).toBe(head);
+    expect.soft(git(repo, 'diff', '--cached', '--name-only')).toBe(staged);
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text([...BOTH_TAX, '// by someone else']));
+    expect.soft((await runOf(b, claude)).committed).toBeUndefined();
+    expect.soft(fs.existsSync(path.join(repo, '.loa/held.json'))).toBe(false);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// As above, but the other write touches the very lines the swap held: it can't be kept apart from the swap, so the
+// file goes back exactly as it was before, and that other version is kept for the person in .loa/interrupted/.
+test("a write the swap can't be taken apart from: the file exactly as it was, the other version kept", async () => {
+  const { repo, b, start, go } = await twoSessions();
+  try {
+    const claude = await start('claude', ['a/'], CLAUDE_PROMPT);
+    const cursor = await start('cursor', ['b/'], CURSOR_PROMPT);
+    go('one');
+    await ended(b, claude);
+    go('two');
+    await ended(b, cursor);
+    // The held file lacks Cursor's comment at line 11; the hook rewrites the line it was on.
+    const hook = path.join(repo, '.git/hooks/pre-commit');
+    fs.writeFileSync(
+      hook,
+      "#!/bin/sh\nsed -i.bak '11s/.*/\\/\\/ rewritten by someone else/' a/tax.mjs && rm a/tax.mjs.bak\n",
+    );
+    fs.chmodSync(hook, 0o755);
+    const head = git(repo, 'rev-parse', 'HEAD').trim();
+    const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
+    expect.soft([done.status, done.body.code]).toEqual([409, 'commit-interrupted']);
+    expect.soft(git(repo, 'rev-parse', 'HEAD').trim()).toBe(head);
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(BOTH_TAX));
+    expect.soft(onDisk(repo, '.loa/interrupted/a/tax.mjs')).toContain('// rewritten by someone else');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
 // The real run's order, had Cursor's edit gone through: Claude Code writes a/tax.mjs by a shell command, which no hook
 // brackets here, so nobody's writes are seen in it; then Cursor adds its comment. Cursor's change is its line alone,
 // Claude Code's commit holds none of it, and reverting Cursor's run takes only it out.

@@ -180,31 +180,61 @@ export function commitRun(run, { message = '', include = [] } = {}) {
       );
     }
     let made = false;
+    /** Held files something else wrote while the commit held them. */
+    const touched = [];
     try {
       await gitAsync(['commit', '-q', '-F', '-'], { env, input: message });
       made = true;
+      // A held file is as the bridge put it, or as a pre-commit hook made it and committed it. Anything else wrote
+      // it meanwhile (an editor, an agent in a terminal): the commit is taken back, so nothing is committed under it.
+      if (held.length) {
+        const sha = (await gitAsync(['rev-parse', 'HEAD'])).trim();
+        for (const [p, , put] of held) {
+          const now = await blobNow(p, true);
+          if (now !== put && now !== (await blobAt(sha, p))) touched.push(p);
+        }
+        if (touched.length) {
+          await (head.commit
+            ? gitAsync(['update-ref', head.ref, head.commit, sha])
+            : gitAsync(['update-ref', '-d', head.ref, sha]));
+          made = false;
+        }
+      }
     } catch (e) {
       const output = `${e.stdout ?? ''}${e.stderr ?? ''}`.trim();
       // A hook that refused, or git itself (no name and email set, say): its own words.
       throw refused('git-refused', `Git refused the commit: ${output}`, { output });
     } finally {
       fs.rmSync(index, { force: true });
-      // Each held file as it was, or, committed, as the commit left it (a hook may have formatted it) with the other
-      // session's lines put back in; where they no longer fit, as it was. A failure here leaves the list for the
-      // next start, and the commit stands.
+      // Each held file as it was before the swap, or, committed, as the commit left it (a hook may have formatted it)
+      // with the other session's lines put back in. What something else wrote meanwhile stays on top; where it can't
+      // be kept apart from the swap, the file goes back exactly as it was, and that other version is kept in
+      // .loa/interrupted/ for the person. A failure here leaves the list for the next start.
       if (held.length)
         try {
           const back = [];
           for (const [p, was, put] of held) {
-            const out = made ? await takeOut([[was, put]], await blobNow(p, true)) : { blob: was };
+            const now = await blobNow(p, true);
+            const out = made || touched.includes(p) ? await takeOut([[was, put]], now) : { blob: was };
+            if (!('blob' in out) && touched.includes(p)) {
+              const keep = path.join(LOA, 'interrupted', p);
+              fs.mkdirSync(path.dirname(keep), { recursive: true });
+              fs.copyFileSync(path.join(ROOT, p), keep);
+            }
             back.push([p, 'blob' in out ? out.blob : was]);
           }
-          await putBlobs(back, `run ${run.id} committed`, run.after);
+          await putBlobs(back, `run ${run.id} ${made ? 'committed' : 'not committed'}`, run.after);
           fs.rmSync(heldFile(), { force: true });
         } catch (e) {
           logError(e);
         }
     }
+    if (touched.length)
+      throw refused(
+        'commit-interrupted',
+        `${touched.join(', ')} changed while the commit held it. Nothing was committed, and every file is back.`,
+        { files: touched.join(', ') },
+      );
     const sha = (await gitAsync(['rev-parse', 'HEAD'])).trim();
     // What git committed: the chosen files, and any file a hook staged besides them.
     const committed = (await gitAsync(['diff-tree', '--root', '--no-commit-id', '--name-only', '-r', '-z', sha]))

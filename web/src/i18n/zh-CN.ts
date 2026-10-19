@@ -482,6 +482,8 @@ const catalogue: Catalogue = {
     '{name} 在恢复原样之后又有改动。还原它会丢失那处改动。',
   'Git refused the commit:': 'Git 拒绝了这次提交：',
   'Git refused the commit.': 'Git 拒绝了这次提交。',
+  '{files} changed while the commit held it. Nothing was committed, and every file is back.':
+    '提交占用 {files} 期间它被改动了。没有提交任何内容，每个文件都已还原。',
   'Your branch moved while committing. Try again.': '提交过程中你的分支发生了移动。请重试。',
   'Rate limited': '已被限流',
   Failed: '失败',
