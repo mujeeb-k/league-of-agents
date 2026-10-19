@@ -321,8 +321,8 @@ const catalogue: Catalogue = {
   'Show the demo instead': 'Afficher plutôt la démo',
   "Your bridge didn't accept this link": 'Votre pont n’a pas accepté ce lien',
   "Can't reach your bridge": 'Impossible de joindre votre pont',
-  "This browser is set to keep {host} from reaching apps on your computer, so it can't reach the bridge. The local app needs no permission. To allow this site instead, click the icon left of the address, turn on access to apps on this device, and try again.":
-    'Ce navigateur empêche {host} de joindre les applications de votre ordinateur, donc il ne peut pas joindre le pont. L’application locale n’a besoin d’aucune autorisation. Pour autoriser ce site, cliquez sur l’icône à gauche de l’adresse, activez l’accès aux applications de cet appareil, puis réessayez.',
+  "This browser is set to keep {host} from reaching apps on your computer, so it can't reach the bridge. The local app needs no permission. To allow this site instead, click the icon left of the address, turn on “Apps on device”, and try again.":
+    'Ce navigateur empêche {host} de joindre les applications de votre ordinateur, donc il ne peut pas joindre le pont. L’application locale n’a besoin d’aucune autorisation. Pour autoriser ce site, cliquez sur l’icône à gauche de l’adresse, activez « Applis sur l’appareil », puis réessayez.',
   'Nothing answered at {address}. The bridge may not be running, or this browser may be keeping the page from reaching your computer (in Chrome, the local network permission). The local app needs no permission.':
     'Rien n’a répondu à {address}. Le pont n’est peut-être pas lancé, ou ce navigateur empêche peut-être la page de joindre votre ordinateur (dans Chrome, l’autorisation de réseau local). L’application locale n’a besoin d’aucune autorisation.',
   "If the bridge isn't running, start it in your repo:": 'Si le pont n’est pas lancé, démarrez-le dans votre dépôt :',

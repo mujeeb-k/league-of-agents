@@ -299,8 +299,8 @@ const catalogue: Catalogue = {
   'Show the demo instead': '改为显示演示',
   "Your bridge didn't accept this link": '你的桥接程序没有接受这个链接',
   "Can't reach your bridge": '无法连接到你的桥接程序',
-  "This browser is set to keep {host} from reaching apps on your computer, so it can't reach the bridge. The local app needs no permission. To allow this site instead, click the icon left of the address, turn on access to apps on this device, and try again.":
-    '这个浏览器设置为阻止 {host} 访问你电脑上的应用，所以它无法连接到桥接程序。本地应用不需要权限。若想允许此网站，请点击地址左侧的图标，打开对此设备上应用的访问权限，然后重试。',
+  "This browser is set to keep {host} from reaching apps on your computer, so it can't reach the bridge. The local app needs no permission. To allow this site instead, click the icon left of the address, turn on “Apps on device”, and try again.":
+    '这个浏览器设置为阻止 {host} 访问你电脑上的应用，所以它无法连接到桥接程序。本地应用不需要权限。若想允许此网站，请点击地址左侧的图标，打开“设备上的应用”，然后重试。',
   'Nothing answered at {address}. The bridge may not be running, or this browser may be keeping the page from reaching your computer (in Chrome, the local network permission). The local app needs no permission.':
     '{address} 没有响应。桥接程序可能没有运行，或者这个浏览器阻止了此页面访问你的电脑（在 Chrome 中是本地网络权限）。本地应用不需要权限。',
   "If the bridge isn't running, start it in your repo:": '如果桥接程序没有运行，请在你的仓库中启动它：',

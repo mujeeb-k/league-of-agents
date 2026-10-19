@@ -117,6 +117,8 @@ test('blocked: "Can\'t reach your bridge" says why, and "Open the local app" con
       await page.goto(`${SITE}/#bridge=${b.port}&t=${codeFor(b)}`);
       await expect(page.locator('#stageState')).toContainText("Can't reach your bridge");
       await expect(page.locator('#blocked')).toContainText('keep leagueofagents.dev from reaching apps');
+      // Chrome's own name for the setting, as its site settings show it (Chrome 156).
+      await expect(page.locator('#blocked')).toContainText('turn on “Apps on device”');
       await page.screenshot({ path: test.info().outputPath('blocked.png') });
       await page.locator('#localLink').click();
       await expect(page).toHaveURL(new RegExp(`^http://127\\.0\\.0\\.1:${b.port}/`));

@@ -318,8 +318,8 @@ const catalogue: Catalogue = {
   'Show the demo instead': 'Mostrar a demonstração',
   "Your bridge didn't accept this link": 'Sua ponte não aceitou este link',
   "Can't reach your bridge": 'Não foi possível alcançar sua ponte',
-  "This browser is set to keep {host} from reaching apps on your computer, so it can't reach the bridge. The local app needs no permission. To allow this site instead, click the icon left of the address, turn on access to apps on this device, and try again.":
-    'Este navegador está configurado para impedir que {host} alcance apps no seu computador, então não consegue alcançar a ponte. O app local não precisa de permissão. Para permitir este site, clique no ícone à esquerda do endereço, ative o acesso a apps neste dispositivo e tente de novo.',
+  "This browser is set to keep {host} from reaching apps on your computer, so it can't reach the bridge. The local app needs no permission. To allow this site instead, click the icon left of the address, turn on “Apps on device”, and try again.":
+    'Este navegador está configurado para impedir que {host} alcance apps no seu computador, então não consegue alcançar a ponte. O app local não precisa de permissão. Para permitir este site, clique no ícone à esquerda do endereço, ative “Apps no dispositivo” e tente de novo.',
   'Nothing answered at {address}. The bridge may not be running, or this browser may be keeping the page from reaching your computer (in Chrome, the local network permission). The local app needs no permission.':
     'Nada respondeu em {address}. A ponte pode não estar rodando, ou este navegador pode estar impedindo a página de alcançar seu computador (no Chrome, a permissão de rede local). O app local não precisa de permissão.',
   "If the bridge isn't running, start it in your repo:": 'Se a ponte não estiver rodando, inicie-a no seu repositório:',

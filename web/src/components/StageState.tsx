@@ -74,7 +74,7 @@ function Unreachable({ conn, why }: { conn: Conn; why: string }) {
       {why === BLOCKED ? (
         <p id="blocked" className="text-ink2 text-pretty">
           {t(
-            "This browser is set to keep {host} from reaching apps on your computer, so it can't reach the bridge. The local app needs no permission. To allow this site instead, click the icon left of the address, turn on access to apps on this device, and try again.",
+            "This browser is set to keep {host} from reaching apps on your computer, so it can't reach the bridge. The local app needs no permission. To allow this site instead, click the icon left of the address, turn on “Apps on device”, and try again.",
             { host: location.host },
           )}
         </p>
