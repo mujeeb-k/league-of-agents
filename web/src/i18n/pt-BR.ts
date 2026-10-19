@@ -565,9 +565,6 @@ const catalogue: Catalogue = {
   'Stays inside your selection': 'Fica dentro da sua seleção',
   "Can change files outside your selection. You'll see each one flagged.":
     'Pode mudar arquivos fora da sua seleção. Você verá cada um sinalizado.',
-  'Wants to change {file}': 'Quer mudar {file}',
-  'Wants to run {command}': 'Quer executar {command}',
-  'Wants to use {tool}': 'Quer usar {tool}',
   'Asks to run: {command}': 'Pede para executar: {command}',
   'Asks to change {file}': 'Pede para mudar {file}',
   'Asks to use {tool}': 'Pede para usar {tool}',
@@ -664,5 +661,8 @@ const catalogue: Catalogue = {
   'Let it work as in a terminal': 'Deixar trabalhar como num terminal',
   'Hold it to your selection': 'Prender à sua seleção',
   Lock: 'Trava',
+  '{agent} in run {id} wants to change {file}': '{agent} na execução {id} quer mudar {file}',
+  '{agent} in run {id} wants to run {command}': '{agent} na execução {id} quer executar {command}',
+  '{agent} in run {id} wants to use {tool}': '{agent} na execução {id} quer usar {tool}',
 };
 export default catalogue;

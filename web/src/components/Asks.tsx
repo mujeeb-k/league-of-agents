@@ -22,7 +22,7 @@ export function Asks({ r }: { r: Run }) {
         {...(w.ask ? { 'data-ask': w.ask } : { 'data-want': w.path })}
         className="mt-2 rounded-lg border bg-card px-2.5 py-2 text-xs"
       >
-        <p className="text-foreground text-pretty [overflow-wrap:anywhere]">{wantSaid(w)}</p>
+        <p className="text-foreground text-pretty [overflow-wrap:anywhere]">{wantSaid(r, w)}</p>
         {holder ? (
           <p className="held mt-0.5 text-muted-foreground text-pretty">
             {t('Run {id} is working on it.', { id: holder.id })}

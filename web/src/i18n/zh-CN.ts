@@ -528,9 +528,6 @@ const catalogue: Catalogue = {
   'Stays inside your selection': '不会越出你所选范围',
   "Can change files outside your selection. You'll see each one flagged.":
     '可以改动你所选范围之外的文件，每一个都会标出给你看。',
-  'Wants to change {file}': '想要改动 {file}',
-  'Wants to run {command}': '想要运行 {command}',
-  'Wants to use {tool}': '想要使用 {tool}',
   'Asks to run: {command}': '请求运行：{command}',
   'Asks to change {file}': '请求改动 {file}',
   'Asks to use {tool}': '请求使用 {tool}',
@@ -621,5 +618,8 @@ const catalogue: Catalogue = {
   'Let it work as in a terminal': '让它像在终端里一样工作',
   'Hold it to your selection': '把它限制在你的选区内',
   Lock: '锁',
+  '{agent} in run {id} wants to change {file}': '运行 {id} 中的 {agent} 想要改动 {file}',
+  '{agent} in run {id} wants to run {command}': '运行 {id} 中的 {agent} 想要运行 {command}',
+  '{agent} in run {id} wants to use {tool}': '运行 {id} 中的 {agent} 想要使用 {tool}',
 };
 export default catalogue;

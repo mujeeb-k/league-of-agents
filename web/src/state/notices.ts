@@ -94,7 +94,7 @@ export function noticeAsks(runs: Run[]) {
       document.title = `(${unseen}) ${base}`;
       if (!notifying()) continue;
       const n = new Notification(t('Run {id} needs you', { id: r.id }), {
-        body: wantSaid(w),
+        body: wantSaid(r, w),
         tag: `loa-want-${S.repoRoot}-${r.id}-${w.ask ?? w.path}`,
       });
       n.onclick = () => {

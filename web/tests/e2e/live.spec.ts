@@ -3021,7 +3021,9 @@ test.describe('sessions at once', () => {
         await call(b, '/api/runs', { agent: 'claude', prompt: 'Log it. ask:run:shared/asked.txt', scope: ['shared/'] })
       ).body as unknown as RunDTO;
       const ask = page.locator(`#sideList [data-run="${id}"] [data-ask]`);
-      await expect(ask).toContainText('Wants to run printf asked > shared/asked.txt', { timeout: 15_000 });
+      await expect(ask).toContainText(`Claude Code in run ${id} wants to run printf asked > shared/asked.txt`, {
+        timeout: 15_000,
+      });
       await ask.locator('[data-allow]').click();
       await until(b, id, 'done');
       expect(fs.readFileSync(path.join(repo, 'shared/asked.txt'), 'utf8')).toBe('asked');
@@ -3864,7 +3866,7 @@ test.describe('sessions at once, in the app', () => {
       await run(page, 'edit:apps/console/main.ts');
       const card = page.locator('#sideList [data-run="2"]');
       const ask = card.locator('[data-want="apps/console/main.ts"]');
-      await expect(ask).toContainText('Wants to change apps/console/main.ts', { timeout: 15_000 });
+      await expect(ask).toContainText('Hermes in run 2 wants to change apps/console/main.ts', { timeout: 15_000 });
       await expect(card).toContainText('Waiting for you');
       // Run 1 holds the file: Allow waits for it, and the card says so.
       await expect(ask.locator('.held')).toHaveText('Run 1 is working on it.');
@@ -5892,7 +5894,9 @@ test('whole-repository Claude Code keeps its permission checks: what it would as
     const { id } = (await call(b, '/api/runs', { agent: 'claude', prompt: 'Log it. ask:run', scope: [] }))
       .body as unknown as RunDTO;
     const ask = page.locator(`#sideList [data-run="${id}"] [data-ask]`);
-    await expect(ask).toContainText('Wants to run printf asked > asked.txt', { timeout: 15_000 });
+    await expect(ask).toContainText(`Claude Code in run ${id} wants to run printf asked > asked.txt`, {
+      timeout: 15_000,
+    });
     await expect(page.locator(`#sideList [data-run="${id}"]`)).toContainText('Waiting for you');
     await expect(page.locator(`#sels .zone[data-run="${id}"] [data-ask] [data-allow]`)).toBeVisible();
     expect(fs.existsSync(asked)).toBe(false);
@@ -5927,11 +5931,11 @@ test('what a session asks is on the map and in the run as on its card, Allow and
       .body as unknown as RunDTO;
     // On the map, on the session's label; and in the run, which a phone shows below the map, in view.
     await expect(page.locator(`#sels .zone[data-run="${id}"] [data-ask]`)).toContainText(
-      'Wants to run printf asked > asked.txt',
+      `Claude Code in run ${id} wants to run printf asked > asked.txt`,
       { timeout: 15_000 },
     );
     const ask = page.locator('#insp [data-ask]');
-    await expect(ask).toContainText('Wants to run printf asked > asked.txt');
+    await expect(ask).toContainText(`Claude Code in run ${id} wants to run printf asked > asked.txt`);
     await expect(ask.locator('[data-allow]')).toBeInViewport();
     await expect(ask.locator('[data-refuse]')).toBeInViewport();
     await ask.locator('[data-allow]').click();

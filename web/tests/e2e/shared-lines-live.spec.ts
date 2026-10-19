@@ -303,7 +303,7 @@ test("Cursor's card says it asks before editing outside, and its refused edit is
     // The replay waits for this before its edit.
     go('two');
     const ask = card.locator('[data-want="a/tax.mjs"]');
-    await expect(ask).toContainText('Wants to change a/tax.mjs', { timeout: 15_000 });
+    await expect(ask).toContainText('Cursor in run 1 wants to change a/tax.mjs', { timeout: 15_000 });
     await expect(ask.locator('[data-allow]')).toBeEnabled();
     await expect(ask.locator('[data-refuse]')).toBeEnabled();
     // On the map too, the file it was refused is said as blocked, not as an edit.

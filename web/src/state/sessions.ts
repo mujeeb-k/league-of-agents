@@ -3,6 +3,7 @@ import type { Run } from '../lib/types';
 import type { Want } from '../api/types';
 import { covers } from '../lib/sections';
 import { t } from '../i18n';
+import { agentOf } from '../lib/constants';
 import { S, st } from './app';
 
 /** Most sessions started at once from one prompt; each gets a colour of its own (theme.css, --session-1 to 5). */
@@ -31,13 +32,18 @@ export const lockChoice = (scope: string[]) =>
 
 /** The writes a session at work asked to make outside its section, not yet answered. */
 export const asking = (r: Run) => (r.status === 'running' ? (r.wants ?? []).filter(w => !w.answer) : []);
-/** What a session asks, in a line: a file to change, a command to run, or a tool to use. */
-export const wantSaid = (w: Want) =>
-  !w.ask || (w.path && w.tool !== 'Bash')
-    ? t('Wants to change {file}', { file: w.path })
+/**
+ * What a session asks, in a line, with which session asks it, wherever it is shown: a file to change, a command to
+ * run, or a tool to use.
+ */
+export const wantSaid = (r: Run, w: Want) => {
+  const who = { agent: agentOf(r.agent).name, id: r.id };
+  return !w.ask || (w.path && w.tool !== 'Bash')
+    ? t('{agent} in run {id} wants to change {file}', { ...who, file: w.path })
     : w.tool === 'Bash'
-      ? t('Wants to run {command}', { command: w.said ?? '' })
-      : t('Wants to use {tool}', { tool: w.tool ?? '' });
+      ? t('{agent} in run {id} wants to run {command}', { ...who, command: w.said ?? '' })
+      : t('{agent} in run {id} wants to use {tool}', { ...who, tool: w.tool ?? '' });
+};
 
 /** The other session at work whose section holds a file: until it ends, the file can't join another section. */
 export const holderOf = (r: Run, path: string) =>
