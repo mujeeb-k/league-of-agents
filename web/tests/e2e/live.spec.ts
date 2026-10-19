@@ -26,6 +26,7 @@ import {
   call,
   git,
   codeFor,
+  freePort,
   homeOf,
   keptRecords,
   linkFor,
@@ -6296,7 +6297,8 @@ test('without --port, a busy 43210 moves the bridge to the next free port', asyn
 test('one bridge per repo: a second start or serve finds the running bridge instead of starting another', async () => {
   const repo = makeRepo(),
     b = await startBridge(repo, undefined, {}, ['--no-hooks']);
-  const other = String(b.port + 1);
+  // A port nothing listens on, though other tests' bridges may be running beside this one.
+  const other = String(await freePort());
   const loa = (...args: string[]) =>
     execFileSync(process.execPath, [BRIDGE, ...args], {
       cwd: repo,

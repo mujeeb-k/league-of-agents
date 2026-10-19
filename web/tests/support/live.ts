@@ -104,7 +104,7 @@ export function makeRepo(): string {
   return dir;
 }
 
-function freePort(): Promise<number> {
+export function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const s = net.createServer();
     s.unref();
