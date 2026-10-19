@@ -121,6 +121,13 @@ function moveLegacy(legacy, stopOld) {
     process.kill(old.pid, 'SIGTERM');
     const pause = new Int32Array(new SharedArrayBuffer(4));
     for (const t0 = Date.now(); alive(old.pid) && Date.now() - t0 < 5000;) Atomics.wait(pause, 0, 0, 100);
+    // Still running: nothing of its moves while it could still write it.
+    if (alive(old.pid)) {
+      console.error(
+        `The League of Agents bridge from an earlier version (process ${old.pid}) didn't stop. Nothing was moved.`,
+      );
+      process.exit(1);
+    }
     stoppedOld = true;
   }
   const refs = git(['for-each-ref', '--format=%(objectname) %(objecttype) %(refname)', 'refs/loa/'], { repo: true })

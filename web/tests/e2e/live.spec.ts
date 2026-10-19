@@ -1,5 +1,5 @@
 // Live mode end to end: a real bridge in a temp git repo, with tests/fixtures/fake-claude.mjs as Claude Code.
-import { execFile, execFileSync, spawnSync } from 'node:child_process';
+import { execFile, execFileSync, spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -5792,6 +5792,65 @@ test("the records of a 0.2.0 bridge move out of the repo: its hooks keep working
   } finally {
     old.stop();
     b?.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// A 0.2.0 bridge still running in the repo: nothing of its is moved under it. This version doesn't start beside it;
+// `stop` stops it first, and moves its records only once it has stopped.
+test("a 0.2.0 bridge still running: nothing moves under it; stop stops it first, and one that won't stop keeps all", async () => {
+  test.setTimeout(120_000);
+  const repo = makeRepo();
+  const env = { ...process.env, HOME: homeOf(repo) };
+  // Run without blocking this process: the earlier bridge is its child, and must be collected once it stops.
+  const loa = (...args: string[]) =>
+    new Promise<{ status: number | null; stdout: string; stderr: string }>(resolve => {
+      const child = spawn(process.execPath, [BRIDGE, ...args], { cwd: repo, env });
+      let stdout = '',
+        stderr = '';
+      child.stdout.on('data', d => (stdout += d));
+      child.stderr.on('data', d => (stderr += d));
+      child.on('close', status => resolve({ status, stdout, stderr }));
+    });
+  const old = await startBridge(
+    repo,
+    FAKE_CLAUDE,
+    { LOA_QUIET_MS: String(QUIET) },
+    ['--no-hooks'],
+    publishedBridge('0.2.0'),
+  );
+  let stubborn: ReturnType<typeof spawn> | null = null;
+  try {
+    fs.appendFileSync(path.join(repo, 'shared/log.ts'), '// edited\n');
+    await expect.poll(async () => (await endedRuns(old)).length, { timeout: 10_000 }).toBe(1);
+    const started = await loa('serve', '--no-hooks', '--no-open');
+    expect([started.status, started.stderr.trim()]).toEqual([
+      1,
+      'A League of Agents bridge from an earlier version is running in this repo. Stop it first: npx leagueofagents-cli@latest stop',
+    ]);
+    expect(git(repo, 'for-each-ref', 'refs/loa/')).not.toBe('');
+    expect(fs.existsSync(path.join(repo, '.loa/runs/1.json'))).toBe(true);
+    // A bridge that won't stop: nothing is moved.
+    stubborn = spawn(process.execPath, ['-e', "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"], {
+      stdio: 'ignore',
+    });
+    const real = fs.readFileSync(path.join(repo, '.loa/bridge.json'), 'utf8');
+    fs.writeFileSync(path.join(repo, '.loa/bridge.json'), JSON.stringify({ ...JSON.parse(real), pid: stubborn.pid }));
+    const kept = await loa('stop');
+    expect(kept.status).toBe(1);
+    expect(kept.stderr).toContain("didn't stop. Nothing was moved.");
+    expect(fs.existsSync(path.join(repo, '.loa/runs/1.json'))).toBe(true);
+    expect(git(repo, 'for-each-ref', 'refs/loa/')).not.toBe('');
+    // The real one: stopped, then its records moved.
+    fs.writeFileSync(path.join(repo, '.loa/bridge.json'), real);
+    const stopped = await loa('stop');
+    expect([stopped.status, stopped.stdout.trim()]).toEqual([0, 'Stopped League of Agents.']);
+    await expect.poll(() => old.proc.exitCode !== null || old.proc.signalCode !== null).toBe(true);
+    expect(git(repo, 'for-each-ref', 'refs/loa/')).toBe('');
+    expect(fs.existsSync(path.join(loaOf(repo), 'runs/1.json'))).toBe(true);
+  } finally {
+    stubborn?.kill('SIGKILL');
+    old.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
 });
