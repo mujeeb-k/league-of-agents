@@ -8,9 +8,10 @@
 // runs, the working tree holds that version, and the other's lines are put back after. A commit waits until no
 // session is working, so nothing is swapped under an agent at work.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { logError, readJson, refused, serial } from './util.mjs';
-import { LOA, ROOT, gitAsync } from './repo.mjs';
+import { LOA, ROOT, gitAsync, intoRepo } from './repo.mjs';
 import { blobAt, blobNow, headNow, putBlobs } from './snapshots.mjs';
 import { takeOut } from './writes.mjs';
 import { emitRun } from './events.mjs';
@@ -149,14 +150,17 @@ export function commitRun(run, { message = '', include = [] } = {}) {
     const setEntries = async env => {
       for (const [p, entry] of entries)
         await (entry
-          ? gitAsync(['update-index', '--add', '--cacheinfo', `${entry[0]},${entry[2]},${p}`], { env })
-          : gitAsync(['update-index', '--force-remove', '--', p], { env }));
+          ? gitAsync(['update-index', '--add', '--cacheinfo', `${entry[0]},${entry[2]},${p}`], { env, repo: true })
+          : gitAsync(['update-index', '--force-remove', '--', p], { env, repo: true }));
     };
     // Committed by git itself, from an index of its own: the person's hooks run (pre-commit sees only these files
     // staged; commit-msg may change the message) and signing is as they set it. A failing hook stops the commit.
+    // Git as the person's own from here: what it writes goes into the repo. The files' content is the bridge's,
+    // in its store: the repo gets its own copy first.
+    await intoRepo(entries.flatMap(([, e]) => (e ? [e[2]] : [])));
     const index = path.join(LOA, 'commit.index');
     const env = { ...process.env, GIT_INDEX_FILE: index };
-    await gitAsync(head.commit ? ['read-tree', head.commit] : ['read-tree', '--empty'], { env });
+    await gitAsync(head.commit ? ['read-tree', head.commit] : ['read-tree', '--empty'], { env, repo: true });
     await setEntries(env);
     if ((await headNow()).commit !== head.commit) throw refused('head-moved', 'HEAD moved. Try again.');
     // A file may hold another session's lines too. While git commits, with a pre-commit hook to run, it holds the
@@ -180,10 +184,12 @@ export function commitRun(run, { message = '', include = [] } = {}) {
       );
     }
     let made = false;
-    /** Held files something else wrote while the commit held them. */
+    /** Held files something else wrote while the commit held them; whether a version of one was kept aside. */
     const touched = [];
+    const interrupted = path.join(LOA, 'interrupted');
+    let kept = false;
     try {
-      await gitAsync(['commit', '-q', '-F', '-'], { env, input: message });
+      await gitAsync(['commit', '-q', '-F', '-'], { env, input: message, repo: true });
       made = true;
       // A held file is as the bridge put it, or as a pre-commit hook made it and committed it. Anything else wrote
       // it meanwhile (an editor, an agent in a terminal): the commit is taken back, so nothing is committed under it.
@@ -195,8 +201,8 @@ export function commitRun(run, { message = '', include = [] } = {}) {
         }
         if (touched.length) {
           await (head.commit
-            ? gitAsync(['update-ref', head.ref, head.commit, sha])
-            : gitAsync(['update-ref', '-d', head.ref, sha]));
+            ? gitAsync(['update-ref', head.ref, head.commit, sha], { repo: true })
+            : gitAsync(['update-ref', '-d', head.ref, sha], { repo: true }));
           made = false;
         }
       }
@@ -208,8 +214,8 @@ export function commitRun(run, { message = '', include = [] } = {}) {
       fs.rmSync(index, { force: true });
       // Each held file as it was before the swap, or, committed, as the commit left it (a hook may have formatted it)
       // with the other session's lines put back in. What something else wrote meanwhile stays on top; where it can't
-      // be kept apart from the swap, the file goes back exactly as it was, and that other version is kept in
-      // .loa/interrupted/ for the person. A failure here leaves the list for the next start.
+      // be kept apart from the swap, the file goes back exactly as it was, and that other version is kept for the
+      // person, in League of Agents' folder (said). A failure here leaves the list for the next start.
       if (held.length)
         try {
           const back = [];
@@ -217,9 +223,10 @@ export function commitRun(run, { message = '', include = [] } = {}) {
             const now = await blobNow(p, true);
             const out = made || touched.includes(p) ? await takeOut([[was, put]], now) : { blob: was };
             if (!('blob' in out) && touched.includes(p)) {
-              const keep = path.join(LOA, 'interrupted', p);
+              const keep = path.join(interrupted, p);
               fs.mkdirSync(path.dirname(keep), { recursive: true });
               fs.copyFileSync(path.join(ROOT, p), keep);
+              kept = true;
             }
             back.push([p, 'blob' in out ? out.blob : was]);
           }
@@ -229,12 +236,16 @@ export function commitRun(run, { message = '', include = [] } = {}) {
           logError(e);
         }
     }
-    if (touched.length)
-      throw refused(
-        'commit-interrupted',
-        `${touched.join(', ')} changed while the commit held it. Nothing was committed, and every file is back.`,
-        { files: touched.join(', ') },
-      );
+    if (touched.length) {
+      const said = `${touched.join(', ')} changed while the commit held it. Nothing was committed, and every file is back.`;
+      const where = interrupted.replace(os.homedir(), '~');
+      throw kept
+        ? refused('commit-interrupted-kept', `${said} What was written meanwhile is in ${where}.`, {
+            files: touched.join(', '),
+            kept: where,
+          })
+        : refused('commit-interrupted', said, { files: touched.join(', ') });
+    }
     const sha = (await gitAsync(['rev-parse', 'HEAD'])).trim();
     // What git committed: the chosen files, and any file a hook staged besides them.
     const committed = (await gitAsync(['diff-tree', '--root', '--no-commit-id', '--name-only', '-r', '-z', sha]))

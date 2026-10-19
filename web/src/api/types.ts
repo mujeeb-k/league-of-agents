@@ -138,7 +138,7 @@ export interface RunDTO {
    * Without a sandbox, files a shell command changed outside the section, put back at once; what it wrote is kept
    * under `ref`, to restore (POST /api/runs/:id/put-back).
    */
-  putBack?: { path: string; ref: string; put: string | null; restored: boolean }[];
+  putBack?: { path: string; ref: string; commit?: string; put: string | null; restored: boolean }[];
   /** Files it changed that the map doesn't show (binary files, the skip list's): reverted and committed with it. */
   unseen?: { path: string; created: boolean; deleted: boolean }[];
   committed?: { sha: string; at: number; files: string[]; hook?: string[] };

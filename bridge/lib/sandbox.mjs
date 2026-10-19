@@ -309,8 +309,9 @@ export async function prepareSandbox(run) {
       deny.push(add('literal', path.join(real, p)));
   const git = [gitDir.trim(), path.resolve(real, commonDir.trim())];
   const later = runLater(git[0], git[1], path.resolve(real, hooksDir.trim()));
-  // In the repo, though git ignores them: the bridge's own folder, and the agents' settings and hooks for this repo,
-  // which later sessions run outside the sandbox. Writable only when the section holds them.
+  // In the repo, though git ignores them: the loader the Claude Code plugin's hooks run (.loa/), and the agents'
+  // settings and hooks for this repo, which later sessions run outside the sandbox. Writable only when the section
+  // holds them.
   later.push(['subpath', path.join(real, '.loa')]);
   for (const p of REPO_SETTINGS) if (!inSection.some(f => f(p))) later.push(['literal', path.join(real, p)]);
   // The repo's own folder, and every folder above it and above each of those: none can be moved away and replaced.
@@ -322,9 +323,11 @@ export async function prepareSandbox(run) {
   }
   for (const d of parents) deny.push(add('literal', d));
   // Every bridge's token, in its settings and in the link its log prints, this repo's or another's: one read would let
-  // a session start a run that nothing holds. In any case, as macOS's disk reads .LOA as .loa.
+  // a session start a run that nothing holds. With them, every repo's runs and snapshots. Where bridges before this
+  // one kept the token too, in any case, as macOS's disk reads .LOA as .loa.
   const token = [
-    ...['bridge.json', 'bridge.log'].map(f => add('literal', path.join(real, '.loa', f))),
+    ...['bridge.json', 'bridge.log'].map(f => add('literal', path.join(realish(LOA), f))),
+    add('regex', `^${escape(realish(path.dirname(LOA)))}/[^/]+/(bridge\\.(json|log)$|runs(/|$)|git(/|$))`),
     add('regex', '/\\.[Ll][Oo][Aa]/[Bb][Rr][Ii][Dd][Gg][Ee]\\.([Jj][Ss][Oo][Nn]|[Ll][Oo][Gg])$'),
   ].join(' ');
   // In the home folder a session reads what it would anywhere; it writes only its agent's own state and caches.

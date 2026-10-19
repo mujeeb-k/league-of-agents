@@ -3,14 +3,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { BRIDGE_DIR } from './paths.mjs';
-import { readJson } from './util.mjs';
+import { loaOf, readJson } from './util.mjs';
 import { ROOT, LOA, excludeFromGit, git } from './repo.mjs';
 
 // Each agent's own hook file gets entries that run a copy of this bridge. Hooks that aren't the bridge's are never
 // changed; removing the bridge's puts each file back exactly as it was, or deletes a file it created. They are
 // installed while a bridge runs and taken out when it stops.
-// The repo's own hook files run the copy in the repo (.loa/bridge.mjs), which goes with the repo. Cursor reads project
+// The repo's own hook files run the copy in League of Agents' folder for the repo (loaOf). Cursor reads project
 // hooks only from the folder opened as its workspace, which is often a parent of the repo, so its hooks go in the
 // user's own Cursor settings, shared by every repo: those run a copy in League of Agents' own settings folder, never
 // one inside a repo that may be deleted, and the hook finds the repo itself (runHook).
@@ -21,7 +22,7 @@ export const hookFiles = () => ({
 });
 /** A hook file as people know it: relative inside the repo, from ~ outside it. */
 export const shown = p => (p.startsWith(ROOT + path.sep) ? path.relative(ROOT, p) : p.replace(os.homedir(), '~'));
-const OURS = /(loa\.mjs|\.loa[\\/]bridge\.mjs|league-of-agents[\\/]hook[\\/]bridge\.mjs)" hook /;
+const OURS = /(loa\.mjs|\.loa[\\/]bridge\.mjs|league-of-agents[\\/](hook|repos[\\/][0-9a-f]+)[\\/]bridge\.mjs)" hook /;
 const isOurs = command => OURS.test(String(command));
 const backupFile = () => path.join(LOA, 'hooks-backup.json');
 /**
@@ -43,7 +44,7 @@ const readBackup = () =>
   Object.fromEntries(Object.entries(readJson(backupFile(), {})).map(([p, v]) => [path.resolve(ROOT, p), v]));
 /** League of Agents' own settings folder, outside every repo, where approved checks are kept too (checks.mjs). */
 const userDir = () => path.join(os.homedir(), '.config', 'league-of-agents');
-/** What the repo's hooks run: a one-line file that loads the bridge's copy in .loa (copyForHooks). */
+/** What the repo's hooks run: a one-line file that loads the bridge's copy in League of Agents' folder (copyForHooks). */
 const hookFile = () => path.join(LOA, 'bridge.mjs');
 /** What Cursor's hooks run, shared by every repo: the copy in League of Agents' own folder. */
 const userHookFile = () => path.join(userDir(), 'hook', 'bridge.mjs');
@@ -60,7 +61,8 @@ const alive = (pid, root) => {
   } catch {
     return false;
   }
-  return readJson(path.join(root, '.loa/bridge.json'), {}).pid === pid;
+  // Or, for a bridge before this one, the file it kept in the repo.
+  return [loaOf(root), path.join(root, '.loa')].some(d => readJson(path.join(d, 'bridge.json'), {}).pid === pid);
 };
 /** This bridge is running, with its hooks in or not. */
 export function markRunning(hooks) {
@@ -97,13 +99,23 @@ function othersWithHooks() {
   return n;
 }
 /**
- * Hooks, the bridge's and the Claude Code plugin's, run a copy of the bridge inside the repo, so they keep working when the
- * bridge was started from a temporary place (npx's cache) that may later be cleared. Each copy is a folder named by
- * its contents, and .loa/bridge.mjs is switched to it by a rename: a hook starting meanwhile loads the old copy or the
+ * Hooks, the bridge's and the Claude Code plugin's, run a copy of the bridge in League of Agents' folder for the repo, so
+ * they keep working when the bridge was started from a temporary place (npx's cache) that may later be cleared. Each
+ * copy is a folder named by its contents, and bridge.mjs there is switched to it by a rename: a hook starting meanwhile loads the old copy or the
  * new one, never half of one. Copies over a day old go; a hook still running from one has long since loaded it.
  */
 export function copyForHooks() {
   copyTo(LOA, hookFile());
+  // The Claude Code plugin's hooks look for it in the repo, where bridges before this one kept it: one line there
+  // loads this copy.
+  const shim = path.join(ROOT, '.loa', 'bridge.mjs');
+  fs.mkdirSync(path.dirname(shim), { recursive: true, mode: 0o700 });
+  excludeFromGit(['.loa/']);
+  fs.writeFileSync(`${shim}.tmp`, `import ${JSON.stringify(pathToFileURL(hookFile()).href)};\n`);
+  fs.renameSync(`${shim}.tmp`, shim);
+  // The copies an earlier version kept there, which the loader no longer names.
+  for (const old of fs.readdirSync(path.dirname(shim)))
+    if (/^b-[0-9a-f]{12}$/.test(old)) fs.rmSync(path.join(path.dirname(shim), old), { recursive: true, force: true });
 }
 /** The same copy in a folder of its own, its entry file at `entry`. */
 function copyTo(home, entry) {
@@ -224,9 +236,10 @@ export function removeHooks() {
       const parsed = before?.text == null ? null : JSON.parse(before.text);
       original = parsed && withoutOurs(parsed);
       // A file that already held another repo's hooks is not put back as it was.
-      clean = !/(loa\.mjs|\.loa[\\/]+bridge\.mjs|league-of-agents[\\/]+hook[\\/]+bridge\.mjs)\\" hook /.test(
-        before.text,
-      );
+      clean =
+        !/(loa\.mjs|\.loa[\\/]+bridge\.mjs|league-of-agents[\\/]+(hook|repos[\\/]+[0-9a-f]+)[\\/]+bridge\.mjs)\\" hook /.test(
+          before.text,
+        );
     } catch {}
     if (before && before.text === null && !hasOwnContent(stripped)) {
       fs.rmSync(p);

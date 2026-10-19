@@ -14,17 +14,29 @@ function filesUnder(dir: string): string[] {
 }
 
 /**
- * Where a marker landed: every object git holds for the repo (loose or packed, reachable or not, read as content),
- * every file under .git and .loa as bytes, and every file under the other folders given (the bridge's home and temp
- * folders). The working tree itself, where the marker was planted, is not searched.
+ * Where a marker landed: every object git holds for the repo, and in each League of Agents store found in the folders
+ * given (loose or packed, reachable or not, read as content), every file under .git and .loa as bytes, and every file
+ * under the other folders given (the bridge's home and temp folders). The working tree itself, where the marker was
+ * planted, is not searched.
  */
 export function landings(marker: string, repo: string, folders: string[]): string[] {
   const hits: string[] = [];
-  const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, maxBuffer: 1 << 30 });
-  for (const line of git('cat-file', '--batch-all-objects', '--batch-check').toString().split('\n')) {
-    const [oid, type] = line.split(' ');
-    if (oid && type !== 'missing' && git('cat-file', type!, oid).includes(marker))
-      hits.push(`git object ${oid} (${type})`);
+  const stores = folders.flatMap(f => {
+    const repos = path.join(f, '.config/league-of-agents/repos');
+    return fs.existsSync(repos)
+      ? fs
+          .readdirSync(repos)
+          .map(d => path.join(repos, d, 'git'))
+          .filter(d => fs.existsSync(path.join(d, 'objects')))
+      : [];
+  });
+  for (const at of [[], ...stores.map(d => ['--git-dir', d])]) {
+    const git = (...args: string[]) => execFileSync('git', [...at, ...args], { cwd: repo, maxBuffer: 1 << 30 });
+    for (const line of git('cat-file', '--batch-all-objects', '--batch-check').toString().split('\n')) {
+      const [oid, type] = line.split(' ');
+      if (oid && type !== 'missing' && git('cat-file', type!, oid).includes(marker))
+        hits.push(`git object ${oid} (${type})${at.length ? ` in ${at[1]}` : ''}`);
+    }
   }
   for (const dir of [path.join(repo, '.git'), path.join(repo, '.loa'), ...folders])
     for (const f of filesUnder(dir)) if (fs.readFileSync(f).includes(marker)) hits.push(f.replace(repo + path.sep, ''));

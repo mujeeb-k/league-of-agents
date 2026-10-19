@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
-import { LOA, ROOT, gitAsync } from './repo.mjs';
+import { LOA, ROOT, gitAsync, gitEnv } from './repo.mjs';
 import { splitLines } from './util.mjs';
 
 /** git's empty blob, for a file that isn't there. Written once, so a diff or a merge can name it. */
@@ -25,8 +25,11 @@ const emptyBlob = () =>
 /** git with its output as bytes: a file's text is merged as it is, whatever its encoding. */
 const gitBytes = (args, input) =>
   new Promise((resolve, reject) => {
-    const child = execFile('git', args, { cwd: ROOT, encoding: 'buffer', maxBuffer: 256 * 1024 * 1024 }, (e, out) =>
-      e ? reject(e) : resolve(out),
+    const child = execFile(
+      'git',
+      args,
+      { cwd: ROOT, env: gitEnv(), encoding: 'buffer', maxBuffer: 256 * 1024 * 1024 },
+      (e, out) => (e ? reject(e) : resolve(out)),
     );
     if (input !== undefined) child.stdin.end(input);
   });

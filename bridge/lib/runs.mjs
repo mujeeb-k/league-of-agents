@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { line, logError, readJson, refused, splitLines, serial } from './util.mjs';
 import { inScope, rangeKept, scopeEntry } from './scope.mjs';
-import { ROOT, RUNS_DIR, git } from './repo.mjs';
+import { ROOT, RUNS_DIR, unpin } from './repo.mjs';
 import { linesOf } from './agents/lines.mjs';
 import { blobAt, blobNow, pin, putBlobs, showAt, computeChanges, snapshotNow } from './snapshots.mjs';
 import { takeOut } from './writes.mjs';
@@ -25,7 +25,7 @@ import { emit, emitRun } from './events.mjs';
 import { pinSteps, stepsKept, stepsOf } from './steps.mjs';
 
 export const runs = new Map();
-/** The runs recorded before, from .loa/runs/. */
+/** The runs recorded before, from League of Agents' folder for the repo (repo.mjs RUNS_DIR). */
 export function loadRuns() {
   for (const f of fs.readdirSync(RUNS_DIR))
     if (f.endsWith('.json')) {
@@ -47,17 +47,14 @@ export function pruneRuns() {
     .slice(0, Math.max(0, ids.length - KEEP_RUNS))
     .filter(id => (runs.get(id).endedAt ?? runs.get(id).startedAt ?? 0) < cutoff);
   if (!old.length) return;
-  git(['update-ref', '--stdin'], {
-    input:
-      old
-        .flatMap(id => [
-          `delete refs/loa/runs/${id}/before`,
-          `delete refs/loa/runs/${id}/after`,
-          `delete refs/loa/runs/${id}/steps`,
-          ...[...new Set((runs.get(id).putBack ?? []).map(k => k.ref))].map(ref => `delete ${ref}`),
-        ])
-        .join('\n') + '\n',
-  });
+  unpin(
+    old.flatMap(id => [
+      `refs/loa/runs/${id}/before`,
+      `refs/loa/runs/${id}/after`,
+      `refs/loa/runs/${id}/steps`,
+      ...new Set((runs.get(id).putBack ?? []).map(k => k.ref)),
+    ]),
+  );
   for (const id of old) {
     for (const ext of ['.json', '.stream.jsonl', '.stderr.log', '.steps.jsonl'])
       fs.rmSync(path.join(RUNS_DIR, id + ext), { force: true });

@@ -1,9 +1,9 @@
 // Authorship recorded in git, read only: Git AI notes and co-author trailers; and attribution written as a note.
 import crypto from 'node:crypto';
 import { VERSION } from './paths.mjs';
-import { gitAsync } from './repo.mjs';
+import { LOA_IDENT, gitAsync } from './repo.mjs';
 import { repoFile } from './files.mjs';
-import { LOA_IDENT, headNow } from './snapshots.mjs';
+import { headNow } from './snapshots.mjs';
 import { runs } from './runs.mjs';
 
 /**
@@ -184,6 +184,7 @@ export async function exportAttribution(format, files) {
   );
   await gitAsync(['notes', `--ref=${ref.slice('refs/notes/'.length)}`, 'add', '-f', '-F', '-', head], {
     input: note,
+    repo: true,
     ...(hasIdentity ? {} : { env: { ...process.env, ...LOA_IDENT } }),
   });
   return { ref, commit: head, files: named.length };

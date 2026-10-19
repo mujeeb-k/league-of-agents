@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
-import { FAKE_ACP, call, git, linkFor, startBridge, type Bridge } from '../support/live';
+import { FAKE_ACP, call, git, linkFor, loaOf, startBridge, type Bridge } from '../support/live';
 import { APP } from '../support/targets';
 import fr from '../../src/i18n/fr';
 
@@ -863,7 +863,7 @@ test('a folder of 1,500 files as the map, picked from a repository too large to 
     const times: number[] = [];
     for (let i = 0; i < 3; i++) {
       // Each time from the whole repository, which asks for a folder.
-      fs.rmSync(path.join(repo, '.loa/map.json'), { force: true });
+      fs.rmSync(path.join(loaOf(repo), 'map.json'), { force: true });
       await page.goto('about:blank');
       await page.goto(linkFor(b));
       const pick = page.locator(`#mapPicker [data-folder="src/area${i}/"]`);

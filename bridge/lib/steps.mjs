@@ -1,12 +1,12 @@
 // A run's steps: each tool call its agent makes, as it makes it: what it does (reads, edits, runs a command), the
 // file it names, and when. The map shows where each session is from them, and its timeline lists them. They are kept
-// whole in .loa/runs/<id>.steps.jsonl, past the activity's last 400 lines and any restart. An edit's file, as the edit
-// left it, is kept as a git blob, so the map can show it at that moment; at the run's end the blobs are pinned under
-// refs/loa/runs/<id>/steps. The file as the edit found it is kept too (`from`): what changed between the two is what
+// whole in <id>.steps.jsonl in the runs folder, past the activity's last 400 lines and any restart. An edit's file, as
+// the edit left it, is kept as a git blob, so the map can show it at that moment; at the run's end the blobs are
+// pinned in the store under refs/loa/runs/<id>/steps. The file as the edit found it is kept too (`from`): what changed between the two is what
 // that agent wrote, whatever else changed the file before or after (agents/lines.mjs).
 import fs from 'node:fs';
 import path from 'node:path';
-import { ROOT, RUNS_DIR, gitAsync } from './repo.mjs';
+import { ROOT, RUNS_DIR, gitAsync, keep } from './repo.mjs';
 import { MAX_BYTES } from './files.mjs';
 import { secretSpecs } from './snapshots.mjs';
 import { emit } from './events.mjs';
@@ -163,8 +163,8 @@ export const stepsKept = run =>
   Promise.all([...keeping.entries()].filter(([k]) => k.startsWith(`${run.id} `)).map(([, p]) => p));
 
 /**
- * The run ended: once every edit's file is kept, the blobs are pinned under refs/loa/runs/<id>/steps (a tree of
- * them, named by step), so git keeps them as long as the run.
+ * The run ended: once every edit's file is kept, the blobs are pinned in the store under refs/loa/runs/<id>/steps (a
+ * tree of them, named by step), so they are kept as long as the run.
  */
 export async function pinSteps(run) {
   // A run closed after a restart has no steps in memory: those in its file.
@@ -184,5 +184,5 @@ export async function pinSteps(run) {
   const tree = (
     await gitAsync(['mktree'], { input: blobs.map(([b, name]) => `100644 blob ${b}\t${name}`).join('\n') + '\n' })
   ).trim();
-  await gitAsync(['update-ref', `refs/loa/runs/${run.id}/steps`, tree]);
+  await keep(`refs/loa/runs/${run.id}/steps`, tree);
 }

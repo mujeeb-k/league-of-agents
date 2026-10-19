@@ -16,7 +16,7 @@ import {
 } from './cli.mjs';
 import { serve } from './serve.mjs';
 
-openRepo();
+openRepo({ stopOld: command === 'stop' || command === 'uninstall' });
 initChecks();
 loadAgents();
 if (command === 'uninstall') await uninstall();
@@ -35,7 +35,7 @@ const hooks = opt('hooks')
         : false;
 // `start` (and no command) runs the bridge in the background; `serve` runs it here, in the foreground.
 if (command !== 'serve') await startInBackground(hooks);
-// One bridge per repo. A second would take over .loa/bridge.json, and the hooks, which find the bridge there,
+// One bridge per repo. A second would take over its bridge.json, and the hooks, which find the bridge there,
 // would send its prompts and stops to the wrong one. `start` already opened the running one instead.
 {
   const other = await running();

@@ -64,7 +64,7 @@ function allowedOrigin(origin) {
 /**
  * A link carries a code good for one use: the page that opens it exchanges it for a session token of its own, kept
  * in that browser, so a link left in a browser's history, a terminal's scrollback or a log opens nothing. The
- * bridge's own token (.loa/bridge.json) is never in a link: the command line uses it, and asks for each link's code.
+ * bridge's own token (its bridge.json) is never in a link: the command line uses it, and asks for each link's code.
  */
 const codes = new Set(),
   sessionTokens = new Set();

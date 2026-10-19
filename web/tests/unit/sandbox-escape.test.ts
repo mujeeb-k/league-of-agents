@@ -6,6 +6,7 @@
 // rewritten command line, and swapping a folder for one of its own so that something which runs later, outside the
 // sandbox, reads its files instead.
 import { execFileSync, spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -36,6 +37,13 @@ type Opts = {
   after?: (s: Session) => void;
 };
 const BRIDGE = path.join(LIB, '../loa.mjs');
+/** League of Agents' folder for a repo, in a home folder (bridge/lib/util.mjs loaOf). */
+const loaOf = (home: string, root: string) =>
+  path.join(
+    home,
+    '.config/league-of-agents/repos',
+    crypto.createHash('sha256').update(root).digest('hex').slice(0, 32),
+  );
 /** A file in /tmp, which every session may write: named after this run, written and removed by the command itself. */
 const PROBE = tagged('escape-probe');
 
@@ -60,10 +68,13 @@ function withSession<T>(
   }
   for (const f of ['Library/Keychains/login.keychain-db', 'Library/Keychains/other.keychain-db'])
     fs.writeFileSync(path.join(home, f), `${MARKER}\n`);
-  // Another repo's bridge, running: its key, which would let a session drive that bridge, and its log of links.
-  fs.mkdirSync(path.join(home, 'code/other/.loa'), { recursive: true });
-  fs.writeFileSync(path.join(home, 'code/other/.loa/bridge.json'), JSON.stringify({ port: 1, token: MARKER }));
-  fs.writeFileSync(path.join(home, 'code/other/.loa/bridge.log'), `Open http://127.0.0.1:1/#t=${MARKER}\n`);
+  // Another repo's bridge, running: its key, which would let a session drive that bridge, and its log of links, in
+  // League of Agents' folder for that repo, and where a bridge before this one kept them, in the repo.
+  for (const dir of [loaOf(home, path.join(home, 'code/other')), path.join(home, 'code/other/.loa')]) {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'bridge.json'), JSON.stringify({ port: 1, token: MARKER }));
+    fs.writeFileSync(path.join(dir, 'bridge.log'), `Open http://127.0.0.1:1/#t=${MARKER}\n`);
+  }
   fs.mkdirSync(path.join(home, '.config/league-of-agents/running'), { recursive: true });
   fs.writeFileSync(
     path.join(home, '.config/league-of-agents/running/1'),
@@ -87,10 +98,10 @@ function withSession<T>(
       ),
     },
   }).trim();
-  execFileSync('git', ['update-ref', 'refs/loa/runs/1/before', snapshot], { cwd: repo });
   const url = (f: string) => JSON.stringify(pathToFileURL(path.join(LIB, f)).href);
   const script = `
     const r = await import(${url('repo.mjs')}); r.openRepo();
+    await r.keep('refs/loa/runs/1/before', ${JSON.stringify(snapshot)});
     const sb = await import(${url('sandbox.mjs')});
     sb.setClaudeHeld(true);
     const run = { id: 1, scope: ${JSON.stringify(scope)}, agent: ${JSON.stringify(agent)} };
@@ -103,8 +114,8 @@ function withSession<T>(
       encoding: 'utf8',
     }),
   ) as string[] | null;
-  fs.writeFileSync(path.join(repo, '.loa/bridge.log'), 'Open http://127.0.0.1:43210/#t=SECRET\n');
-  fs.writeFileSync(path.join(repo, '.loa/scope-1.json'), JSON.stringify({ scope, ranges: {} }));
+  fs.writeFileSync(path.join(loaOf(home, repo), 'bridge.log'), 'Open http://127.0.0.1:43210/#t=SECRET\n');
+  fs.writeFileSync(path.join(loaOf(home, repo), 'scope-1.json'), JSON.stringify({ scope, ranges: {} }));
   try {
     return use({ base, home, repo }, args);
   } finally {
@@ -120,8 +131,8 @@ function hooked(s: Session, tool: string, input: object, id = 't1') {
     env: {
       ...process.env,
       HOME: s.home,
-      LOA_HOLD_DIR: path.join(s.repo, '.loa/hold-1'),
-      LOA_SCOPE_FILE: path.join(s.repo, '.loa/scope-1.json'),
+      LOA_HOLD_DIR: path.join(loaOf(s.home, s.repo), 'hold-1'),
+      LOA_SCOPE_FILE: path.join(loaOf(s.home, s.repo), 'scope-1.json'),
     },
     encoding: 'utf8',
   });
@@ -158,12 +169,15 @@ function attempt(commands: Record<string, string>, opts: Opts | string[] = {}) {
   });
 }
 
-/** Whether the hook lets each file tool call through, for a session on `scope`. `~` and `@` stand for home and repo. */
+/**
+ * Whether the hook lets each file tool call through, for a session on `scope`. `~`, `@` and `%` stand for home, repo
+ * and League of Agents' folder for the repo.
+ */
 function tools(calls: Record<string, [tool: string, input: Record<string, string>]>, scope = ['src/']) {
   return withSession({ scope }, s =>
     Object.fromEntries(
       Object.entries(calls).map(([name, [tool, input]]) => {
-        const at = (v: string) => v.replace(/^~/, s.home).replace(/^@/, s.repo);
+        const at = (v: string) => v.replace(/^~/, s.home).replace(/^@/, s.repo).replace(/^%/, loaOf(s.home, s.repo));
         const res = hooked(s, tool, Object.fromEntries(Object.entries(input).map(([k, v]) => [k, at(v)])));
         expect(res.stdout + res.stderr, name).not.toContain(MARKER);
         return [name, res.status === 0];
@@ -183,13 +197,14 @@ describe.runIf(process.platform === 'darwin')('a session on a section, in its sa
   it("can't read a bridge's token, in its settings or its log, its own or another repo's", () => {
     expect(
       attempt({
-        settings: 'cat .loa/bridge.json',
-        log: 'cat .loa/bridge.log',
-        other: 'cat "$HOME/code/other/.loa/bridge.json"',
-        otherLog: 'cat "$HOME/code/other/.LOA/Bridge.log"',
-        search: 'grep -r loa-marker "$HOME/code"',
+        settings: 'cat "$HOME"/.config/league-of-agents/repos/*/bridge.json',
+        log: 'cat "$HOME"/.config/league-of-agents/repos/*/bridge.log',
+        records: 'ls "$HOME"/.config/league-of-agents/repos/*/runs',
+        earlier: 'cat "$HOME/code/other/.loa/bridge.json"',
+        earlierLog: 'cat "$HOME/code/other/.LOA/Bridge.log"',
+        search: 'grep -r loa-marker "$HOME/code" "$HOME/.config"',
       }),
-    ).toEqual({ settings: false, log: false, other: false, otherLog: false, search: false });
+    ).toEqual({ settings: false, log: false, records: false, earlier: false, earlierLog: false, search: false });
   });
 
   it("can't swap a folder that holds what runs later for one of its own", () => {
@@ -316,8 +331,8 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
         key: ['Read', { file_path: '~/.ssh/id_ed25519' }],
         keychain: ['Read', { file_path: '~/Library/Keychains/login.keychain-db' }],
         ownFolder: ['Read', { file_path: '~/.claude/settings.json' }],
-        token: ['Read', { file_path: '@/.loa/bridge.json' }],
-        log: ['Read', { file_path: '@/.loa/bridge.log' }],
+        token: ['Read', { file_path: '%/bridge.json' }],
+        log: ['Read', { file_path: '%/bridge.log' }],
         system: ['Read', { file_path: '/etc/hosts' }],
         upAndOut: ['Read', { file_path: '@/src/../../../home/.ssh/id_ed25519' }],
         search: ['Grep', { pattern: 'x' }],
@@ -390,14 +405,27 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
   it("never read another bridge's key or its log, nor search a folder that holds them", () => {
     expect(
       tools({
-        key: ['Read', { file_path: '~/code/other/.loa/bridge.json' }],
+        key: ['Read', { file_path: '~/.config/league-of-agents/repos/x/bridge.json' }],
+        earlier: ['Read', { file_path: '~/code/other/.loa/bridge.json' }],
         log: ['Read', { file_path: '~/code/other/.LOA/bridge.log' }],
         home: ['Grep', { path: '~', pattern: 't' }],
         code: ['Grep', { path: '~/code', pattern: 't' }],
+        config: ['Grep', { path: '~/.config', pattern: 't' }],
+        records: ['Glob', { path: '~/.config', pattern: '**/*.json' }],
         own: ['Grep', { path: '@/src', pattern: 'a' }],
         names: ['Glob', { path: '~/code', pattern: '**/*.json' }],
       }),
-    ).toEqual({ key: false, log: false, home: false, code: false, own: true, names: true });
+    ).toEqual({
+      key: false,
+      earlier: false,
+      log: false,
+      home: false,
+      code: false,
+      config: false,
+      records: false,
+      own: true,
+      names: true,
+    });
   });
 
   // A tool that could reach a file or start a program runs in Claude Code's own process, outside the sandbox: on a
@@ -419,7 +447,7 @@ describe.runIf(process.platform === 'darwin')("a Claude Code session's file tool
   it("refuse every call when the session's hold can't be read", () => {
     expect(
       withSession({}, s => {
-        fs.rmSync(path.join(s.repo, '.loa/hold-1/hold.json'));
+        fs.rmSync(path.join(loaOf(s.home, s.repo), 'hold-1/hold.json'));
         return ['Bash', 'Read', 'Write', 'TodoWrite'].map(
           tool => hooked(s, tool, { command: 'true', file_path: path.join(s.repo, 'src/a.txt') }).status,
         );
@@ -442,7 +470,8 @@ describe.runIf(process.platform === 'darwin')('a Hermes session, whole inside th
         notes: 'touch "$HOME/notes"',
         key: 'cat "$HOME/.ssh/id_ed25519"',
         keychain: 'cat "$HOME/Library/Keychains/login.keychain-db"',
-        bridge: 'cat "$HOME/code/other/.loa/bridge.json"',
+        bridge: 'cat "$HOME"/.config/league-of-agents/repos/*/bridge.json',
+        earlier: 'cat "$HOME/code/other/.loa/bridge.json"',
         temp: `touch ${PROBE} && rm ${PROBE}`,
       }),
     ).toEqual({
@@ -455,6 +484,7 @@ describe.runIf(process.platform === 'darwin')('a Hermes session, whole inside th
       key: true,
       keychain: false,
       bridge: false,
+      earlier: false,
       temp: true,
     });
   });

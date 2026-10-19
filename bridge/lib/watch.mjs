@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { logError, serial } from './util.mjs';
 import { HOOK_AGENT } from './hook.mjs';
-import { ROOT, CONFIG_FILE, gitAsync } from './repo.mjs';
+import { ROOT, CONFIG_FILE, gitAsync, keep } from './repo.mjs';
 import { SKIP, forgetFiles, isCode } from './files.mjs';
 import { writeTree, commitTree, headNow, pin, computeChanges, startIndex } from './snapshots.mjs';
 import { runs, working, newRun, finishRun } from './runs.mjs';
@@ -34,7 +34,10 @@ export function armIdle() {
 }
 /** @type {{ head: { commit: string; ref: string }; tree: string; commit: string } | null} */
 export let base = null;
-export const setBase = b => (base = b);
+export const setBase = b => {
+  base = b;
+  keepBase();
+};
 /** @type {NodeJS.Timeout | undefined} */
 let quietTimer;
 const pending = new Set();
@@ -45,8 +48,14 @@ export async function rebase(fresh = false) {
   forgetFiles();
   const head = await headNow(),
     tree = await writeTree(fresh);
-  base = { head, tree, commit: await commitTree(tree, 'baseline', head) };
+  base = { head, tree, commit: await commitTree(tree, 'baseline') };
+  keepBase();
 }
+/**
+ * The baseline is pinned too, so a run that starts from it finds every object it reaches already in the store. The
+ * first takes the longest, copying the working tree's objects: it goes on while the bridge answers.
+ */
+const keepBase = () => keep('refs/loa/base', base.commit).catch(logError);
 /**
  * Brings the baseline up to date, recording any changes since it as a run. Returns the baseline's commit.
  * Runs in the serial lane.
@@ -64,7 +73,8 @@ export async function settle() {
   const tree = await writeTree();
   if (tree === base.tree) return base.commit;
   const before = base.commit;
-  base = { head, tree, commit: await commitTree(tree, 'detected', head) };
+  base = { head, tree, commit: await commitTree(tree, 'detected') };
+  keepBase();
   if (!(await computeChanges(before, base.commit)).length) return base.commit;
   const run = newRun({ agent: 'detected' });
   run.before = before;

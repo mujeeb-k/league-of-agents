@@ -56,6 +56,24 @@ export const allowedChecksFile = (repo: string) =>
     crypto.createHash('sha256').update(fs.realpathSync(repo)).digest('hex').slice(0, 32) + '.json',
   );
 
+/** League of Agents' own folder for a repo, in the home folder, outside the repo (bridge/lib/util.mjs loaOf). */
+export const loaOf = (repo: string) => allowedChecksFile(repo).replace(/\.json$/, '');
+
+/**
+ * git on the store's refs, reading the repo's objects as the bridge does: a run's snapshots and what pins them. With a
+ * published bridge before the store, which kept them in the repo, git in the repo.
+ */
+export const storeGit = (repo: string, ...args: string[]) =>
+  fs.existsSync(path.join(loaOf(repo), 'git'))
+    ? storeOnly(repo, args)
+    : execFileSync('git', args, { cwd: repo, encoding: 'utf8' });
+const storeOnly = (repo: string, args: string[]) =>
+  execFileSync('git', ['--git-dir', path.join(loaOf(repo), 'git'), ...args], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: { ...process.env, GIT_ALTERNATE_OBJECT_DIRECTORIES: path.join(fs.realpathSync(repo), '.git/objects') },
+  });
+
 /**
  * Approves the repo's committed checks, as the person does once in the Checks panel; the bridge runs a repo's
  * loa.config.json only after that. "a cloned repo's checks wait for approval" tests the panel.
@@ -208,7 +226,11 @@ export async function startBridge(
     if (proc.exitCode !== null || Date.now() - t0 > 10_000) throw new Error('bridge did not start:\n' + out);
     await new Promise(r => setTimeout(r, 50));
   }
-  const { token } = JSON.parse(fs.readFileSync(path.join(repo, '.loa/bridge.json'), 'utf8')) as { token: string };
+  // Where this bridge keeps it, or where a published one before it did, in the repo.
+  const file = [path.join(loaOf(repo), 'bridge.json'), path.join(repo, '.loa/bridge.json')].find(f =>
+    fs.existsSync(f),
+  )!;
+  const { token } = JSON.parse(fs.readFileSync(file, 'utf8')) as { token: string };
   const b: Bridge = {
     port,
     token,

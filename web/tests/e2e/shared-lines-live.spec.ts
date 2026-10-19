@@ -16,7 +16,9 @@ import {
   TWO_SECTIONS,
   call,
   git,
+  homeOf,
   linkFor,
+  loaOf,
   startBridge,
   type Bridge,
 } from '../support/live';
@@ -351,7 +353,7 @@ test('something writing a file while the commit holds it stops the commit, and e
     expect.soft(git(repo, 'diff', '--cached', '--name-only')).toBe(staged);
     expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text([...BOTH_TAX, '// by someone else']));
     expect.soft((await runOf(b, claude)).committed).toBeUndefined();
-    expect.soft(fs.existsSync(path.join(repo, '.loa/held.json'))).toBe(false);
+    expect.soft(fs.existsSync(path.join(loaOf(repo), 'held.json'))).toBe(false);
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
@@ -359,7 +361,8 @@ test('something writing a file while the commit holds it stops the commit, and e
 });
 
 // As above, but the other write touches the very lines the swap held: it can't be kept apart from the swap, so the
-// file goes back exactly as it was before, and that other version is kept for the person in .loa/interrupted/.
+// file goes back exactly as it was before, and that other version is kept for the person, in League of Agents' folder
+// for the repo, which the refusal names.
 test("a write the swap can't be taken apart from: the file exactly as it was, the other version kept", async () => {
   const { repo, b, start, go } = await twoSessions();
   try {
@@ -378,10 +381,12 @@ test("a write the swap can't be taken apart from: the file exactly as it was, th
     fs.chmodSync(hook, 0o755);
     const head = git(repo, 'rev-parse', 'HEAD').trim();
     const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
-    expect.soft([done.status, done.body.code]).toEqual([409, 'commit-interrupted']);
+    const kept = path.join(loaOf(repo), 'interrupted');
+    expect.soft([done.status, done.body.code]).toEqual([409, 'commit-interrupted-kept']);
+    expect.soft(done.body.args).toEqual({ files: 'a/tax.mjs', kept: kept.replace(homeOf(repo), '~') });
     expect.soft(git(repo, 'rev-parse', 'HEAD').trim()).toBe(head);
     expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(BOTH_TAX));
-    expect.soft(onDisk(repo, '.loa/interrupted/a/tax.mjs')).toContain('// rewritten by someone else');
+    expect.soft(fs.readFileSync(path.join(kept, 'a/tax.mjs'), 'utf8')).toContain('// rewritten by someone else');
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });

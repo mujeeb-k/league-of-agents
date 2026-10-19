@@ -2,8 +2,8 @@
 // and a folder's subfolders sit just to its right, stacked, so children stay next to their parent. The root's
 // subtrees are packed into columns so the whole map matches the canvas's shape.
 //
-// A layout is kept, and saved per repo in live mode (.loa/layout.json through the bridge, or the browser with
-// bridges before 0.2.0; api/live.ts): later opens place every known folder and file where it was, whatever the
+// A layout is kept, and saved per repo in live mode (layout.json in the bridge's folder for the repo, or the browser
+// with bridges before 0.2.0; api/live.ts): later opens place every known folder and file where it was, whatever the
 // window's shape. New files take a free slot; a full folder grows down, then right, only where it collides with
 // nothing; a new folder goes at the end of its parent's stack, at the first free height. Existing files never
 // move. "Tidy layout" lays everything out afresh.

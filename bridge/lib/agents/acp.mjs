@@ -1,9 +1,10 @@
 // Harnesses that speak the Agent Client Protocol: Hermes, DeepSeek Harness, and any the person adds.
+import os from 'node:os';
 import path from 'node:path';
 import { VERSION } from '../paths.mjs';
 import { inScope } from '../scope.mjs';
 import { ROOT } from '../repo.mjs';
-import { line } from '../util.mjs';
+import { line, realish } from '../util.mjs';
 import { blocked, push, refusedBySandbox } from '../runs.mjs';
 import { step, stepDone, stepRefused, stepsOf } from '../steps.mjs';
 import { lockOfRun } from '../sandbox.mjs';
@@ -256,8 +257,8 @@ const textOf = u => (u.content || []).map(c => c?.content?.text || '').join(' ')
 const isEdit = tool => tool.kind === 'edit' || (tool.kind === 'other' && ['edit', 'write'].includes(tool.title));
 /**
  * What an ACP harness asks before doing it (the tool call, as told so far). Allowed, as it would be anywhere, but for
- * an edit outside the run's section, if it has one, and a write to the bridge's own folder (.loa, which holds its
- * key). An edit outside the section, in the repo, is asked of the person; the rest refused is said on the run. On a
+ * an edit outside the run's section, if it has one, and a write to League of Agents' own folder (its records and
+ * key, outside the repo) or to .loa in the repo (the loader the Claude Code plugin's hooks run). An edit outside the section, in the repo, is asked of the person; the rest refused is said on the run. On a
  * section, git's folder is never asked: what is there runs later, outside the sandbox, which refuses it whatever the
  * answer.
  */
@@ -265,7 +266,8 @@ function permitAcp(run, tool, options) {
   const rel = filesOf(tool);
   const edit = isEdit(tool);
   // Any case: macOS's disk doesn't tell .LOA from .loa, or .GIT from .git.
-  const never = r => insideRepo(r) && (/^\.loa(\/|$)/i.test(r) || (!!run.scope?.length && /^\.git(\/|$)/i.test(r)));
+  const never = r =>
+    ourFolder(r) || (insideRepo(r) && (/^\.loa(\/|$)/i.test(r) || (!!run.scope?.length && /^\.git(\/|$)/i.test(r))));
   const key = edit && rel.some(never);
   const outside = edit && run.scope?.length ? rel.filter(r => !insideRepo(r) || !inScope(run.scope, r)) : [];
   const ok = !key && !outside.length;
@@ -280,6 +282,12 @@ function permitAcp(run, tool, options) {
   return option ? { outcome: 'selected', optionId: option.optionId } : { outcome: 'cancelled' };
 }
 const insideRepo = r => !!r && r !== '..' && !r.startsWith('../') && !path.isAbsolute(r);
+/** Whether a path, as the repo names it, is in League of Agents' own folder, in any case. */
+const ourFolder = r => {
+  const at = realish(path.resolve(ROOT, r)).toLowerCase(),
+    ours = realish(path.join(os.homedir(), '.config/league-of-agents')).toLowerCase();
+  return at === ours || at.startsWith(ours + path.sep);
+};
 /** The files a tool call names, as the repo names them. */
 const filesOf = tool =>
   [

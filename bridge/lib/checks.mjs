@@ -3,10 +3,8 @@ import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
-import os from 'node:os';
-import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { readJson } from './util.mjs';
+import { loaOf, readJson } from './util.mjs';
 import { ROOT, CONF, LOA, git } from './repo.mjs';
 import { emit } from './events.mjs';
 
@@ -35,13 +33,7 @@ export const setChecksShared = on => (checksShared = on);
 /** Which checks run: the person's own, or the repo's committed list once they approved that exact list. */
 export function initChecks() {
   CHECKS_OFF = path.join(LOA, 'checks-off.json');
-  CHECKS_FILE = path.join(
-    os.homedir(),
-    '.config',
-    'league-of-agents',
-    'repos',
-    crypto.createHash('sha256').update(ROOT).digest('hex').slice(0, 32) + '.json',
-  );
+  CHECKS_FILE = loaOf(ROOT) + '.json';
   allowed = { private: [], approved: [], ...readJson(CHECKS_FILE, {}) };
   checksShared = !!CONF.checks?.length;
   if (checksShared && !sameChecks(CONF.checks, allowed.approved)) {

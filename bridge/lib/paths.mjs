@@ -1,4 +1,4 @@
-// Where the bridge's own files are: the package's bridge/ folder, or the copy in .loa/ that the hooks run.
+// Where the bridge's own files are: the package's bridge/ folder, or the copy the hooks run (hooks-install.mjs).
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readJson } from './util.mjs';

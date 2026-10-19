@@ -1,9 +1,10 @@
-// Snapshots: the working tree as private git commits, pinned under refs/loa/; never your branch or staging.
+// Snapshots: the working tree as private git commits, pinned in League of Agents' own store (repo.mjs keep); never
+// your branch, your staging or your refs.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { logError, splitLines } from './util.mjs';
-import { CONF, LOA, ROOT, excludeFile, gitAsync } from './repo.mjs';
+import { CONF, LOA, LOA_IDENT, ROOT, excludeFile, gitAsync, keep } from './repo.mjs';
 import { SKIP } from './files.mjs';
 
 const snapIndex = () => path.join(LOA, 'snapshot.index');
@@ -140,18 +141,12 @@ export async function startIndex() {
   }
   fs.writeFileSync(keyFile(), key);
 }
-/** League of Agents' own git identity, for its snapshots, and for notes where the person has none set. */
-export const LOA_IDENT = {
-  GIT_AUTHOR_NAME: 'loa',
-  GIT_AUTHOR_EMAIL: 'loa@localhost',
-  GIT_COMMITTER_NAME: 'loa',
-  GIT_COMMITTER_EMAIL: 'loa@localhost',
-};
-/** A commit of the tree on top of HEAD, reachable only from the refs it is pinned to. */
-export async function commitTree(tree, label, head) {
-  const out = await gitAsync(['commit-tree', tree, ...(head.commit ? ['-p', head.commit] : []), '-m', 'loa ' + label], {
-    env: { ...process.env, ...LOA_IDENT },
-  });
+/**
+ * A commit of the tree, reachable only from the refs it is pinned to. It has no parent: a snapshot is its files, and
+ * pinning one keeps those alone, never the history it was taken on.
+ */
+export async function commitTree(tree, label) {
+  const out = await gitAsync(['commit-tree', tree, '-m', 'loa ' + label], { env: { ...process.env, ...LOA_IDENT } });
   return out.trim();
 }
 /** A file's content id as it is on disk now, or null when it is gone. `keep` writes the blob, to read it back. */
@@ -174,7 +169,7 @@ export async function headNow() {
 export async function snapshotNow(label, paths = /** @type {string[] | null} */ (null)) {
   const head = await headNow(),
     tree = await writeTree(false, paths);
-  return { head, tree, commit: await commitTree(tree, label, head) };
+  return { head, tree, commit: await commitTree(tree, label) };
 }
 /** A file's content id in a commit, or null when the commit doesn't have it. */
 export async function blobAt(commit, p) {
@@ -198,7 +193,7 @@ export async function commitWith(commit, files, label) {
   }
   const tree = (await gitAsync(['write-tree'], { env })).trim();
   fs.rmSync(index, { force: true });
-  return commitTree(tree, label, await headNow());
+  return commitTree(tree, label);
 }
 /**
  * A commit with the files of `commit`, except each of `files` ([path, blob]) as that blob, or absent where it is null.
@@ -221,7 +216,7 @@ export async function commitBlobs(commit, files, label, also = commit) {
       await gitAsync(['update-index', '--add', '--cacheinfo', `${mode},${blob},${p}`], { env });
     }
     const tree = (await gitAsync(['write-tree'], { env })).trim();
-    return commitTree(tree, label, await headNow());
+    return commitTree(tree, label);
   } finally {
     fs.rmSync(index, { force: true });
   }
@@ -241,7 +236,7 @@ export async function putBlobs(files, label, base, also = base) {
 }
 export async function pin(id, which, commit) {
   // Unpinned, a snapshot could be pruned later: said in the log, though the run goes on.
-  await gitAsync(['update-ref', `refs/loa/runs/${id}/${which}`, commit]).catch(logError);
+  await keep(`refs/loa/runs/${id}/${which}`, commit).catch(logError);
 }
 /**
  * Puts files in the working tree back as a snapshot holds them, byte for byte, with git's own checkout (its line

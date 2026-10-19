@@ -7,7 +7,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { ENTRY } from './paths.mjs';
 import { readJson } from './util.mjs';
 import { argv, opt, SITE, WEB_URL, APP_PATH } from './args.mjs';
-import { ROOT, LOA, bridgeFile, EXCLUDED, excludeFile, git } from './repo.mjs';
+import { ROOT, LOA, bridgeFile, EXCLUDED, excludeFile, git, stoppedOld } from './repo.mjs';
 import { CHECKS_FILE } from './checks.mjs';
 import { CLAUDE_FIX, claudeProblemNow } from './agents/claude.mjs';
 import { hookFiles, shown, removeHooks } from './hooks-install.mjs';
@@ -58,7 +58,7 @@ const CHROMIUM =
  */
 const opensSite = () => !!WEB_URL && CHROMIUM.test(defaultBrowser() ?? '');
 /**
- * The bridge this repo's .loa/bridge.json describes, if it answers with that token; `locked` if it is locked.
+ * The bridge this repo's bridge.json describes, if it answers with that token; `locked` if it is locked.
  * Bridges before 0.1.0 wrote no process id; they still count, though `stop` can't stop them.
  */
 export async function running() {
@@ -86,7 +86,7 @@ function openInBrowser(url) {
 }
 /**
  * The bridge runs in the background, in its own process group, so it outlives the terminal or the agent session that
- * started it. .loa/bridge.json holds its port, token and process id.
+ * started it. Its bridge.json holds its port, token and process id.
  */
 export async function startInBackground(hooks) {
   const open = async b => {
@@ -135,7 +135,7 @@ export async function startInBackground(hooks) {
 export async function stopBridge(exit = true) {
   const b = await running();
   if (!b) {
-    console.log('League of Agents is not running for this repo.');
+    console.log(stoppedOld ? 'Stopped League of Agents.' : 'League of Agents is not running for this repo.');
     process.exit(0);
   }
   if (!b.pid) {
@@ -170,14 +170,15 @@ export async function askForHooks() {
 }
 
 /**
- * Leaves the repo as if the bridge had never run: stops it, then removes its hooks, the snapshot refs, the
- * lines it added to .git/info/exclude, and .loa/. Says what it removed.
+ * Leaves the repo as if the bridge had never run: stops it, then removes its hooks, the lines it added to
+ * .git/info/exclude, and League of Agents' records for it, in its folder outside the repo (where openRepo moved what
+ * a bridge before this one kept in .loa/), and any refs such a bridge left under refs/loa/. Says what it removed.
  */
 export async function uninstall() {
   if (await running()) await stopBridge(false);
   const removed = removeHooks().map(f => `hooks in ${f}`);
-  const refs = git(['for-each-ref', '--format=%(refname)', 'refs/loa/']).split('\n').filter(Boolean);
-  for (const ref of refs) git(['update-ref', '-d', ref]);
+  const refs = git(['for-each-ref', '--format=%(refname)', 'refs/loa/'], { repo: true }).split('\n').filter(Boolean);
+  for (const ref of refs) git(['update-ref', '-d', ref], { repo: true });
   if (refs.length) removed.push(`${refs.length} snapshot ${refs.length === 1 ? 'ref' : 'refs'} (refs/loa/)`);
   // Bridges before 0.1.0 didn't record their lines; of those, only .loa/ is surely the bridge's.
   const ours = fs.existsSync(EXCLUDED) ? readJson(EXCLUDED, []) : ['.loa/'];
@@ -192,7 +193,12 @@ export async function uninstall() {
     removed.push('its lines in .git/info/exclude');
   }
   fs.rmSync(LOA, { recursive: true, force: true });
-  removed.push('.loa/');
+  removed.push(`League of Agents' records for it (${LOA.replace(os.homedir(), '~')}/)`);
+  // What the Claude Code plugin's hooks load (copyForHooks).
+  if (fs.existsSync(path.join(ROOT, '.loa'))) {
+    fs.rmSync(path.join(ROOT, '.loa'), { recursive: true, force: true });
+    removed.push('.loa/');
+  }
   if (fs.existsSync(CHECKS_FILE)) {
     fs.rmSync(CHECKS_FILE);
     removed.push(`the checks you allowed for it (${CHECKS_FILE.replace(os.homedir(), '~')})`);

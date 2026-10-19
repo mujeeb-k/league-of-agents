@@ -10,14 +10,14 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { line, refused, sameSecret, serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
-import { ROOT } from './repo.mjs';
+import { ROOT, storeAsync } from './repo.mjs';
 import { blobAt, blobNow, computeChanges, pin, restoreFrom, snapshotNow } from './snapshots.mjs';
 import { push, saveRun, working } from './runs.mjs';
 import { lockOfRun } from './sandbox.mjs';
 
 /**
  * How a session's hooks reach the bridge: its port, and a token good only for that run's shell route. A session in
- * the sandbox can't read the bridge's own token (.loa/bridge.json), so it can't ask the bridge to write for it.
+ * the sandbox can't read the bridge's own token (its bridge.json), so it can't ask the bridge to write for it.
  */
 let port = 0;
 export const setShellPort = p => (port = p);
@@ -96,6 +96,7 @@ export function shellEnds(run, tool) {
         run.putBack.push({
           path: p,
           ref: `refs/loa/runs/${run.id}/put-back-${n}`,
+          commit: to,
           put: await blobAt(from, p),
           restored: false,
         });
@@ -122,8 +123,10 @@ export function restorePutBack(run, file) {
     const abs = path.join(ROOT, file);
     if ((await blobNow(file)) !== kept.put)
       throw refused('changed-since-put-back', `${file} changed since it was put back.`, { name: file });
-    if ((await blobAt(kept.ref, file)) === null) fs.rmSync(abs, { force: true });
-    else await restoreFrom(kept.ref, [file]);
+    // The store's ref, for a put-back recorded before its commit was.
+    const from = kept.commit ?? (await storeAsync(['rev-parse', kept.ref])).trim();
+    if ((await blobAt(from, file)) === null) fs.rmSync(abs, { force: true });
+    else await restoreFrom(from, [file]);
     for (const k of run.putBack) if (k.path === file) k.restored = true;
     saveRun(run);
     return true;

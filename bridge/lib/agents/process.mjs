@@ -1,4 +1,4 @@
-// An agent's process: started in the repo, its output kept raw in .loa/runs/ and read line by line.
+// An agent's process: started in the repo, its output kept raw in the runs folder (repo.mjs) and read line by line.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -12,7 +12,7 @@ import { holdOf, holdsAgent, lockOfRun, sandboxArgs } from '../sandbox.mjs';
  * what an agent is allowed only then (running without its own permission check) can't reach one that isn't held.
  * Hermes and DeepSeek Harness start inside the sandbox. Claude Code starts outside it, with the folder its hook
  * reads to run each of its commands inside (sandbox.mjs holdOf).
- * Its stdout is kept as-is in .loa/runs/<id>.stream.jsonl (fixtures, debugging) and
+ * Its stdout is kept as-is in <id>.stream.jsonl in the runs folder (fixtures, debugging) and
  * handed to `onLine` a line at a time; its stderr is kept in <id>.stderr.log and handed to `onStderr`. `closed`
  * resolves with its exit code, once its logs are written.
  */

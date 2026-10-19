@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import type { StateResponse } from '../../src/api/types';
-import { git, linkFor, startBridge } from '../support/live';
+import { git, linkFor, startBridge, storeGit } from '../support/live';
 import { ZOOMS, checkLevel, zoomTo } from '../support/zoom';
 
 const REPO = process.env.LOA_LARGE_REPO ?? '';
@@ -75,7 +75,7 @@ test('a large public repository: every zoom level, then a real run', async ({ pa
     await expect(page.locator('[data-mode="diff"]')).toHaveAttribute('aria-checked', 'true', { timeout: 30_000 });
     const shown = Date.now() - t0;
     await shot('run-diff');
-    const diff = git(REPO, 'diff', 'refs/loa/runs/1/before', 'refs/loa/runs/1/after');
+    const diff = storeGit(REPO, 'diff', 'refs/loa/runs/1/before', 'refs/loa/runs/1/after');
     fs.writeFileSync(path.join(OUT, 'run.diff'), diff);
     fs.writeFileSync(
       path.join(OUT, 'run.txt'),
@@ -84,13 +84,13 @@ test('a large public repository: every zoom level, then a real run', async ({ pa
         `files: ${files.length} tracked, ${drawn} on the map (the rest are binary or over 400 kB)`,
         ...levels,
         `run: "${PROMPT}" on ${FILE}`,
-        `before: ${git(REPO, 'rev-parse', 'refs/loa/runs/1/before').trim()}`,
-        `after: ${git(REPO, 'rev-parse', 'refs/loa/runs/1/after').trim()}`,
+        `before: ${storeGit(REPO, 'rev-parse', 'refs/loa/runs/1/before').trim()}`,
+        `after: ${storeGit(REPO, 'rev-parse', 'refs/loa/runs/1/after').trim()}`,
         `the app showed the finished run in diff ${shown} ms after the bridge reported it done`,
-        `changed: ${git(REPO, 'diff', '--name-status', 'refs/loa/runs/1/before', 'refs/loa/runs/1/after').trim()}`,
+        `changed: ${storeGit(REPO, 'diff', '--name-status', 'refs/loa/runs/1/before', 'refs/loa/runs/1/after').trim()}`,
       ].join('\n') + '\n',
     );
-    expect(git(REPO, 'diff', '--name-only', 'refs/loa/runs/1/before', 'refs/loa/runs/1/after').trim()).toBe(FILE);
+    expect(storeGit(REPO, 'diff', '--name-only', 'refs/loa/runs/1/before', 'refs/loa/runs/1/after').trim()).toBe(FILE);
   } finally {
     b.stop();
   }

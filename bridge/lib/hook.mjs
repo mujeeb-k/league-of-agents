@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { readJson, realish, splitLines } from './util.mjs';
+import { loaOf, readJson, realish, splitLines } from './util.mjs';
 import { inScope, rangeKept } from './scope.mjs';
 
 /** Runs started by an agent's own hooks, by agent: Claude Code and Codex in a terminal, Cursor in its editor. */
@@ -114,7 +114,10 @@ const EDITS = /^(Edit|Write|MultiEdit|NotebookEdit)$/,
 const FREE =
   /^(Agent|Task|TaskCreate|TaskGet|TaskList|TaskOutput|TaskStop|TaskUpdate|TodoWrite|WebFetch|WebSearch|BashOutput|KillBash|KillShell|Skill|ToolSearch|ExitPlanMode|AskUserQuestion)$/;
 const quoted = s => `'${String(s).replace(/'/g, "'\\''")}'`;
-/** A bridge's key, in its settings or its log, in any case (macOS's disk reads .LOA as .loa). */
+/**
+ * A bridge's key, in its settings or its log, where a bridge before this one kept them, in any case (macOS's disk
+ * reads .LOA as .loa).
+ */
 const TOKEN = /[\\/]\.loa[\\/]bridge\.(json|log)$/i;
 /** The repos of the bridges running on this computer, as they registered (hooks-install.mjs markRunning). */
 function runningRoots(home) {
@@ -203,6 +206,11 @@ function hold(data, cwd) {
       if (TOKEN.test(p)) block(`${rel} holds League of Agents' key, which a session never reads.`);
       if (tool === 'Grep' && runningRoots(h.home).some(root => root !== h.root && under(root, p)))
         block(`${p} holds another repo that League of Agents works in, whose key a session never reads.`);
+      // League of Agents' records, every repo's runs and each bridge's key (util.mjs loaOf), and a search of a folder
+      // that holds them.
+      const records = path.join(h.home, '.config/league-of-agents/repos');
+      if (under(p, records) || (tool !== 'Read' && READS.test(tool) && under(records, p)))
+        block(`${p} holds League of Agents' records and keys, which a session never reads.`);
       // The Keychain's files, and a search of a folder that holds them (Grep and Glob read outside the sandbox).
       const keychain = path.join(h.home, 'Library/Keychains');
       if (under(p, keychain) || (tool !== 'Read' && READS.test(tool) && under(keychain, p)))
@@ -289,7 +297,9 @@ function repoOf(dir) {
 
 /** A repo's bridge, if one is running there. */
 function liveBridge(root) {
-  const b = readJson(path.join(root, '.loa', 'bridge.json'), null);
+  // Or, for a bridge before this one, the file it kept in the repo.
+  const b =
+    readJson(path.join(loaOf(root), 'bridge.json'), null) ?? readJson(path.join(root, '.loa', 'bridge.json'), null);
   if (!b?.token || !b.pid) return null;
   try {
     process.kill(b.pid, 0);
@@ -315,7 +325,7 @@ function cursorRepos(data, kind) {
       try {
         return fs
           .readdirSync(w, { withFileTypes: true })
-          .filter(e => e.isDirectory() && fs.existsSync(path.join(w, e.name, '.loa', 'bridge.json')))
+          .filter(e => e.isDirectory() && liveBridge(path.join(w, e.name)))
           .map(e => path.join(w, e.name));
       } catch {
         return [];

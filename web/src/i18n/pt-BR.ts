@@ -519,6 +519,8 @@ const catalogue: Catalogue = {
   'Git refused the commit.': 'O git recusou o commit.',
   '{files} changed while the commit held it. Nothing was committed, and every file is back.':
     '{files} mudou enquanto o commit o segurava. Nada foi commitado, e cada arquivo voltou.',
+  '{files} changed while the commit held it. Nothing was committed, and every file is back. What was written meanwhile is in {kept}.':
+    '{files} mudou enquanto o commit o segurava. Nada foi commitado, e cada arquivo voltou. O que foi escrito nesse meio-tempo está em {kept}.',
   'Your branch moved while committing. Try again.': 'Seu branch se moveu durante o commit. Tente de novo.',
   'Rate limited': 'Limite atingido',
   Failed: 'Falhou',

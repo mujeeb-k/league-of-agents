@@ -22,6 +22,8 @@ export const BY_CODE: Record<string, string> = {
   'sessions-working': 'Commit and Revert wait until no session is working.',
   'git-refused': 'Git refused the commit.',
   'commit-interrupted': '{files} changed while the commit held it. Nothing was committed, and every file is back.',
+  'commit-interrupted-kept':
+    '{files} changed while the commit held it. Nothing was committed, and every file is back. What was written meanwhile is in {kept}.',
   'head-moved': 'Your branch moved while committing. Try again.',
   'changed-since-put-back': '{name} changed since it was put back. Restoring it would lose that change.',
   'detached-head': 'HEAD is detached. Check out a branch to commit to.',

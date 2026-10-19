@@ -32,6 +32,8 @@ import {
   makeRepo,
   publishedBridge,
   startBridge,
+  storeGit,
+  loaOf,
   type Bridge,
 } from '../support/live';
 import { landings } from '../support/outcome';
@@ -54,7 +56,7 @@ async function cardRows(page: Page, file: string) {
 }
 /** The same, from git. */
 function gitRows(repo: string, file: string) {
-  return git(repo, 'diff', '--no-color', '-U0', 'refs/loa/runs/1/before', 'refs/loa/runs/1/after', '--', file)
+  return storeGit(repo, 'diff', '--no-color', '-U0', 'refs/loa/runs/1/before', 'refs/loa/runs/1/after', '--', file)
     .split('\n')
     .filter(l => /^[+-]/.test(l) && !/^(\+\+\+|---) /.test(l))
     .map(l => l.replace(/\s+$/, ''))
@@ -165,7 +167,7 @@ test('live run, review and revert', async ({ page }) => {
     await page.locator('#prompt').fill('Same change again');
     await page.locator('#prompt').press('Enter');
     await expect(page.locator('#runbar b')).toHaveText('Run 2', { timeout: 15_000 });
-    const run2 = JSON.parse(fs.readFileSync(path.join(repo, '.loa/runs/2.json'), 'utf8')) as RunDTO;
+    const run2 = JSON.parse(fs.readFileSync(path.join(loaOf(repo), 'runs/2.json'), 'utf8')) as RunDTO;
     expect(run2.resumeFrom).toBeNull();
     await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
     // Removing the follow-up chip on a finished run starts the next prompt fresh.
@@ -215,7 +217,7 @@ test('live run, review and revert', async ({ page }) => {
     await expect(page.locator('#insp .outcome')).toContainText('Kept');
     await expect(page.locator('#sideList [data-run="4"]')).toContainText('Kept');
     // Keep reaches the bridge and is saved with the run.
-    const saved = JSON.parse(fs.readFileSync(path.join(repo, '.loa/runs/4.json'), 'utf8')) as { kept?: boolean };
+    const saved = JSON.parse(fs.readFileSync(path.join(loaOf(repo), 'runs/4.json'), 'utf8')) as { kept?: boolean };
     expect(saved.kept).toBe(true);
 
     // Disconnect returns to the demo.
@@ -1090,15 +1092,15 @@ test('the layout is kept: another window, another size, every folder and file wh
       return { ctx, places: await placesOf(page) };
     };
     const first = await open({ width: 1440, height: 900 });
-    // Saved once it has held for a second, in .loa/, by the bridge.
-    await expect.poll(() => fs.existsSync(path.join(repo, '.loa/layout.json')), { timeout: 5000 }).toBe(true);
+    // Saved once it has held for a second, by the bridge, in its folder for the repo.
+    await expect.poll(() => fs.existsSync(path.join(loaOf(repo), 'layout.json')), { timeout: 5000 }).toBe(true);
     await first.ctx.close();
     const second = await open({ width: 900, height: 1100 });
     expect(Object.keys(second.places).length).toBeGreaterThan(20);
     expect(second.places).toEqual(first.places);
     await second.ctx.close();
     // Without the saved layout, that window lays the repo out differently: what the test above guards.
-    fs.rmSync(path.join(repo, '.loa/layout.json'));
+    fs.rmSync(path.join(loaOf(repo), 'layout.json'));
     const fresh = await open({ width: 900, height: 1100 });
     expect(fresh.places).not.toEqual(first.places);
     await fresh.ctx.close();
@@ -1245,7 +1247,7 @@ test("a start's first snapshot: from git's own index the first time, the same tr
   const expected = execFileSync('git', ['write-tree'], { cwd: repo, env, encoding: 'utf8' }).trim();
   const beforeOf = async (b: Bridge) => {
     const r = await runToEnd(b, { agent: 'claude', prompt: 'Probe', scope: [], resumeFrom: null });
-    return git(repo, 'rev-parse', `refs/loa/runs/${r.id}/before^{tree}`).trim();
+    return storeGit(repo, 'rev-parse', `refs/loa/runs/${r.id}/before^{tree}`).trim();
   };
   let b = await startBridge(repo, FAKE_CLAUDE);
   try {
@@ -1260,8 +1262,8 @@ test("a start's first snapshot: from git's own index the first time, the same tr
   b = await startBridge(repo, FAKE_CLAUDE);
   try {
     const tree = await beforeOf(b);
-    expect(git(repo, 'ls-tree', '-r', '--name-only', tree)).not.toContain('out/x.log');
-    expect(git(repo, 'ls-tree', '-r', '--name-only', tree)).toContain('apps/new.ts');
+    expect(storeGit(repo, 'ls-tree', '-r', '--name-only', tree)).not.toContain('out/x.log');
+    expect(storeGit(repo, 'ls-tree', '-r', '--name-only', tree)).toContain('apps/new.ts');
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
@@ -1526,7 +1528,7 @@ const tmpOf = (repo: string) => {
   return dir;
 };
 
-test("untracked secret files' contents land nowhere: not in git's objects, .loa, the log, home or temp", async () => {
+test("untracked secret files' contents land nowhere: not in git's objects, the bridge's records, the log, home or temp", async () => {
   const repo = makeRepo();
   plantSecrets(repo);
   const tmp = tmpOf(repo);
@@ -1577,9 +1579,9 @@ test("untracked secret files' contents land nowhere: not in git's objects, .loa,
   }
 });
 
-// What the README's limits say, held as it is: an agent's own activity is kept in .loa/runs, so a secret file an
-// agent prints is there, and nowhere else. If this changes, the README's limit changes with it.
-test("git push never sends the bridge's snapshots: a remote gets the branch, and no ref under refs/loa", async () => {
+// What the README's limits say, held as it is: an agent's own activity is kept in the bridge's runs, so a secret file
+// an agent prints is there, and nowhere else. If this changes, the README's limit changes with it.
+test("git push never sends the bridge's snapshots, not even a mirror: they are in no ref of the repo", async () => {
   const repo = makeRepo(),
     remote = path.join(path.dirname(repo), 'remote.git'),
     b = await startBridge(repo);
@@ -1590,8 +1592,8 @@ test("git push never sends the bridge's snapshots: a remote gets the branch, and
       .poll(async () => ((await call(b, `/api/runs/${run.id}`)).body as unknown as RunDTO).status, { timeout: 15_000 })
       .toBe('done');
     const refs = (dir: string) => git(dir, 'for-each-ref', '--format=%(refname)').trim().split('\n');
-    expect(refs(repo).filter(r => r.startsWith('refs/loa/')).length).toBeGreaterThan(1);
-    const snapshot = git(repo, 'rev-parse', `refs/loa/runs/${run.id}/after`).trim();
+    expect(refs(repo)).toEqual(['refs/heads/main']);
+    const snapshot = storeGit(repo, 'rev-parse', `refs/loa/runs/${run.id}/after`).trim();
     git(path.dirname(repo), 'init', '-q', '--bare', remote);
     git(repo, 'remote', 'add', 'origin', remote);
     // The pushes people make: the branch, every branch, and the tags.
@@ -1602,16 +1604,17 @@ test("git push never sends the bridge's snapshots: a remote gets the branch, and
     expect(refs(remote)).toEqual(['refs/heads/main']);
     // Nor the snapshot itself: the remote has no such commit.
     expect(() => execFileSync('git', ['cat-file', '-e', snapshot], { cwd: remote, stdio: 'ignore' })).toThrow();
-    // The one push that does, as the README says: a mirror.
+    // A mirror pushes every ref the repo has: none is the bridge's.
     git(repo, 'push', '-q', '--mirror', 'origin');
-    expect(refs(remote)).toContain(`refs/loa/runs/${run.id}/after`);
+    expect(refs(remote).filter(r => r.startsWith('refs/loa/'))).toEqual([]);
+    expect(() => execFileSync('git', ['cat-file', '-e', snapshot], { cwd: remote, stdio: 'ignore' })).toThrow();
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
 });
 
-test('a secret file an agent prints is in its activity under .loa/runs, and nowhere else', async () => {
+test("a secret file an agent prints is in its activity in the bridge's runs, and nowhere else", async () => {
   const repo = makeRepo();
   plantSecrets(repo);
   const tmp = tmpOf(repo);
@@ -1626,7 +1629,7 @@ test('a secret file an agent prints is in its activity under .loa/runs, and nowh
     await new Promise(r => setTimeout(r, 300));
     const hits = landings(MARKER, repo, [homeOf(repo), tmp]);
     expect(hits.length).toBeGreaterThan(0);
-    expect(hits.filter(h => !h.startsWith('.loa/runs/'))).toEqual([]);
+    expect(hits.filter(h => !h.startsWith(path.join(loaOf(repo), 'runs') + path.sep))).toEqual([]);
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
@@ -1681,16 +1684,19 @@ test('bridge keeps deny rules, records raw agent output, and keeps secret files 
       'Stop',
       'UserPromptSubmit',
     ]);
-    // Hooks run the bridge's copy inside the repo, so they survive npx clearing its cache.
+    // Hooks run the bridge's copy in its folder for the repo, so they survive npx clearing its cache.
     const commands = JSON.stringify(settings.hooks);
-    expect(commands).toContain(path.join(repo, '.loa', 'bridge.mjs').replace(/\\/g, '\\\\'));
-    expect(fs.existsSync(path.join(repo, '.loa', 'bridge.mjs'))).toBe(true);
+    expect(commands).toContain(path.join(loaOf(repo), 'bridge.mjs').replace(/\\/g, '\\\\'));
+    expect(fs.existsSync(path.join(loaOf(repo), 'bridge.mjs'))).toBe(true);
     await runToEnd(b, { agent: 'claude', prompt: 'Name the action and origin', scope: ['shared/'], resumeFrom: null });
-    const raw = fs.readFileSync(path.join(repo, '.loa/runs/1.stream.jsonl'), 'utf8').trim().split('\n');
+    const raw = fs
+      .readFileSync(path.join(loaOf(repo), 'runs/1.stream.jsonl'), 'utf8')
+      .trim()
+      .split('\n');
     expect(raw.map(l => (JSON.parse(l) as { type: string }).type)).toEqual(['system', 'assistant', 'user', 'result']);
-    expect(fs.existsSync(path.join(repo, '.loa/runs/1.stderr.log'))).toBe(true);
+    expect(fs.existsSync(path.join(loaOf(repo), 'runs/1.stderr.log'))).toBe(true);
     for (const which of ['before', 'after']) {
-      const files = git(repo, 'ls-tree', '-r', '--name-only', `refs/loa/runs/1/${which}`);
+      const files = storeGit(repo, 'ls-tree', '-r', '--name-only', `refs/loa/runs/1/${which}`);
       expect(files.split('\n').filter(f => /(^|\/)\.env/.test(f))).toEqual(['.env.example']);
       for (const f of secrets) expect(files.split('\n')).not.toContain(f);
       expect(files).toContain('shared/allowlist.ts');
@@ -2232,7 +2238,7 @@ test.describe('commit a session', () => {
       // As the session left it again.
       fs.writeFileSync(
         path.join(repo, 'shared/log.ts'),
-        git(repo, 'show', `refs/loa/runs/${run.id}/after:shared/log.ts`),
+        storeGit(repo, 'show', `refs/loa/runs/${run.id}/after:shared/log.ts`),
       );
       git(repo, 'checkout', '-q', '--detach');
       expect((await commit(b, run.id, { message: 'x' })).body).toMatchObject({ code: 'detached-head' });
@@ -2465,7 +2471,13 @@ test.describe('sessions at once', () => {
         expect(run.stream!.map(e => e.text).join('\n')).toContain('Put back what a shell command changed outside');
         // Kept: restored as the command left it, once asked.
         expect(run.putBack).toEqual([
-          { path: 'notes.md', ref: `refs/loa/runs/${c.id}/put-back-0`, put: null, restored: false },
+          {
+            path: 'notes.md',
+            ref: `refs/loa/runs/${c.id}/put-back-0`,
+            commit: expect.any(String),
+            put: null,
+            restored: false,
+          },
         ]);
         // A file written there since it was put back: restoring would lose it, so it is refused.
         fs.writeFileSync(path.join(repo, 'notes.md'), 'mine\n');
@@ -2624,7 +2636,7 @@ test.describe('sessions at once', () => {
         const home = homeOf(repo);
         fs.mkdirSync(path.join(home, '.claude'), { recursive: true });
         const cmd = [
-          'cat .loa/bridge.json',
+          'cat "$HOME"/.config/league-of-agents/repos/*/bridge.json',
           `printf x >> "$HOME/.gitconfig"`,
           `mkdir -p "$HOME/.config/league-of-agents" && printf x > "$HOME/.config/league-of-agents/approved.json"`,
           `printf x > "$HOME/.claude/settings.json"`,
@@ -2748,7 +2760,7 @@ test.describe('sessions at once', () => {
       await waitsOn(b, s.id);
       expect((await call(b, `/api/runs/${s.id}/cancel`, {})).status).toBe(200);
       await until(b, s.id, 'cancelled');
-      expect(fs.existsSync(path.join(repo, `.loa/scope-${s.id}.json`))).toBe(false);
+      expect(fs.existsSync(path.join(loaOf(repo), `scope-${s.id}.json`))).toBe(false);
       expect((await answer(b, s.id, MAIN, true)).body).toMatchObject({ code: 'answered' });
     }));
 
@@ -2876,8 +2888,8 @@ test.describe('sessions at once', () => {
       await until(b, h.id, 'done');
       // Kept whole once it ends, past any restart: its file, and the edit's text pinned under the run.
       expect((await stepsOf(b, h.id)).length).toBe(3);
-      expect(fs.readFileSync(path.join(repo, `.loa/runs/${h.id}.steps.jsonl`), 'utf8')).toContain('shared/log.ts');
-      expect(git(repo, 'ls-tree', '-r', `refs/loa/runs/${h.id}/steps`)).toContain('blob');
+      expect(fs.readFileSync(path.join(loaOf(repo), `runs/${h.id}.steps.jsonl`), 'utf8')).toContain('shared/log.ts');
+      expect(storeGit(repo, 'ls-tree', '-r', `refs/loa/runs/${h.id}/steps`)).toContain('blob');
       expect(((await call(b, `/api/runs/${h.id}/steps/1`)).body as unknown as { text: string }).text).toBe(at.text);
     }));
 
@@ -2973,6 +2985,21 @@ test.describe('sessions at once', () => {
       }
     }));
 
+  // League of Agents' own folder holds every run and the bridge's key, outside the repo: refused even on the whole
+  // repository, in any case.
+  test("an ACP harness never writes League of Agents' folder, even on the whole repository: refused and said", () =>
+    twoSessions(async (b, repo) => {
+      const planted = path.join(loaOf(repo), 'planted.json');
+      const named = planted.replace('/.config/', '/.CONFIG/');
+      const h = (await start(b, [], `edit:${named}`)).body as unknown as RunDTO;
+      await until(b, h.id, 'done');
+      // The request's label, as far as the activity keeps it.
+      const said = (await runOf(b, h.id)).stream?.map(e => e.text) ?? [];
+      const refused = 'Refused: Approve edit: ';
+      expect(said.some(t => t.startsWith(refused) && named.startsWith(t.slice(refused.length)))).toBe(true);
+      expect(fs.existsSync(planted)).toBe(false);
+    }));
+
   test('revert puts back a file that is not UTF-8 byte for byte', () =>
     twoSessions(async (b, repo) => {
       // Latin-1 text: é is the single byte 0xe9, which UTF-8 can't decode.
@@ -3010,13 +3037,13 @@ test.describe('sessions at once', () => {
       expect(fs.existsSync(path.join(repo, 'apps/new.ts'))).toBe(true);
     }));
 
-  test("in a worktree, git ignores the bridge's folder, as in the main repo", async () => {
+  test("in a worktree, the bridge's folder is its own, and git ignores what it keeps in the repo", async () => {
     const main = makeRepo(),
       wt = path.join(path.dirname(main), 'wt');
     git(main, 'worktree', 'add', '-q', wt);
     const b = await startBridge(wt);
     try {
-      expect(fs.existsSync(path.join(wt, '.loa/bridge.json'))).toBe(true);
+      expect(fs.existsSync(path.join(loaOf(wt), 'bridge.json'))).toBe(true);
       expect(git(wt, 'status', '--porcelain')).not.toContain('.loa');
     } finally {
       b.stop();
@@ -3340,7 +3367,7 @@ test.describe('sessions at once', () => {
   test("a run that can't start, or a save that can't write, ends: it never holds the repo", () =>
     twoSessions(async (b, repo) => {
       // Where run 1's scope file goes, a folder: writing it fails.
-      fs.mkdirSync(path.join(repo, '.loa/scope-1.json'));
+      fs.mkdirSync(path.join(loaOf(repo), 'scope-1.json'));
       const a = (await start(b, ['shared/'], 'edit:shared/log.ts')).body as unknown as RunDTO;
       await until(b, a.id, 'failed');
       // A file it can't write.
@@ -4121,7 +4148,7 @@ test('terminal Claude Code: hooks record the turn, with its reply and tool calls
     execFileSync(process.execPath, [BRIDGE, 'hook', kind], {
       cwd: repo,
       input: JSON.stringify(input),
-      env: { ...process.env, LOA_MANAGED: '' },
+      env: { ...process.env, HOME: homeOf(repo), LOA_MANAGED: '' },
     });
   try {
     hook('start', { prompt: 'Tag log lines with the app name', session_id: 'sess-term', cwd: repo });
@@ -4171,7 +4198,7 @@ test('terminal Claude Code: hooks record the turn, with its reply and tool calls
     ];
     fs.writeFileSync(transcript, entries.map(e => JSON.stringify(e)).join('\n') + '\n');
     hook('stop', { session_id: 'sess-term', transcript_path: transcript, cwd: repo });
-    const run = JSON.parse(fs.readFileSync(path.join(repo, '.loa/runs/1.json'), 'utf8')) as RunDTO;
+    const run = JSON.parse(fs.readFileSync(path.join(loaOf(repo), 'runs/1.json'), 'utf8')) as RunDTO;
     expect(run.agent).toBe('claude-terminal');
     expect(run.status).toBe('done');
     expect(run.model).toBe('claude-sonnet-5-5');
@@ -4230,7 +4257,7 @@ test('watch mode: a save from any editor becomes one run once the files are quie
     expect(runs).toHaveLength(1);
     expect(runs[0]!).toMatchObject({ agent: 'detected', title: 'Edited log.ts', status: 'done', prompt: '' });
     expect(runs[0]!.changes.map(c => c.path)).toEqual(['shared/log.ts']);
-    expect(git(repo, 'diff', '--name-only', `refs/loa/runs/1/before`, `refs/loa/runs/1/after`).trim()).toBe(
+    expect(storeGit(repo, 'diff', '--name-only', `refs/loa/runs/1/before`, `refs/loa/runs/1/after`).trim()).toBe(
       'shared/log.ts',
     );
     // Nothing was staged or committed.
@@ -4319,7 +4346,7 @@ test('watch mode: a terminal turn interrupted before Stop is closed by the next 
       execFileSync(process.execPath, [BRIDGE, 'hook', kind], {
         cwd: repo,
         input: JSON.stringify(input),
-        env: { ...process.env, LOA_MANAGED: '' },
+        env: { ...process.env, HOME: homeOf(repo), LOA_MANAGED: '' },
       });
     const edit = (line: string) => fs.appendFileSync(path.join(repo, 'shared/log.ts'), line + '\n');
     // Esc interrupts the first turn, so Claude Code never sends Stop. The next prompt closes it.
@@ -4442,7 +4469,9 @@ test('a save is a run by You that reverts cleanly; a file changed on disk is nev
     // Revert restores the file exactly.
     expect((await call(b, '/api/runs/1/revert', {})).status).toBe(200);
     expect(git(repo, 'status', '--porcelain')).toBe('');
-    expect(git(repo, 'diff', 'refs/loa/runs/1/before', '--', 'shared/log.ts')).toBe('');
+    expect(storeGit(repo, 'show', 'refs/loa/runs/1/before:shared/log.ts')).toBe(
+      fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8'),
+    );
     // Changed on disk after opening: 409 with the current text; the file keeps the other edit.
     const opened = await call(b, '/api/file?path=shared/log.ts');
     fs.appendFileSync(file, '// edited elsewhere\n');
@@ -4459,7 +4488,7 @@ test('terminal hooks never end a save; a save during a run is refused', () =>
         const c = execFile(
           process.execPath,
           [BRIDGE, 'hook', kind],
-          { cwd: repo, env: { ...process.env, LOA_MANAGED: '' } },
+          { cwd: repo, env: { ...process.env, HOME: homeOf(repo), LOA_MANAGED: '' } },
           () => resolve(),
         );
         c.stdin!.end(JSON.stringify(input));
@@ -4533,7 +4562,9 @@ test('the editor on a live repo: save is a You run that reverts cleanly; disk ch
     await expect(page.locator('#editor')).toHaveCount(0);
     const last = (await runsOf(b)).filter(r => r.agent === 'you').at(-1)!;
     expect((await call(b, `/api/runs/${last.id}/revert`, {})).status).toBe(200);
-    expect(git(repo, 'diff', `refs/loa/runs/${last.id}/before`, '--', 'shared/log.ts')).toBe('');
+    expect(storeGit(repo, 'show', `refs/loa/runs/${last.id}/before:shared/log.ts`)).toBe(
+      fs.readFileSync(path.join(repo, 'shared/log.ts'), 'utf8'),
+    );
     // While an agent works, the editor is read-only and says why.
     await page.locator('#prompt').fill('Take your time');
     await page.locator('#prompt').press('Enter');
@@ -4889,7 +4920,9 @@ test('hooks go in only with consent, point outside the repo for Cursor, and come
     ]);
     const codex = read('.codex/hooks.json');
     expect(codex.hooks.UserPromptSubmit![0]!.hooks![0]!.command).toBe('python3 mine.py');
-    expect(codex.hooks.UserPromptSubmit![1]!.hooks![0]!.command).toMatch(/\.loa\/bridge\.mjs" hook start codex$/);
+    expect(codex.hooks.UserPromptSubmit![1]!.hooks![0]!.command).toBe(
+      `"${process.execPath}" "${path.join(loaOf(repo), 'bridge.mjs')}" hook start codex`,
+    );
     expect(codex.hooks.Stop![0]!.hooks![0]!.command).toMatch(/hook stop codex$/);
     // Cursor's go in the person's own Cursor settings, and run the copy in League of Agents' folder, not the repo's.
     expect(fs.existsSync(path.join(repo, '.cursor'))).toBe(false);
@@ -4927,7 +4960,7 @@ test('Codex and Cursor hook payloads become runs with the prompt as the title, l
       execFileSync(process.execPath, [BRIDGE, 'hook', ...args], {
         cwd: repo,
         input: JSON.stringify(input),
-        env: { ...process.env, LOA_MANAGED: '' },
+        env: { ...process.env, HOME: homeOf(repo), LOA_MANAGED: '' },
         encoding: 'utf8',
       });
     // Codex's documented UserPromptSubmit and Stop payloads.
@@ -5108,7 +5141,7 @@ test('Cursor hooks find the repo inside the workspace, and only their own conver
     execFileSync(process.execPath, [BRIDGE, 'hook', ...args], {
       cwd: workspace,
       input: JSON.stringify({ cursor_version: '2.1.6', workspace_roots: [workspace], transcript_path: null, ...input }),
-      env: { ...process.env, LOA_MANAGED: '' },
+      env: { ...process.env, HOME: homeOf(repo), LOA_MANAGED: '' },
       encoding: 'utf8',
     });
   const summary = async (x: Bridge) => (await runsOf(x)).map(r => [r.agent, r.title, r.status, r.sessionId]);
@@ -5353,21 +5386,18 @@ test('bridge security: wrong tokens and unknown link codes slow down; the right 
       encoding: 'utf8',
       timeout: 20_000,
     });
-  const token = () => (JSON.parse(fs.readFileSync(path.join(repo, '.loa/bridge.json'), 'utf8')) as Bridge).token;
+  const token = () => (JSON.parse(fs.readFileSync(path.join(loaOf(repo), 'bridge.json'), 'utf8')) as Bridge).token;
   const state = (t: string | null) =>
     fetch(`http://127.0.0.1:${port}/api/state`, t === null ? {} : { headers: { authorization: 'Bearer ' + t } });
   try {
     loa('start', '--port', port, '--no-open', '--no-hooks');
     const first = token();
     // The token's folder is closed to other accounts on this machine.
-    expect(fs.statSync(path.join(repo, '.loa')).mode & 0o077).toBe(0);
+    expect(fs.statSync(loaOf(repo)).mode & 0o077).toBe(0);
     // So are the files that hold it, on their own: its settings, and the log its links are printed to.
     for (const f of ['bridge.json', 'bridge.log'])
-      expect(fs.statSync(path.join(repo, '.loa', f)).mode & 0o077, f).toBe(0);
+      expect(fs.statSync(path.join(loaOf(repo), f)).mode & 0o077, f).toBe(0);
     // A missing token is turned away at once and counts for nothing.
-    // So are the files that hold it, on their own: its settings, and the log its links are printed to.
-    for (const f of ['bridge.json', 'bridge.log'])
-      expect(fs.statSync(path.join(repo, '.loa', f)).mode & 0o077, f).toBe(0);
     for (let i = 0; i < 20; i++) expect((await state(null)).status).toBe(401);
     // Each wrong token waits longer than the last.
     const t0 = Date.now();
@@ -5492,7 +5522,7 @@ test('uninstall: stops the bridge and leaves the repo and agent settings as befo
     fs.appendFileSync(log, '// edited\n');
     await expect.poll(async () => (await endedRuns(b)).length, { timeout: 10_000 }).toBe(1);
     fs.writeFileSync(log, text);
-    expect(git(repo, 'for-each-ref', 'refs/loa/')).not.toBe('');
+    expect(storeGit(repo, 'for-each-ref', 'refs/loa/')).not.toBe('');
     expect(fs.readFileSync(own.cursor, 'utf8')).toContain(path.join(home, '.config/league-of-agents/hook/bridge.mjs'));
     expect(fs.existsSync(path.join(repo, '.codex/hooks.json'))).toBe(true);
 
@@ -5502,11 +5532,12 @@ test('uninstall: stops the bridge and leaves the repo and agent settings as befo
       encoding: 'utf8',
     });
     expect(out).toContain('Removed League of Agents from sample-repo:');
-    expect(out).toMatch(/- \d+ snapshot refs \(refs\/loa\/\)/);
+    expect(out).toContain("- League of Agents' records for it (~/.config/league-of-agents/repos/");
     expect(out).toContain('- .loa/');
     expect(out).toContain('/plugin uninstall league-of-agents');
     await expect.poll(() => b.proc.exitCode !== null || b.proc.signalCode !== null).toBe(true);
     expect(git(repo, 'for-each-ref', 'refs/loa/')).toBe('');
+    expect(fs.existsSync(loaOf(repo))).toBe(false);
     expect(fs.existsSync(path.join(repo, '.loa'))).toBe(false);
     expect(out).toContain('- the checks you allowed for it');
     expect(fs.existsSync(allowedChecksFile(repo))).toBe(false);
@@ -5520,6 +5551,145 @@ test('uninstall: stops the bridge and leaves the repo and agent settings as befo
     }).toEqual(before);
   } finally {
     b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+/** What an agent's git can do to a repo's refs, objects and ignored files, all at once. */
+function clearRepo(repo: string) {
+  for (const ref of git(repo, 'for-each-ref', '--format=%(refname)').trim().split('\n'))
+    if (!ref.startsWith('refs/heads/')) git(repo, 'update-ref', '-d', ref);
+  git(repo, 'reflog', 'expire', '--expire=now', '--all');
+  git(repo, 'gc', '-q', '--prune=now');
+  git(repo, 'clean', '-qfdx');
+}
+
+test("an agent's git can't reach the bridge's records: refs deleted, objects pruned, ignored files cleaned, and revert still works", async () => {
+  const repo = makeRepo();
+  const b = await startBridge(repo, undefined, { LOA_QUIET_MS: String(QUIET) }, ['--no-hooks']);
+  try {
+    const log = path.join(repo, 'shared/log.ts');
+    const text = fs.readFileSync(log, 'utf8');
+    fs.appendFileSync(log, '// edited\n');
+    await expect.poll(async () => (await endedRuns(b)).length, { timeout: 10_000 }).toBe(1);
+    // Nothing of the bridge's is in the repo's refs, so nothing there is for a git command to take.
+    expect(git(repo, 'for-each-ref', '--format=%(refname)').trim()).toBe('refs/heads/main');
+    clearRepo(repo);
+    const id = (await runsOf(b))[0]?.id;
+    expect((await call(b, `/api/runs/${id}/revert`, {})).status).toBe(200);
+    expect(fs.readFileSync(log, 'utf8')).toBe(text);
+    expect((await runsOf(b)).map(r => [r.id, r.reverted])).toEqual([[id, true]]);
+    const status = execFileSync(process.execPath, [BRIDGE, 'status'], {
+      cwd: repo,
+      env: { ...process.env, HOME: homeOf(repo) },
+      encoding: 'utf8',
+    });
+    expect(status).toContain(`http://127.0.0.1:${b.port}`);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test('a commit a run relies on, reset away and pruned: the run still reverts to the file as it found it', async () => {
+  const repo = makeRepo();
+  const log = path.join(repo, 'shared/log.ts');
+  // The file as the run finds it is in this commit alone.
+  const found = fs.readFileSync(log, 'utf8') + '// committed, then reset away\n';
+  fs.writeFileSync(log, found);
+  git(repo, 'commit', '-qam', 'later reset away');
+  const b = await startBridge(repo, undefined, { LOA_QUIET_MS: String(QUIET) }, ['--no-hooks']);
+  try {
+    fs.appendFileSync(log, '// edited\n');
+    await expect.poll(async () => (await endedRuns(b)).length, { timeout: 10_000 }).toBe(1);
+    const lost = git(repo, 'rev-parse', 'HEAD:shared/log.ts').trim();
+    // The commit goes, the working tree stays: the file as the run found it is now in no commit, and pruned.
+    git(repo, 'reset', '-q', 'HEAD~1');
+    clearRepo(repo);
+    expect(spawnSync('git', ['cat-file', '-e', lost], { cwd: repo }).status).not.toBe(0);
+    const id = (await runsOf(b))[0]?.id;
+    expect((await call(b, `/api/runs/${id}/revert`, {})).status).toBe(200);
+    expect(fs.readFileSync(log, 'utf8')).toBe(found);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test("the records of a 0.2.0 bridge move out of the repo: its hooks keep working, and its run reverts after the repo's git took everything", async () => {
+  test.setTimeout(120_000);
+  const repo = makeRepo();
+  const log = path.join(repo, 'shared/log.ts');
+  const found = fs.readFileSync(log, 'utf8') + '// committed, then reset away\n';
+  fs.writeFileSync(log, found);
+  git(repo, 'commit', '-qam', 'later reset away');
+  const settings = path.join(repo, '.claude/settings.local.json');
+  fs.mkdirSync(path.dirname(settings), { recursive: true });
+  const mine = '{ "permissions": { "deny": ["Read(./.env)"] } }\n';
+  fs.writeFileSync(settings, mine);
+  const env = { ...process.env, HOME: homeOf(repo), LOA_MANAGED: '' };
+  const old = await startBridge(
+    repo,
+    FAKE_CLAUDE,
+    { LOA_QUIET_MS: String(QUIET) },
+    ['--hooks'],
+    publishedBridge('0.2.0'),
+  );
+  let b: Bridge | null = null;
+  try {
+    fs.appendFileSync(log, '// edited\n');
+    await expect.poll(async () => (await endedRuns(old)).length, { timeout: 10_000 }).toBe(1);
+    old.stop();
+    // Collected, so its process id is no longer taken for a bridge still running.
+    await expect.poll(() => old.proc.exitCode !== null || old.proc.signalCode !== null).toBe(true);
+    expect(git(repo, 'for-each-ref', 'refs/loa/')).not.toBe('');
+    // Any command of this version moves the records; the hooks the earlier one left still run.
+    execFileSync(process.execPath, [BRIDGE, 'status'], { cwd: repo, env, encoding: 'utf8' });
+    expect(git(repo, 'for-each-ref', 'refs/loa/')).toBe('');
+    expect(fs.existsSync(path.join(loaOf(repo), 'runs/1.json'))).toBe(true);
+    const hooks = JSON.parse(fs.readFileSync(settings, 'utf8')) as {
+      hooks: { Stop: { hooks: { command: string }[] }[] };
+    };
+    const stop = spawnSync('/bin/sh', ['-c', hooks.hooks.Stop[0]!.hooks[0]!.command], {
+      cwd: repo,
+      input: JSON.stringify({ session_id: 's', cwd: repo }),
+      env,
+      encoding: 'utf8',
+    });
+    expect([stop.status, stop.stderr]).toEqual([0, '']);
+    // This version's hooks replace the earlier one's, and come off as the person's file was before either.
+    b = await startBridge(repo, FAKE_CLAUDE, { LOA_QUIET_MS: String(QUIET) }, ['--hooks']);
+    b.stop();
+    await expect.poll(() => b!.proc.exitCode !== null || b!.proc.signalCode !== null).toBe(true);
+    expect(fs.readFileSync(settings, 'utf8')).toBe(mine);
+    b = await startBridge(repo, FAKE_CLAUDE, { LOA_QUIET_MS: String(QUIET) }, ['--no-hooks']);
+    git(repo, 'reset', '-q', 'HEAD~1');
+    clearRepo(repo);
+    expect((await call(b, '/api/runs/1/revert', {})).status).toBe(200);
+    expect(fs.readFileSync(log, 'utf8')).toBe(found);
+  } finally {
+    old.stop();
+    b?.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test("a repo that holds the home folder's .config is refused: the records would be in it", () => {
+  const repo = makeRepo();
+  const home = path.join(repo, 'home');
+  fs.mkdirSync(home);
+  const start = spawnSync(process.execPath, [BRIDGE, 'serve', '--no-hooks', '--no-open'], {
+    cwd: repo,
+    env: { ...process.env, HOME: home },
+    encoding: 'utf8',
+    timeout: 15_000,
+  });
+  try {
+    expect([start.status, start.stderr.trim()]).toEqual([
+      1,
+      `League of Agents keeps its records in ${path.join(fs.realpathSync(home), '.config/league-of-agents')}, which is inside this repo.`,
+    ]);
+  } finally {
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
 });
@@ -5539,7 +5709,7 @@ test('branch switch mid-session: runs, snapshots and reverts stay right, and the
   const b = await startBridge(repo, undefined, { LOA_QUIET_MS: String(QUIET) }, ['--no-hooks']);
   const branch = async () => ((await call(b, '/api/state')).body.repo as { branch: string }).branch;
   const diffOf = (id: number) =>
-    git(repo, 'diff', '--name-status', `refs/loa/runs/${id}/before`, `refs/loa/runs/${id}/after`);
+    storeGit(repo, 'diff', '--name-status', `refs/loa/runs/${id}/before`, `refs/loa/runs/${id}/after`);
   try {
     await page.goto(linkFor(b));
     await expect(page.locator('.crumb .br')).toHaveText('main');
@@ -5699,7 +5869,8 @@ test('hooks removed while the bridge runs are not recorded as a run, and the rep
   }
 });
 
-// Runs are kept while they're among the newest 500 or from the last 30 days; older ones go, refs and files.
+// Runs are kept while they're among the newest 500 or from the last 30 days; older ones go, refs and files. They are
+// kept as a bridge before this one kept them, in the repo: moved out of it first.
 test('old runs are pruned: past the newest 500 and older than 30 days, with their snapshots', async () => {
   const repo = makeRepo();
   const head = git(repo, 'rev-parse', 'HEAD').trim();
@@ -5736,12 +5907,14 @@ test('old runs are pruned: past the newest 500 and older than 30 days, with thei
     expect(ids).toHaveLength(550);
     expect(ids.slice(0, 50)).toEqual(Array.from({ length: 50 }, (_, i) => i + 1));
     expect(ids[50]).toBe(101);
-    const left = git(repo, 'for-each-ref', '--format=%(refname)', 'refs/loa/runs/').trim().split('\n');
+    const left = storeGit(repo, 'for-each-ref', '--format=%(refname)', 'refs/loa/runs/').trim().split('\n');
     expect(left).toHaveLength(1100);
+    expect(git(repo, 'for-each-ref', 'refs/loa/')).toBe('');
+    expect(fs.existsSync(path.join(repo, '.loa/runs'))).toBe(false);
     expect(left).not.toContain('refs/loa/runs/51/before');
-    expect(fs.existsSync(path.join(repo, '.loa/runs/51.json'))).toBe(false);
-    expect(fs.existsSync(path.join(repo, '.loa/runs/51.stream.jsonl'))).toBe(false);
-    expect(fs.existsSync(path.join(repo, '.loa/runs/50.json'))).toBe(true);
+    expect(fs.existsSync(path.join(loaOf(repo), 'runs/51.json'))).toBe(false);
+    expect(fs.existsSync(path.join(loaOf(repo), 'runs/51.stream.jsonl'))).toBe(false);
+    expect(fs.existsSync(path.join(loaOf(repo), 'runs/50.json'))).toBe(true);
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
@@ -6027,7 +6200,7 @@ test('start opens leagueofagents.dev in a Chrome-family default browser, the loc
     });
   try {
     const first = start('com.google.Chrome');
-    const b = JSON.parse(fs.readFileSync(path.join(repo, '.loa/bridge.json'), 'utf8')) as Bridge;
+    const b = JSON.parse(fs.readFileSync(path.join(loaOf(repo), 'bridge.json'), 'utf8')) as Bridge;
     // Each link ends in a code of its own, new every time.
     const site = `${SITE}/#bridge=${b.port}&t=`,
       local = `http://127.0.0.1:${b.port}/#t=`;
@@ -6064,7 +6237,7 @@ test('start opens leagueofagents.dev in a Chrome-family default browser, the loc
     // --local: the local app even in Chrome, and the site is never printed. The running bridge, which lets the
     // site in, is replaced.
     const only = start('com.google.Chrome', ['--local']);
-    const lb = JSON.parse(fs.readFileSync(path.join(repo, '.loa/bridge.json'), 'utf8')) as Bridge;
+    const lb = JSON.parse(fs.readFileSync(path.join(loaOf(repo), 'bridge.json'), 'utf8')) as Bridge;
     expect(only).toContain(`Open    http://127.0.0.1:${lb.port}/#t=`);
     expect(only).not.toContain(SITE);
     // And the site can't reach it.
@@ -6093,7 +6266,7 @@ test('without --port, a busy 43210 moves the bridge to the next free port', asyn
     });
   try {
     const out = loa('start', '--no-open', '--no-hooks');
-    const b = JSON.parse(fs.readFileSync(path.join(repo, '.loa/bridge.json'), 'utf8')) as Bridge;
+    const b = JSON.parse(fs.readFileSync(path.join(loaOf(repo), 'bridge.json'), 'utf8')) as Bridge;
     expect(b.port).toBeGreaterThan(43210);
     expect(out).toContain(`http://127.0.0.1:${b.port}/#t=`);
     expect(
@@ -6111,7 +6284,7 @@ test('without --port, a busy 43210 moves the bridge to the next free port', asyn
 });
 
 // One bridge per repo: a second start opens the running one, so the hooks, which find the bridge through
-// .loa/bridge.json, always reach the bridge that holds the run.
+// bridge.json, always reach the bridge that holds the run.
 test('one bridge per repo: a second start or serve finds the running bridge instead of starting another', async () => {
   const repo = makeRepo(),
     b = await startBridge(repo, undefined, {}, ['--no-hooks']);
@@ -6123,7 +6296,7 @@ test('one bridge per repo: a second start or serve finds the running bridge inst
       encoding: 'utf8',
       timeout: 20_000,
     });
-  const info = () => JSON.parse(fs.readFileSync(path.join(repo, '.loa/bridge.json'), 'utf8')) as Bridge;
+  const info = () => JSON.parse(fs.readFileSync(path.join(loaOf(repo), 'bridge.json'), 'utf8')) as Bridge;
   try {
     expect(loa('start', '--port', other, '--no-open', '--no-hooks')).toContain(
       `League of Agents is running for sample-repo.\n  Open    http://127.0.0.1:${b.port}/#t=`,
@@ -6131,7 +6304,7 @@ test('one bridge per repo: a second start or serve finds the running bridge inst
     expect(loa('serve', '--port', other, '--no-hooks')).toContain(
       `League of Agents is already running for sample-repo: http://127.0.0.1:${b.port}/#t=`,
     );
-    // Nothing listens on the other port, and the running bridge still owns .loa/bridge.json.
+    // Nothing listens on the other port, and the running bridge still owns bridge.json.
     await expect(fetch(`http://127.0.0.1:${other}/`)).rejects.toThrow();
     expect([info().port, info().token]).toEqual([b.port, b.token]);
   } finally {
@@ -6194,7 +6367,7 @@ test('start, status, restart and stop the bridge in the background', async () =>
       timeout: 20_000,
     });
   const info = () =>
-    JSON.parse(fs.readFileSync(path.join(repo, '.loa/bridge.json'), 'utf8')) as Bridge & { pid: number };
+    JSON.parse(fs.readFileSync(path.join(loaOf(repo), 'bridge.json'), 'utf8')) as Bridge & { pid: number };
   const state = (token: string) =>
     fetch(`http://127.0.0.1:${port}/api/state`, { headers: { authorization: 'Bearer ' + token } }).then(r => r.status);
   try {
@@ -6410,7 +6583,7 @@ test("a selection outside the open run's section starts a new session; the menu 
     await page.locator('#prompt').fill('Same change again');
     await page.locator('#prompt').press('Enter');
     await expect(page.locator('#runbar b')).toHaveText('Run 2', { timeout: 15_000 });
-    const run2 = JSON.parse(fs.readFileSync(path.join(repo, '.loa/runs/2.json'), 'utf8')) as RunDTO;
+    const run2 = JSON.parse(fs.readFileSync(path.join(loaOf(repo), 'runs/2.json'), 'utf8')) as RunDTO;
     expect(run2.resumeFrom).toBeNull();
     expect(run2.scope).toEqual(['apps/console/']);
     await expect(page.locator('#insp .bubble').nth(1)).toHaveText(SUMMARY, { timeout: 15_000 });
@@ -6758,7 +6931,7 @@ test.describe('two agents, one checkout', () => {
         const run = await runOf(b, c.id);
         expect(run.agentLines).toEqual({ 'b/report.mjs': [[n - 1, n - 1]] });
         const steps = fs
-          .readFileSync(path.join(repo, `.loa/runs/${c.id}.steps.jsonl`), 'utf8')
+          .readFileSync(path.join(loaOf(repo), `runs/${c.id}.steps.jsonl`), 'utf8')
           .trim()
           .split('\n')
           .map(l => JSON.parse(l) as { act: string; late?: boolean; blob?: string });

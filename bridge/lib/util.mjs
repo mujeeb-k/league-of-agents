@@ -1,7 +1,19 @@
 // Small helpers shared by the bridge and its hooks.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+
+/**
+ * League of Agents' own folder for a repo, outside it, where no git command run in the repo reaches: its runs, their
+ * snapshots, its settings and its key. Named by the repo's real path, as the checks approved for it are (checks.mjs).
+ */
+export const loaOf = (root, home = os.homedir()) =>
+  path.join(
+    home,
+    '.config/league-of-agents/repos',
+    crypto.createHash('sha256').update(realish(root)).digest('hex').slice(0, 32),
+  );
 
 export function readJson(p, d) {
   try {
