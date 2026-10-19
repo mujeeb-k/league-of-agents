@@ -344,6 +344,7 @@ function applyState(s: StateResponse, first: boolean) {
   }
   S.RUNS = runs;
   S.WORKING = workingOf(s);
+  noteEnded(S.RUNS);
   forgetEnded();
   const wanted = S.RUNS.find(r => r.id === live.pendingSelect) ?? null;
   // A session that just finished opens once the canvas has shown it finished (openFinished), not in the same frame.
@@ -538,7 +539,6 @@ async function poll() {
         const s = needState ? await bridge.state(conn(), S.mapRoot) : withDeltas(last!, deltas, r.seq);
         if (mine !== epoch) return;
         followSessions(S.WORKING, workingOf(s), s);
-        noteEnded(S.WORKING, workingOf(s), s.runs);
         noticeEnded(S.WORKING, workingOf(s), s.runs, id => selectRun(S.RUNS.find(r => r.id === id) ?? null));
         applyState(s, false);
         noticeAsks(S.RUNS);

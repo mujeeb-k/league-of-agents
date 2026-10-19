@@ -395,13 +395,16 @@ function zonesOf(): ZoneBox[] {
   const out: ZoneBox[] = [];
   const working = workingRuns();
   // An ended session's mark goes once another session works on its section.
+  // An ended session may still be listed at work for a moment after its status says how it ended: until it isn't,
+  // it shows as at work, its section not yet free, and it never counts as another session on its own section.
   for (const id of ended) {
     const r = S.RUNS.find(x => x.id === id);
-    if (!r || working.some(w => (w.scope ?? []).some(a => (r.scope ?? []).some(b => overlaps(a, b))))) ended.delete(id);
+    const other = working.filter(w => w.id !== id);
+    if (!r || other.some(w => (w.scope ?? []).some(a => (r.scope ?? []).some(b => overlaps(a, b))))) ended.delete(id);
   }
-  const shown = [...working, ...S.RUNS.filter(r => ended.has(r.id))];
+  const shown = [...working, ...S.RUNS.filter(r => ended.has(r.id) && !working.some(w => w.id === r.id))];
   for (const run of shown) {
-    const how = ended.has(run.id) ? endedAs(run) : null;
+    const how = ended.has(run.id) && !working.includes(run) ? endedAs(run) : null;
     const colour = how ? 'var(--ink3)' : sessionColour(run);
     const name = t('Run {id} · {agent}', { id: run.id, agent: agentOf(run.agent).name });
     let label: string | null = how ? `${name} · ${how}` : name;

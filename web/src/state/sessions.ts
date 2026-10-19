@@ -93,10 +93,13 @@ export function endedAs(r: Pick<Run, 'status' | 'limited'>): string | null {
 export const ended = new Set<number>();
 /** Every session noted as ended: once its mark is gone, a later state event never brings it back. */
 const noted = new Set<number>();
+/** Each run's status as the app last saw it: a run seen at work that has since ended without finishing is marked. */
+const lastStatus = new Map<number, string>();
 /** Another repository, or the demo again: its runs of the same numbers are other runs. */
 export function forgetSessions() {
   ended.clear();
   noted.clear();
+  lastStatus.clear();
 }
 /** Marks a session as ended, once. */
 export function markEnded(id: number) {
@@ -109,10 +112,13 @@ export function seen(id: number) {
   noted.add(id);
   ended.delete(id);
 }
-/** Notes the sessions that just stopped working and ended without finishing, from the runs as they are now. */
-export function noteEnded(before: number[], now: number[], runs: Pick<Run, 'id' | 'status' | 'limited'>[]) {
-  for (const id of before) {
-    const r = runs.find(x => x.id === id);
-    if (!now.includes(id) && r && endedAs(r)) markEnded(id);
+/**
+ * Notes the sessions that ended without finishing since the app last saw them at work, from each run's own status:
+ * never from the list of sessions at work, which can change before or after the run's status does.
+ */
+export function noteEnded(runs: Pick<Run, 'id' | 'status' | 'limited'>[]) {
+  for (const r of runs) {
+    if (lastStatus.get(r.id) === 'running' && endedAs(r)) markEnded(r.id);
+    lastStatus.set(r.id, r.status);
   }
 }
