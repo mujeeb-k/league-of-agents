@@ -169,27 +169,25 @@ const STREAMED = {
       '--output-format',
       'stream-json',
       '--verbose',
-      // Held by the sandbox: the repo's own settings don't load, as their hooks and MCP servers would run outside
-      // it, on files the session may have just written; the bridge's hook answers every call (hook.mjs hold), and
-      // one the hook never saw is refused, as the hook couldn't check it (dontAsk). Anywhere else its settings load
-      // and decide as in a terminal, its own permission checks with them; what it would ask there is asked of the
-      // person on the run's card, through the bridge's permission tool (hook.mjs askServer). Where the session has
-      // a section, the hook also holds its edits to it (hook.mjs pre).
-      ...(sandboxed
-        ? ['--setting-sources', 'user', '--permission-mode', 'dontAsk']
-        : [
-            '--mcp-config',
-            JSON.stringify({
-              mcpServers: {
-                [ASK_SERVER]: {
-                  command: process.execPath,
-                  args: [path.join(LOA, 'bridge.mjs'), 'hook', 'ask', String(run.id)],
-                },
-              },
-            }),
-            '--permission-prompt-tool',
-            `mcp__${ASK_SERVER}__ask`,
-          ]),
+      // Its own permission checks always run, in the mode its settings set, as in a terminal: what it would ask
+      // there is asked of the person on the run's card, through the bridge's permission tool (hook.mjs askServer).
+      // Held by the sandbox, the repo's own settings don't load, as their hooks and MCP servers would run outside
+      // it, on files the session may have just written; the bridge's hook sees every call first (hook.mjs hold),
+      // refuses what would reach past the section, and leaves the rest to that check, a shell command rewritten to
+      // run inside the sandbox; a hook that can't run refuses the call. Not held, where the session has a section,
+      // the hook holds its edits to it (hook.mjs pre).
+      ...(sandboxed ? ['--setting-sources', 'user'] : []),
+      '--mcp-config',
+      JSON.stringify({
+        mcpServers: {
+          [ASK_SERVER]: {
+            command: process.execPath,
+            args: [path.join(LOA, 'bridge.mjs'), 'hook', 'ask', String(run.id)],
+          },
+        },
+      }),
+      '--permission-prompt-tool',
+      `mcp__${ASK_SERVER}__ask`,
       '--settings',
       JSON.stringify(sandboxed ? held() : unheld(run)),
       ...(run.sessionId ? ['--resume', run.sessionId] : []),

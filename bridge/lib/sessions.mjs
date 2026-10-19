@@ -8,7 +8,7 @@ import { ROOT, LOA } from './repo.mjs';
 import { repoRelative } from './agents/labels.mjs';
 import { finishRun, push, saveRun, working } from './runs.mjs';
 import { emitRun } from './events.mjs';
-import { forgetSandbox, lockOfRun, prepareSandbox } from './sandbox.mjs';
+import { forgetSandbox, holdOf, lockOfRun, prepareSandbox } from './sandbox.mjs';
 import { forgetShell } from './shell.mjs';
 import { connectorOf, lockOf } from './agents/registry.mjs';
 
@@ -187,7 +187,9 @@ export function askPerson(run, { tool, input, id }) {
   const ask = String(id || `${run.id}-${(run.wants ?? []).length}`);
   let want = run.wants?.find(w => w.ask === ask);
   if (!want) {
-    const command = tool === 'Bash' && typeof input?.command === 'string' ? input.command : null;
+    // A held session's command as it wrote it, not as the hold rewrote it to run in the sandbox (hook.mjs hold).
+    const written = tool === 'Bash' ? heldCommand(run, id) : null;
+    const command = written ?? (tool === 'Bash' && typeof input?.command === 'string' ? input.command : null);
     const file = typeof input?.file_path === 'string' ? repoRelative(input.file_path) : null;
     want = { ask, tool: String(tool), path: file ?? '', said: command ?? file ?? String(tool) };
     (run.wants ??= []).push(want);
@@ -217,6 +219,15 @@ export function askPerson(run, { tool, input, id }) {
   });
 }
 const ASK_WAIT_MS = Number(process.env.LOA_ASK_WAIT_MS || 60_000);
+/** The command a held session's call wrote, kept by the hold under its call's id (hook.mjs hold), if there is one. */
+function heldCommand(run, id) {
+  const name = String(id ?? '').replace(/[^A-Za-z0-9_-]/g, '');
+  try {
+    return name ? fs.readFileSync(path.join(holdOf(run), 'commands', `${name}.sh`), 'utf8') : null;
+  } catch {
+    return null;
+  }
+}
 /** The person answers a question an agent asked (askPerson): the agent goes on, or is told the person refused. */
 export function answerAsk(run, ask, allow) {
   const want = run.status === 'running' && run.wants?.find(w => w.ask === ask && !w.answer);

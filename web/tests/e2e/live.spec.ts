@@ -3001,6 +3001,23 @@ test.describe('sessions at once', () => {
     },
   );
 
+  // Held, Claude Code keeps its own permission checks too: the hold refuses what would reach past the section and
+  // leaves the rest to them; a command is asked about as it was written, and runs, allowed, inside the sandbox.
+  onMac('held, what Claude Code would ask is asked on its card, the command as it wrote it', ({ page }) =>
+    twoSessions(async (b, repo) => {
+      await page.goto(linkFor(b));
+      await expect(page.locator('#conn')).toHaveText('Live');
+      const { id } = (
+        await call(b, '/api/runs', { agent: 'claude', prompt: 'Log it. ask:run:shared/asked.txt', scope: ['shared/'] })
+      ).body as unknown as RunDTO;
+      const ask = page.locator(`#sideList [data-run="${id}"] [data-ask]`);
+      await expect(ask).toContainText('Wants to run printf asked > shared/asked.txt', { timeout: 15_000 });
+      await ask.locator('[data-allow]').click();
+      await until(b, id, 'done');
+      expect(fs.readFileSync(path.join(repo, 'shared/asked.txt'), 'utf8')).toBe('asked');
+    }),
+  );
+
   // The lock is the person's to choose for each session on a section. Off, the session works as in a terminal: nothing
   // it does is refused for the section, and what it changes outside is flagged after.
   onMac("with the lock off, a session on a section isn't held: its edit outside goes through, and is flagged", () =>
@@ -3230,7 +3247,7 @@ test.describe('sessions at once', () => {
   };
   // Held, it does only what the hook allows; its card says so only once that design has been reviewed.
   // Not held, its permission mode is the one its settings set, never bypassed, and what it would ask is asked.
-  const HELD = { mode: 'dontAsk', asks: false, outside: true, held: true, says: false, sources: 'user' },
+  const HELD = { mode: 'as set', asks: true, outside: true, held: true, says: false, sources: 'user' },
     FLAGGED = { mode: 'as set', asks: true, outside: true, held: false, says: false, sources: 'all' };
   onMac(
     'held by the sandbox on a section, Claude Code runs outside it, with the hook; on the whole repository it is not held',

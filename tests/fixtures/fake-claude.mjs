@@ -42,25 +42,6 @@ if (/\bratelimit\b/.test(prompt)) {
   out({ type: 'result', is_error: true, result: text, session_id: 'sess-123', total_cost_usd: 0 });
   process.exit(1);
 }
-// "ask:run": a shell command its permission mode would ask about. Asked as Claude Code asks with
-// --permission-prompt-tool: the MCP server --mcp-config names is started, and the tool called with the command; allowed,
-// it runs; refused, the agent says what it was told. With no permission tool, it runs unasked, as when permissions are
-// bypassed.
-if (/\bask:run\b/.test(prompt)) {
-  const command = 'printf asked > asked.txt';
-  const tool = flag('--permission-prompt-tool');
-  let answer = { behavior: 'allow' };
-  if (tool) {
-    const [, server, name] = /^mcp__(.+)__([^_]+)$/.exec(tool);
-    const config = JSON.parse(flag('--mcp-config')).mcpServers[server];
-    answer = await callTool(config, name, { tool_name: 'Bash', input: { command }, tool_use_id: 'toolu_ask_1' });
-  }
-  if (answer.behavior === 'allow') spawnSync('sh', ['-c', command]);
-  const text = answer.behavior === 'allow' ? 'Ran it.' : `Not allowed: ${answer.message}`;
-  out({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
-  out({ type: 'result', result: text, session_id: 'sess-123', total_cost_usd: 0.001 });
-  process.exit(0);
-}
 /** One tool call to an MCP server started as Claude Code starts one: initialize, then tools/call; its text answer. */
 function callTool({ command, args: argv = [], env = {} }, name, input) {
   return new Promise((resolve, reject) => {
@@ -132,6 +113,38 @@ const runHooks = (event, payload) => {
 };
 /** Whether the bridge holds this session's commands in its sandbox: a hook rewrites each one (bridge/lib/hook.mjs). */
 const held = JSON.stringify(given).includes('hook hold');
+// "ask:run": a shell command its permission mode would ask about. Asked as Claude Code asks with
+// --permission-prompt-tool: the MCP server --mcp-config names is started, and the tool called with the command; allowed,
+// it runs; refused, the agent says what it was told. With no permission tool, it runs unasked, as when permissions are
+// bypassed.
+if (/\bask:run\b/.test(prompt)) {
+  const file = /\bask:run:(\S+)/.exec(prompt)?.[1] ?? 'asked.txt';
+  const payload = {
+    tool_name: 'Bash',
+    tool_input: { command: `printf asked > ${file}` },
+    tool_use_id: 'toolu_ask_1',
+    cwd: process.cwd(),
+  };
+  // Its hooks first, as Claude Code runs them: one may refuse the call, or rewrite it (and decide nothing).
+  const refused = runHooks('PreToolUse', payload);
+  const tool = flag('--permission-prompt-tool');
+  let answer = refused ? { behavior: 'deny', message: refused } : { behavior: 'allow' };
+  if (tool && !refused) {
+    const [, server, name] = /^mcp__(.+)__([^_]+)$/.exec(tool);
+    const config = JSON.parse(flag('--mcp-config')).mcpServers[server];
+    // As Claude Code calls it: the tool, its input (as the hooks left it), and the call's id.
+    answer = await callTool(config, name, {
+      tool_name: payload.tool_name,
+      input: payload.tool_input,
+      tool_use_id: payload.tool_use_id,
+    });
+  }
+  if (answer.behavior === 'allow') spawnSync('sh', ['-c', payload.tool_input.command]);
+  const text = answer.behavior === 'allow' ? 'Ran it.' : `Not allowed: ${answer.message}`;
+  out({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+  out({ type: 'result', result: text, session_id: 'sess-123', total_cost_usd: 0.001 });
+  process.exit(0);
+}
 // "want:<path>" in the prompt: write that file with the Write tool, which the scope lock or the sandbox may refuse; and
 // when resumed with "You may now change <paths>.", write those, as Claude Code carries on once allowed.
 const resumed = args.includes('--resume');

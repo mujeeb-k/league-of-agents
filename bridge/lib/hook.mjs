@@ -159,18 +159,12 @@ function say(text) {
   }
 }
 function hold(data, cwd) {
-  // Said in so many words: the session runs in the mode where Claude Code does only what is allowed (registry.mjs),
-  // so a call this hook never saw is left to Claude Code's own check, not run.
-  const allow = updatedInput => {
-    say(
-      JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
-          permissionDecision: 'allow',
-          ...(updatedInput ? { updatedInput } : {}),
-        },
-      }),
-    );
+  // What the hold lets through it decides nothing about: Claude Code's own permission check runs on it as in a
+  // terminal, and what it would ask is asked of the person, through the bridge's permission tool (askServer). A shell
+  // command goes on rewritten to run inside the sandbox; Claude Code asks about it as rewritten, and the card shows
+  // it as written (sessions.mjs askPerson).
+  const pass = updatedInput => {
+    if (updatedInput) say(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', updatedInput } }));
     process.exit(0);
   };
   try {
@@ -184,9 +178,9 @@ function hold(data, cwd) {
       const file = path.join(dir, 'commands', `${id}.sh`);
       fs.writeFileSync(file, input.command);
       const command = [...h.args, '/bin/bash', file].map(quoted).join(' ');
-      allow({ ...input, command });
+      pass({ ...input, command });
     }
-    if (FREE.test(tool)) allow();
+    if (FREE.test(tool)) pass();
     // Any other tool runs in Claude Code's own process, outside the sandbox, so it could write past the section (an
     // MCP server's, Monitor): refused, and said on the run.
     if (!EDITS.test(tool) && !READS.test(tool)) block(`${tool} can't be used in a session on a section.`);
@@ -224,7 +218,7 @@ function hold(data, cwd) {
     }
     const why = EDITS.test(tool) ? editRefused(data, cwd) : null;
     if (why) block(why);
-    allow();
+    pass();
   } catch (e) {
     block(`this tool call couldn't be checked (${e.message}), so it was not run.`);
   }
