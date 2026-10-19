@@ -115,6 +115,8 @@ function bindStage(stage: HTMLElement) {
     }
   };
   let lastClick: { key: string; t: number } | null = null;
+  // A key pressed between two clicks (Escape clearing the selection, say) makes the next a click of its own.
+  const keyed = () => void (lastClick = null);
   const up = (e: PointerEvent) => {
     if (!drag) return;
     const d = drag;
@@ -214,7 +216,9 @@ function bindStage(stage: HTMLElement) {
   stage.addEventListener('pointerleave', leave);
   stage.addEventListener('dblclick', dbl);
   stage.addEventListener('wheel', wheel, { passive: false });
+  window.addEventListener('keydown', keyed, true);
   return () => {
+    window.removeEventListener('keydown', keyed, true);
     stage.removeEventListener('pointerdown', down);
     stage.removeEventListener('pointermove', move);
     stage.removeEventListener('pointerup', up);

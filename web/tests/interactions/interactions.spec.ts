@@ -1001,6 +1001,20 @@ test('F zooms to the selection, else the run, else everything', { tag: '@motion'
   expect((await rested(page)).s).toBeCloseTo(1.1, 3);
 });
 
+// Two clicks on a file within a double click's time are one double click, unless a key came between: Escape clears
+// the selection, and the next click selects again, however soon.
+test('a click after Escape selects again, however soon after the last click', async ({ page }) => {
+  const tile = page.locator('.fr[data-path="server/delivery/secrets.ts"]');
+  const chips = page.locator('#scopeRow .chip:not(.all)');
+  await tile.click();
+  await expect(chips).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(chips).toHaveCount(0);
+  await tile.click();
+  await expect(chips).toHaveText(['secrets.ts']);
+});
+
 test('Escape closes the menu, then clears the selection, then closes the run', async ({ page }) => {
   await page.locator('.fr[data-path="server/delivery/secrets.ts"]').click();
   await page.locator('#agentBtn').click();
