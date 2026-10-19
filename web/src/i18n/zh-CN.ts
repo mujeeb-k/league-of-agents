@@ -172,6 +172,7 @@ const catalogue: Catalogue = {
   Agent: '代理',
   Human: '人',
   Mixed: '混合',
+  Shared: '共享',
   Unknown: '未知',
   "Git AI's note on commit {commit} says {who} wrote it.": '提交 {commit} 上的 Git AI note 说是 {who} 写的。',
   'a person': '某个人',
@@ -184,6 +185,9 @@ const catalogue: Catalogue = {
   'By a command': '通过命令',
   '{agent} wrote it with its edit tools.': '{agent} 用它的编辑工具写了这一行。',
   'Rewritten in part after an agent wrote it.': '在代理写完之后被部分改写。',
+  'Written while {who} wrote this file at the same time.': '在 {who} 同时写这个文件时写入。',
+  you: '你',
+  ' and ': '和',
   'Not from a session: changed while run {id} worked.': '不来自任何会话：在运行 {id} 期间被修改。',
   "No run kept on this computer changed it, so who wrote it isn't known.":
     '此电脑上保留的运行都没有改动过它，所以不知道是谁写的。',

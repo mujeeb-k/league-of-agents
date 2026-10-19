@@ -99,6 +99,8 @@ export interface Run {
   commandLines?: Record<string, [number, number][]>;
   /** Lines of its files another session wrote while it worked: [from, to, that run, 1 where by a command]. */
   otherLines?: Record<string, ([number, number, number] | [number, number, number, number])[]>;
+  /** Lines of its files written while two writers wrote the file at once: [from, to, their runs, 0 for the person]. */
+  sharedLines?: Record<string, [number, number, number[]][]>;
   reviewed: Set<string>;
   kept?: boolean;
   reverted?: boolean;

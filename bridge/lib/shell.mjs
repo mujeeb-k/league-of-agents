@@ -71,9 +71,9 @@ export function shellEnds(run, tool) {
         undone.push(c.path);
         continue;
       }
-      // What it changed in its own section is the run's write, taken out on its revert (writes.mjs); none of its
-      // lines is the agent's, a command being no edit step (lines.mjs). In another session's section it may be that
-      // session's at the same moment: left to it.
+      // What it changed in its own section is the run's write, taken out on its revert (writes.mjs); its lines are its
+      // agent's, by a command, where no other writer touched the file meanwhile (lines.mjs). In another session's
+      // section it may be that session's at the same moment: left to it.
       if (inScope(run.scope, c.path))
         wrote.push({
           start: began.at,

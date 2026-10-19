@@ -186,6 +186,7 @@ const catalogue: Catalogue = {
   Agent: 'Agente',
   Human: 'Humano',
   Mixed: 'Mixto',
+  Shared: 'Compartida',
   Unknown: 'Desconocido',
   "Git AI's note on commit {commit} says {who} wrote it.":
     'La nota de Git AI en el commit {commit} dice que la escribió {who}.',
@@ -200,6 +201,9 @@ const catalogue: Catalogue = {
   'By a command': 'Con un comando',
   '{agent} wrote it with its edit tools.': '{agent} la escribió con sus herramientas de edición.',
   'Rewritten in part after an agent wrote it.': 'Reescrita en parte después de que la escribiera un agente.',
+  'Written while {who} wrote this file at the same time.': 'Escrita mientras {who} escribían este archivo a la vez.',
+  you: 'tú',
+  ' and ': ' y ',
   'Not from a session: changed while run {id} worked.':
     'No es de una sesión: cambió mientras trabajaba la ejecución {id}.',
   "No run kept on this computer changed it, so who wrote it isn't known.":

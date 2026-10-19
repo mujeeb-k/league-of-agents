@@ -77,6 +77,7 @@
   --au-agent: #1d4ed8;
   --au-human: #a21caf;
   --au-mixed: #475569;
+  --au-shared: #0e7490;
   /* Sessions at work at the same time, one colour each (lib/sessions.ts): apart from change, agent and author colours. */
   --session-1: #c2185b;
   --session-2: #5c6a00;
@@ -143,6 +144,7 @@
   --au-agent: #7aa7ff;
   --au-human: #e879f9;
   --au-mixed: #a3b1c6;
+  --au-shared: #67e8f9;
   --session-1: #f06292;
   --session-2: #b5c43a;
   --session-3: #4fc3f7;

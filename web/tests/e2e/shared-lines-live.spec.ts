@@ -114,7 +114,7 @@ async function onMap(page: Page, b: Bridge, file: string) {
   return out;
 }
 
-test('two sessions edit one file: each run is credited with its own lines, commit then revert keeps the other run', async ({
+test('two sessions edit one file one after the other: not shared, each run credited with its own lines, commit then revert keeps the other run', async ({
   page,
 }) => {
   const { repo, b, start, go } = await twoSessions();
@@ -149,10 +149,11 @@ test('two sessions edit one file: each run is credited with its own lines, commi
     expect.soft(change(two, 'a/tax.mjs')?.pre).toEqual(CLAUDE_TAX);
     expect.soft(change(two, 'a/tax.mjs')?.hunks).toEqual([{ at: 10, del: 0, add: [COMMENT] }]);
     expect.soft(two.agentLines).toEqual({ 'a/tax.mjs': [[10, 10]], 'b/cart.mjs': [[0, 0]] });
-    // Shared, on both runs; run 1's own change and lines are as they were.
-    expect.soft(sharedOf(two)).toEqual([['a/tax.mjs', [claude]]]);
+    // One after the other, not in the same window: not shared (VISION 31). Run 1's own change and lines are as they
+    // were.
+    expect.soft(sharedOf(two)).toEqual([]);
     const oneNow = await runOf(b, claude);
-    expect.soft(sharedOf(oneNow)).toEqual([['a/tax.mjs', [cursor]]]);
+    expect.soft(sharedOf(oneNow)).toEqual([]);
     expect.soft(change(oneNow, 'a/tax.mjs')?.hunks).toEqual(change(one, 'a/tax.mjs')?.hunks);
     expect.soft(oneNow.agentLines).toEqual(one.agentLines);
     expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_BOTH);
@@ -197,8 +198,8 @@ test('run 1 waits to be committed while run 2 still works; then each keeps to it
     expect.soft(change(two, 'a/tax.mjs')?.pre).toEqual(CLAUDE_TAX);
     expect.soft(change(two, 'a/tax.mjs')?.hunks).toEqual([{ at: 10, del: 0, add: [COMMENT] }]);
     expect.soft(two.agentLines).toEqual({ 'a/tax.mjs': [[10, 10]], 'b/cart.mjs': [[0, 0]] });
-    expect.soft(sharedOf(two)).toEqual([['a/tax.mjs', [claude]]]);
-    expect.soft(sharedOf(await runOf(b, claude))).toEqual([['a/tax.mjs', [cursor]]]);
+    expect.soft(sharedOf(two)).toEqual([]);
+    expect.soft(sharedOf(await runOf(b, claude))).toEqual([]);
     expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_BOTH);
     // Now none works: run 1's commit holds its lines, not run 2's.
     const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
@@ -215,7 +216,8 @@ test('run 1 waits to be committed while run 2 still works; then each keeps to it
   }
 });
 
-test('a shared file left unticked stays as both runs left it when the other run is reverted', async () => {
+// One after the other, the file isn't shared: reverting the later run takes its line out, unasked.
+test("a file another run wrote before this one isn't shared: this run's revert takes out its line alone", async () => {
   const { repo, b, start, go } = await twoSessions();
   try {
     const claude = await start('claude', ['a/'], CLAUDE_PROMPT);
@@ -226,8 +228,8 @@ test('a shared file left unticked stays as both runs left it when the other run 
     await ended(b, cursor);
     const back = await call(b, `/api/runs/${cursor}/revert`, { force: false, shared: [] });
     expect.soft(back.status).toBe(200);
-    expect.soft(back.body.left).toEqual(['a/tax.mjs']);
-    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(BOTH_TAX));
+    expect.soft(back.body.left).toBeUndefined();
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
     expect.soft(onDisk(repo, 'b/cart.mjs')).toBe(git(repo, 'show', 'HEAD:b/cart.mjs'));
   } finally {
     b.stop();
@@ -362,10 +364,10 @@ test('a file one session wrote by a command and the other edited: each has its o
   }
 });
 
-// A command Claude Code runs is bracketed by the hooks: its write is its run's, so a file it wrote and Cursor edited
-// is shared, each run's change its own, Claude Code's commit holds the command's line alone, and reverting Cursor's
+// A command Claude Code runs is bracketed by the hooks: its write is its run's. Cursor edits the file after it ended:
+// not shared, each run's change its own, Claude Code's commit holds the command's line alone, and reverting Cursor's
 // run takes only its comment out.
-test('a bracketed command and an edit make a shared file: commit and revert each keep to their own run', async () => {
+test('a bracketed command, then an edit: not shared, and commit and revert each keep to their own run', async () => {
   const { repo, b, start, go } = await twoSessions();
   const SHELL = '// written by a shell command';
   try {
@@ -379,8 +381,8 @@ test('a bracketed command and an edit make a shared file: commit and revert each
     const both = [ORIGINAL[0]!, COMMENT, ...ORIGINAL.slice(1), SHELL];
     expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(both));
     expect.soft(change(two, 'a/tax.mjs')?.hunks).toEqual([{ at: 1, del: 0, add: [COMMENT] }]);
-    expect.soft(sharedOf(two)).toEqual([['a/tax.mjs', [claude]]]);
-    expect.soft(sharedOf(await runOf(b, claude))).toEqual([['a/tax.mjs', [cursor]]]);
+    expect.soft(sharedOf(two)).toEqual([]);
+    expect.soft(sharedOf(await runOf(b, claude))).toEqual([]);
     const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
     expect.soft(done.status).toBe(200);
     expect.soft(committed(repo, 'a/tax.mjs')).toBe(text([...ORIGINAL, SHELL]));
@@ -494,8 +496,9 @@ test('an edit with no start seen while another session works keeps the lines its
   }
 });
 
-// A bracketed command of Claude Code's runs; meanwhile Cursor edits a/tax.mjs, and then the command writes it. The
-// command's line is Claude Code's, Cursor's line Cursor's: neither is lost to "not from a session".
+// A bracketed command of Claude Code's runs; meanwhile Cursor edits a/tax.mjs, and then the command writes it. Cursor's
+// edit, seen with its text, is Cursor's; the command's line is shared, the two having written the file in the same
+// window (VISION 31): neither is lost to "not from a session".
 test("a command another session's edit lands in: each keeps its own line", async () => {
   const { repo, b, start, go } = await twoSessions();
   const SHELL = '// written by a shell command';
@@ -507,9 +510,11 @@ test("a command another session's edit lands in: each keeps its own line", async
     const one = await ended(b, claude);
     const both = onDisk(repo, 'a/tax.mjs').trimEnd().split('\n');
     expect.soft(both).toEqual([ORIGINAL[0], COMMENT, ...ORIGINAL.slice(1), SHELL]);
-    expect.soft(one.agentLines).toEqual({ 'a/tax.mjs': [[5, 5]] });
-    expect.soft(one.commandLines).toEqual({ 'a/tax.mjs': [[5, 5]] });
+    expect.soft(one.agentLines).toEqual({});
+    expect.soft(one.sharedLines).toEqual({ 'a/tax.mjs': [[5, 5, [claude, cursor]]] });
+    expect.soft(one.otherLines).toEqual({ 'a/tax.mjs': [[1, 1, cursor]] });
     expect.soft(two.agentLines).toEqual({ 'a/tax.mjs': [[1, 1]] });
+    expect.soft(sharedOf(one)).toEqual([['a/tax.mjs', [cursor]]]);
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });

@@ -194,11 +194,12 @@ async function finish(run, status, { checks = true }) {
   // Who wrote each line is worked out last, and a run ends whether or not it can be: left unsaid for the whole
   // run then, never stuck.
   try {
-    const wrote = await linesOf(run, peers, { stepsOf, blobAt });
+    const wrote = await linesOf(run, peers, { stepsOf, blobAt, held: r => lockOfRun(r) === 'sandbox' });
     // Said even when it is none of them: left out, the app reads it as not worked out (an older bridge's run).
     run.agentLines = wrote.agent;
     if (wrote.command) run.commandLines = wrote.command;
     if (wrote.other) run.otherLines = wrote.other;
+    if (wrote.shared) run.sharedLines = wrote.shared;
   } catch (e) {
     logError(e);
   }

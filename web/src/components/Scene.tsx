@@ -32,11 +32,11 @@ const box = (x: number, y: number, w: number, h: number) => ({
 
 /** Coloured by author, zoomed out: a bar along a tile's foot, split by who wrote its lines; unknown is left empty. */
 const Share = ({ s }: { s: Record<Author, number> }) => {
-  const total = s.agent + s.human + s.mixed + s.unknown;
+  const total = s.agent + s.human + s.mixed + s.shared + s.unknown;
   if (!total) return null;
   return (
     <span className="au">
-      {(['agent', 'mixed', 'human'] as const).map(a =>
+      {(['agent', 'shared', 'mixed', 'human'] as const).map(a =>
         s[a] ? <i key={a} className={`au-${a}`} style={{ width: `${(100 * s[a]) / total}%` }} /> : null,
       )}
     </span>

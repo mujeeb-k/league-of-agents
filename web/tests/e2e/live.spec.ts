@@ -6618,6 +6618,8 @@ test.describe('two agents, one checkout', () => {
   /** What a run said with a code, as the values it gave. */
   const said = (run: RunDTO, code: string) => (run.stream ?? []).filter(e => e.say === code).map(e => e.args);
   const paths = (run: RunDTO) => run.changes.map(c => c.path);
+  /** The line the Claude Code stand-in's command writes ("shell:<path>"). */
+  const SHELL = '// written by a shell command';
   /** Both at work, each on its section, until the test says go: Claude Code on a/, Cursor on b/. */
   async function both(b: Bridge, repo: string, claude: string, cursor: string) {
     const seed = read(repo, 'a/tax.mjs');
@@ -6672,9 +6674,10 @@ test.describe('two agents, one checkout', () => {
   test('a file both sessions edited is shared: marked on both, and left out of Revert and Commit unless chosen', () =>
     twoAgents(async (b, repo) => {
       const seed = read(repo, 'a/tax.mjs');
-      // Claude Code rewrites a/tax.mjs, in its own section; Cursor then adds a line to the same file.
-      const { a, c } = await both(b, repo, 'want:a/tax.mjs want:a/rounding.mjs', 'edit:b/cart.mjs');
-      await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+      // Claude Code's command writes a/tax.mjs, in its own section, and runs on; meanwhile Cursor adds a line to the
+      // same file. The two wrote it in the same window: shared (VISION 31).
+      const { a, c } = await both(b, repo, 'want:a/rounding.mjs shell:a/tax.mjs:a', 'edit:b/cart.mjs');
+      await expect.poll(() => read(repo, 'a/tax.mjs')).toContain(SHELL);
       go(repo, 'c');
       await until(b, c.id, 'done');
       const d = await start(b, 'cursor', ['b/'], 'edit:a/tax.mjs');
@@ -6682,7 +6685,7 @@ test.describe('two agents, one checkout', () => {
       go(repo, 'a');
       await until(b, a.id, 'done');
       const [ra, rd] = [await runOf(b, a.id), await runOf(b, d.id)];
-      const both2 = '// written by a session\n// edited by cursor in ' + rd.sessionId + '\n';
+      const both2 = seed + SHELL + '\n// edited by cursor in ' + rd.sessionId + '\n';
       expect(read(repo, 'a/tax.mjs')).toBe(both2);
       // On both runs, each naming the other.
       expect(ra.shared).toEqual([{ path: 'a/tax.mjs', with: [d.id] }]);
@@ -6700,8 +6703,7 @@ test.describe('two agents, one checkout', () => {
       // Chosen, it goes back with the session that is reverted: to the file as that session found it.
       const chosen = await call(b, `/api/runs/${d.id}/revert`, { shared: ['a/tax.mjs'] });
       expect([chosen.status, chosen.body]).toEqual([200, { ok: true }]);
-      expect(read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
-      expect(seed).not.toBe('// written by a session\n');
+      expect(read(repo, 'a/tax.mjs')).toBe(seed + SHELL + '\n');
     }));
 
   // What changed on disk while only one session was writing the file is that session's, whatever wrote it (VISION 30):
@@ -6769,14 +6771,15 @@ test.describe('two agents, one checkout', () => {
   test("a shared file can't go back or be committed while a session still works; once none does, each holds its own", () =>
     twoAgents(async (b, repo) => {
       const seed = read(repo, 'a/tax.mjs');
-      const { a, c } = await both(b, repo, 'want:a/tax.mjs', 'edit:b/invoice.mjs');
-      await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+      const { a, c } = await both(b, repo, 'shell:a/tax.mjs:a', 'edit:b/invoice.mjs');
+      await expect.poll(() => read(repo, 'a/tax.mjs')).toContain(SHELL);
       go(repo, 'c');
       await until(b, c.id, 'done');
       const d = await start(b, 'cursor', ['b/'], 'edit:b/cart.mjs edit:a/tax.mjs');
       await until(b, d.id, 'done');
-      // Cursor's session has ended and Claude Code's still works: the file is shared already.
-      expect((await runOf(b, d.id)).shared).toEqual([{ path: 'a/tax.mjs', with: [a.id] }]);
+      // Cursor's session has ended and Claude Code's command still runs: what that command wrote is known only once it
+      // ends, so the file isn't said to be shared yet.
+      expect((await runOf(b, d.id)).shared).toBeUndefined();
       const both2 = read(repo, 'a/tax.mjs');
       const busy = { code: 'sessions-working', args: {} };
       for (const body of [{ shared: ['a/tax.mjs'] }, {}]) {
@@ -6793,13 +6796,15 @@ test.describe('two agents, one checkout', () => {
       go(repo, 'a');
       await until(b, a.id, 'done');
       expect(paths(await runOf(b, a.id))).toEqual(['a/tax.mjs']);
+      // Now it is, on both.
+      expect((await runOf(b, d.id)).shared).toEqual([{ path: 'a/tax.mjs', with: [a.id] }]);
       expect((await state(b)).runs.map(r => r.agent)).toEqual(['claude', 'cursor', 'cursor']);
       // Left as it is, the revert goes through, and says on the run what it left.
       const left = await call(b, `/api/runs/${d.id}/revert`, {});
       expect([left.status, left.body]).toEqual([200, { ok: true, left: ['a/tax.mjs'] }]);
       expect((await runOf(b, d.id)).left).toEqual(['a/tax.mjs']);
-      // Now that both have ended it can be chosen. Only Claude Code's lines would come out, but its rewrite of the
-      // whole file touches Cursor's line: the file stays as it is, and the revert says so.
+      // Now that both have ended it can be chosen. Only Claude Code's line would come out, but Cursor's sits right
+      // after it, and the two can't be taken apart: the file stays as it is, and the revert says so.
       const chosen = await call(b, `/api/runs/${a.id}/revert`, { shared: ['a/tax.mjs'] });
       expect([chosen.status, chosen.body]).toEqual([200, { ok: true, left: ['a/tax.mjs'] }]);
       expect(read(repo, 'a/tax.mjs')).toBe(both2);
@@ -6808,8 +6813,8 @@ test.describe('two agents, one checkout', () => {
 
   test("a shared file's revert waits for a third session too, and what it left is no leftover", () =>
     twoAgents(async (b, repo) => {
-      const { a, c } = await both(b, repo, 'want:a/tax.mjs', 'edit:b/invoice.mjs');
-      await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+      const { a, c } = await both(b, repo, 'shell:a/tax.mjs:a', 'edit:b/invoice.mjs');
+      await expect.poll(() => read(repo, 'a/tax.mjs')).toContain(SHELL);
       // A third session, on a file of its own, works until the end.
       const third = await start(b, 'claude', ['README.md'], 'want:README.md wait:z');
       go(repo, 'c');
@@ -6832,7 +6837,7 @@ test.describe('two agents, one checkout', () => {
       expect((await state(b)).runs.map(r => r.agent)).toEqual(['claude', 'cursor', 'claude', 'cursor']);
     }));
 
-  test("a session can't be reverted while another works, even before that one edits its file; then they share it", () =>
+  test("a session can't be reverted while another works, even before that one edits its file; one after the other, neither shares it", () =>
     twoAgents(async (b, repo) => {
       const seed = read(repo, 'a/tax.mjs');
       const a = await start(b, 'claude', ['a/'], 'want:a/tax.mjs wait:a');
@@ -6846,12 +6851,11 @@ test.describe('two agents, one checkout', () => {
       go(repo, 'c');
       await until(b, d.id, 'done');
       const [ra, rd] = [await runOf(b, a.id), await runOf(b, d.id)];
-      // Both wrote it: shared, each with its own line.
+      // Both wrote it, one after the other: not shared (VISION 31), each holding its own line.
       expect(read(repo, 'a/tax.mjs')).toBe('// written by a session\n// edited by cursor in ' + rd.sessionId + '\n');
-      expect([ra.shared, rd.shared]).toEqual([
-        [{ path: 'a/tax.mjs', with: [d.id] }],
-        [{ path: 'a/tax.mjs', with: [a.id] }],
-      ]);
+      expect([ra.shared, rd.shared]).toEqual([undefined, undefined]);
+      expect(ra.agentLines).toEqual({ 'a/tax.mjs': [[0, 0]] });
+      expect(rd.agentLines).toEqual({ 'a/tax.mjs': [[1, 1]], 'b/cart.mjs': expect.anything() });
       expect(seed).not.toBe(read(repo, 'a/tax.mjs'));
     }));
 
@@ -6883,8 +6887,8 @@ test.describe('two agents, one checkout', () => {
     page,
   }) =>
     twoAgents(async (b, repo) => {
-      const { a, c } = await both(b, repo, 'want:a/tax.mjs', 'edit:b/invoice.mjs');
-      await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+      const { a, c } = await both(b, repo, 'shell:a/tax.mjs:a', 'edit:b/invoice.mjs');
+      await expect.poll(() => read(repo, 'a/tax.mjs')).toContain(SHELL);
       go(repo, 'c');
       await until(b, c.id, 'done');
       const d = await start(b, 'cursor', ['b/'], 'edit:b/cart.mjs edit:a/tax.mjs');
@@ -6911,12 +6915,13 @@ test.describe('two agents, one checkout', () => {
     }));
 
   /**
-   * Three runs, as the app shows them: Claude Code (run 1, a/) rewrote a/tax.mjs and made a/rounding.mjs; Cursor
-   * (run 3, b/) edited b/cart.mjs, a/discount.mjs and, after Claude Code, a/tax.mjs. Both have ended.
+   * Three runs, as the app shows them: Claude Code (run 1, a/) made a/rounding.mjs and, by a command still running,
+   * wrote a line in a/tax.mjs; Cursor (run 3, b/) edited b/cart.mjs, a/discount.mjs and, while that command ran,
+   * a/tax.mjs. Both have ended.
    */
   async function sharedFile(b: Bridge, repo: string) {
-    const { a, c } = await both(b, repo, 'want:a/tax.mjs want:a/rounding.mjs', 'edit:b/invoice.mjs');
-    await expect.poll(() => read(repo, 'a/tax.mjs')).toBe('// written by a session\n');
+    const { a, c } = await both(b, repo, 'want:a/rounding.mjs shell:a/tax.mjs:a', 'edit:b/invoice.mjs');
+    await expect.poll(() => read(repo, 'a/tax.mjs')).toContain(SHELL);
     go(repo, 'c');
     await until(b, c.id, 'done');
     const d = await start(b, 'cursor', ['b/'], 'edit:b/cart.mjs edit:a/discount.mjs edit:a/tax.mjs');
@@ -6932,7 +6937,8 @@ test.describe('two agents, one checkout', () => {
     ({ page }) =>
       twoAgents(async (b, repo) => {
         const cart = read(repo, 'b/cart.mjs'),
-          discount = read(repo, 'a/discount.mjs');
+          discount = read(repo, 'a/discount.mjs'),
+          seed = read(repo, 'a/tax.mjs');
         const { d, both: both2 } = await sharedFile(b, repo);
         await page.goto(linkFor(b));
         await expect(page.locator('#conn')).toHaveText('Live');
@@ -6977,7 +6983,7 @@ test.describe('two agents, one checkout', () => {
         await expect(page.locator('#conflictRevert')).toHaveText('Revert');
         await page.locator('#conflictRevert').click();
         await expect(page.locator(TOAST)).toHaveText(`Reverted run ${d.id}`);
-        expect(read(repo, 'a/tax.mjs')).toBe('// by hand, later\n// written by a session\n');
+        expect(read(repo, 'a/tax.mjs')).toBe('// by hand, later\n' + seed + SHELL + '\n');
         expect(read(repo, 'b/cart.mjs')).toBe(cart);
         expect(read(repo, 'a/discount.mjs')).toBe(discount);
         expect(both2).toContain('// edited by cursor');
@@ -7006,10 +7012,8 @@ test.describe('two agents, one checkout', () => {
       await page.goto(linkFor(b));
       await expect(page.locator('#conn')).toHaveText('Live');
       await page.locator(`#sideList [data-run="${a.id}"]`).click();
-      await expect(page.locator('#insp .flist li')).toHaveText([
-        'rounding.mjs+1',
-        `tax.mjsShared with run ${d.id}+2 −4`,
-      ]);
+      // Cursor's line came right after the command's, so the two can't be taken apart: both are in its change.
+      await expect(page.locator('#insp .flist li')).toHaveText(['rounding.mjs+1', `tax.mjsShared with run ${d.id}+2`]);
       await page.locator('#insp [data-act="keep"]').click();
       // Changed by hand since the run: the shared file can't go in with it, and its box says why.
       fs.appendFileSync(path.join(repo, 'a/tax.mjs'), '// by hand, later\n');

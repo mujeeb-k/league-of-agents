@@ -110,6 +110,14 @@ async function ownWrites(run, file) {
   }
   return own;
 }
+/**
+ * Whether two runs wrote a file in the same window: a write of one's (an edit, at its moment; a command, from its
+ * start to its end) met one of the other's. One after the other, each keeps its own writes apart (VISION 31).
+ */
+function sameWindow(a, b, file) {
+  const spans = r => seenWrites(r, file).map(w => [w.start ?? w.at, w.at]);
+  return spans(a).some(([s1, e1]) => spans(b).some(([s2, e2]) => s1 <= e2 && s2 <= e1));
+}
 /** The other session of the epoch whose section holds a file. */
 const holder = (run, file) => epoch.runs.find(r => r !== run && r.scope?.length && inScope(r.scope, file));
 
@@ -183,7 +191,8 @@ export async function ownChanges(run, changes) {
       if (other) crossed.set(other, [...(crossed.get(other) ?? []), c.path]);
       if (named.has(c.path))
         for (const r of epoch.runs)
-          if (r !== run && names.get(r).has(c.path) && holds(r, c.path)) share(run, r, c.path);
+          if (r !== run && names.get(r).has(c.path) && holds(r, c.path) && sameWindow(run, r, c.path))
+            share(run, r, c.path);
     }
   }
   for (const [other, files] of crossed) crossing(run, other, files.join(', '));
@@ -217,7 +226,7 @@ function crossing(run, other, files) {
 }
 
 /**
- * Two sessions wrote the same file (an edit step or a bracketed command each): shared, said on both, each naming the
+ * Two sessions wrote the same file in the same window (sameWindow): shared, said on both, each naming the
  * other. Either may have ended already; its record is saved again and sent.
  */
 function share(run, other, file) {

@@ -2,9 +2,10 @@
 // last wrote it. Built by walking the runs in order, each from the file as the run found it to the file it left.
 //
 // What the labels mean:
-// - agent, with its run: the line changed on disk while that run's session worked, in a file only it was writing,
-//   whatever the tool (the run's agentLines, from the bridge: bridge/lib/agents/lines.mjs), marked where by a command
+// - agent, with its run: an edit of that run's session wrote it, or its command did while no other writer touched
+//   the file (the run's agentLines, from the bridge: bridge/lib/agents/lines.mjs), marked where by a command
 //   (commandLines). In a run's own file this may be another session's run (otherLines).
+// - shared, with the runs: written while two writers wrote the file at once (sharedLines); 0 among them is the person.
 // - human: saved from the map's editor (a run by "you").
 // - mixed: someone else rewrote part of a line an agent had written.
 // - unknown, with a run: changed during that run, but not by an agent's edit: a command, a hand, watch mode.
@@ -13,13 +14,15 @@
 import type { RecordedLine } from '../api/types';
 import type { Run } from './types';
 
-export type Author = 'agent' | 'human' | 'mixed' | 'unknown';
+export type Author = 'agent' | 'human' | 'mixed' | 'shared' | 'unknown';
 export interface Owner {
   author: Author;
   /** The run that last wrote the line; null for a line no kept run wrote. */
   run: number | null;
   /** How an agent's line was written, where not by its edit tools. */
   how?: 'command';
+  /** For a shared line: the runs that wrote the file at once, 0 for the person. */
+  with?: number[];
   /** For a line no kept run wrote: what git records about it (a Git AI note, or a co-author trailer). */
   source?: 'git-ai' | 'trailer';
   by?: string;
@@ -79,8 +82,12 @@ function authorOf(run: Run, path: string, at: number, text: string, replaced: Tr
   // Another session wrote it while this run worked: that session's line.
   const other = run.otherLines?.[path]?.find(within);
   if (other) return { author: 'agent', run: other[2], ...(other[3] ? { how: 'command' } : {}) };
+  const shared = run.sharedLines?.[path]?.find(([from, to]) => at >= from && at <= to);
+  if (shared) return { author: 'shared', run: run.id, with: shared[2] };
   const wasAgent = replaced.owners.some(
-    (o, i) => (o.author === 'agent' || o.author === 'mixed') && overlap(replaced.lines[i]!, text) >= 0.5,
+    (o, i) =>
+      (o.author === 'agent' || o.author === 'mixed' || o.author === 'shared') &&
+      overlap(replaced.lines[i]!, text) >= 0.5,
   );
   if (wasAgent) return { author: 'mixed', run: run.id };
   return { author: run.agent === 'you' ? 'human' : 'unknown', run: run.id };
@@ -160,7 +167,7 @@ function withRecorded(owners: Owner[], lines: string[], rec: RecordedLine[]): Ow
 
 /** A file's lines by author, for its share bar when zoomed out. */
 export function shareOf(owners: Owner[]): Record<Author, number> {
-  const n: Record<Author, number> = { agent: 0, human: 0, mixed: 0, unknown: 0 };
+  const n: Record<Author, number> = { agent: 0, human: 0, mixed: 0, shared: 0, unknown: 0 };
   for (const o of owners) n[o.author]++;
   return n;
 }

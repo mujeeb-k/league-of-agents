@@ -83,6 +83,8 @@ const held = JSON.stringify(given).includes('hook hold');
 const resumed = args.includes('--resume');
 const allowed = /You may now change (.+?)\. /.exec(prompt)?.[1].split(', ') ?? [];
 const wants = [...[...prompt.matchAll(/\bwant:(\S+)/g)].map(m => m[1]), ...allowed];
+// With "shell:" steps too, the turn goes on to them after its writes, and they hold it ("shell:<path>:<name>").
+const shells = [...prompt.matchAll(/\bshell:(\S+)/g)].map(m => m[1]);
 if (wants.length) {
   const results = [];
   for (const [i, file] of wants.entries()) {
@@ -118,12 +120,14 @@ if (wants.length) {
     });
     results.push(`${file}: ${error ? 'refused' : 'written'}`);
   }
-  // "wait:<name>" after them: the turn holds until the file .loa/go-<name> exists, so a test can keep it at work.
-  const hold = /\bwait:(\S+)/.exec(prompt)?.[1];
-  while (hold && !fs.existsSync(`.loa/go-${hold}`)) await new Promise(r => setTimeout(r, 50));
-  const resume = resumed ? ` (resumed ${args[args.indexOf('--resume') + 1]})` : '';
-  out({ type: 'result', result: results.join('\n') + resume, session_id: 'sess-123', total_cost_usd: 0.0123 });
-  process.exit(0);
+  if (!shells.length) {
+    // "wait:<name>" after them: the turn holds until the file .loa/go-<name> exists, so a test can keep it at work.
+    const hold = /\bwait:(\S+)/.exec(prompt)?.[1];
+    while (hold && !fs.existsSync(`.loa/go-${hold}`)) await new Promise(r => setTimeout(r, 50));
+    const resume = resumed ? ` (resumed ${args[args.indexOf('--resume') + 1]})` : '';
+    out({ type: 'result', result: results.join('\n') + resume, session_id: 'sess-123', total_cost_usd: 0.0123 });
+    process.exit(0);
+  }
 }
 // "tool:<name>" in the prompt: call that tool, which the hooks may refuse, and say what came of it. With
 // "tool:<name>><path>", the tool, once let through, writes that file from this process, as a tool Claude Code runs
@@ -184,7 +188,6 @@ if (inserts.some(([what]) => what === 'insert')) {
   out({ type: 'result', result: results.join('\n'), session_id: 'sess-123', total_cost_usd: 0.0123 });
   process.exit(0);
 }
-const shells = [...prompt.matchAll(/\bshell:(\S+)/g)].map(m => m[1]);
 if (shells.length) {
   const results = [];
   for (const [i, arg] of shells.entries()) {

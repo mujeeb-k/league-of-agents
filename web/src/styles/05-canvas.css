@@ -584,6 +584,9 @@ em.n {
 .au-mixed {
   --au: var(--au-mixed);
 }
+.au-shared {
+  --au: var(--au-shared);
+}
 .fr .au i {
   height: 100%;
   background: var(--au);
@@ -593,7 +596,8 @@ em.n {
 }
 .card .ln.au-agent > i,
 .card .ln.au-human > i,
-.card .ln.au-mixed > i {
+.card .ln.au-mixed > i,
+.card .ln.au-shared > i {
   box-shadow: inset max(3px, calc(1.5px / var(--s))) 0 var(--au);
   color: var(--au);
 }

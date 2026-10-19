@@ -110,6 +110,11 @@ export interface RunDTO {
    * command, in the file it left.
    */
   otherLines?: Record<string, ([number, number, number] | [number, number, number, number])[]>;
+  /**
+   * Lines of its files written while two writers wrote the file at once: [from, to, their runs], 0 for the person
+   * (bridges after 0.2.0).
+   */
+  sharedLines?: Record<string, [number, number, number[]][]>;
   /** The model the agent reported (bridges before 0.2.0 don't send it). */
   model?: string | null;
   status: RunStatus;

@@ -582,7 +582,7 @@ function RunView({ run }: { run: Run }) {
 const firstChange = (v: ReturnType<typeof viewOf>) => v.rows.find(r => r.k)?.n ?? 1;
 
 const authorName = (a: Author) =>
-  ({ agent: t('Agent'), human: t('Human'), mixed: t('Mixed'), unknown: t('Unknown') })[a];
+  ({ agent: t('Agent'), human: t('Human'), mixed: t('Mixed'), shared: t('Shared'), unknown: t('Unknown') })[a];
 
 /** What the clicked line's label means, in words, given the run that last wrote it, if any. */
 function authorText(o: Owner, run: Run | null): string {
@@ -607,6 +607,12 @@ function authorText(o: Owner, run: Run | null): string {
       ? t('{agent} wrote it by a command.', { agent: who })
       : t('{agent} wrote it with its edit tools.', { agent: who });
   if (author === 'human') return t('Saved in the editor on the map.');
+  if (author === 'shared')
+    return t('Written while {who} wrote this file at the same time.', {
+      who: (o.with ?? [])
+        .map(id => (id ? agentOf(S.RUNS.find(r => r.id === id)?.agent ?? '').name : t('you')))
+        .join(t(' and ')),
+    });
   if (author === 'mixed') return t('Rewritten in part after an agent wrote it.');
   if (!run) return t("No run kept on this computer changed it, so who wrote it isn't known.");
   // A bridge that didn't say which lines the run's agent wrote (0.2.0, but for Claude Code): not known, either way.
@@ -641,7 +647,7 @@ function Authors({ path }: { path: string }) {
     <Section>
       <Label>{t('Authors')}</Label>
       <div id="authorShare" className="flex flex-wrap gap-x-3 gap-y-1 text-[13px] tabular-nums">
-        {(['agent', 'mixed', 'human', 'unknown'] as const).map(a => (
+        {(['agent', 'shared', 'mixed', 'human', 'unknown'] as const).map(a => (
           <span key={a} className={`au-${a} text-[var(--au,var(--ink2))]`}>{`${authorName(a)} ${n[a]}`}</span>
         ))}
       </div>

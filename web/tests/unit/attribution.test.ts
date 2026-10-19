@@ -66,6 +66,19 @@ describe('authorsOf', () => {
     expect(labels(owners)).toEqual(['unknown', 'agent:1', 'agent:2', 'unknown', 'unknown']);
   });
 
+  it('labels a line written while two writers wrote the file at once shared, naming both', () => {
+    id = 0;
+    const claude = run(
+      'claude',
+      { 'a.ts': change(BASE, [{ at: 1, del: 1, add: ['const a = fetchA();', '// built'] }]) },
+      { agentLines: { 'a.ts': [[1, 1]] }, sharedLines: { 'a.ts': [[2, 2, [1, 2]]] } },
+    );
+    const now = ['import x', 'const a = fetchA();', '// built', 'const b = 2;', 'export {}'];
+    const owners = authorsOf([claude], new Map([['a.ts', now]])).get('a.ts');
+    expect(labels(owners)).toEqual(['unknown', 'agent:1', 'shared:1', 'unknown', 'unknown']);
+    expect(owners![2]!.with).toEqual([1, 2]);
+  });
+
   it('labels an agent line someone else partly rewrote mixed', () => {
     id = 0;
     const claude = run(
@@ -197,6 +210,7 @@ describe('authorsOf', () => {
       agent: 2,
       human: 1,
       mixed: 0,
+      shared: 0,
       unknown: 1,
     });
   });
