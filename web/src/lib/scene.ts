@@ -10,11 +10,12 @@ import { LABEL } from './layout';
 import { drafts } from '../state/editing';
 import { union } from './camera';
 import { area, overlaps } from './sections';
-import { ended, endedAs, sessionColour, workingRuns } from '../state/sessions';
+import { asking, ended, endedAs, sessionColour, workingRuns } from '../state/sessions';
 import { obstacles, pathOf, route, type Rect } from './route';
 import { allDirs, dirStat, filesUnder, linesAt, viewOf } from './model';
 import { momentOf, readOnly } from './live';
 import type { DirNode, FileView, RowKind } from './types';
+import type { Want } from '../api/types';
 import { authorsOf, shareOf, type Author } from './attribution';
 import { t, tn } from '../i18n';
 
@@ -109,6 +110,8 @@ export interface ZoneBox {
   h: number;
   colour: string;
   label: string | null;
+  /** On the box that carries the label: what the session asks of the person, the first not yet answered. */
+  ask?: Want;
 }
 
 export interface SceneData {
@@ -413,6 +416,7 @@ function zonesOf(): ZoneBox[] {
         ended: !!how,
         colour,
         label,
+        ...(label && !how && asking(run)[0] ? { ask: asking(run)[0] } : {}),
         ...(file ? { x: at.x, y: at.y, w: CW, h: CH } : folderBox(at)),
       });
       label = null;

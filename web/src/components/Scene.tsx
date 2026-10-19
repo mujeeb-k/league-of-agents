@@ -17,8 +17,11 @@ import {
 } from '../lib/scene';
 import { fitLabels } from '../lib/labels';
 import { culling, drawn } from '../lib/cull';
-import { wantHeads } from '../api/live';
-import { dom, st } from '../state/app';
+import { answerWant, wantHeads } from '../api/live';
+import type { Want } from '../api/types';
+import { isOffline } from '../state/actions';
+import { holderOf, wantSaid } from '../state/sessions';
+import { S, dom, st } from '../state/app';
 import { useRegion } from '../state/render';
 import { Stat } from './bits';
 import { FileIcon } from './FileIcon';
@@ -159,16 +162,54 @@ const Sel = ({ s }: { s: SelBox }) => (
   </div>
 );
 
-/** A session's section, outlined in its colour. */
+/**
+ * A session's section, outlined in its colour. What the session asks of the person is on its label, with Allow and
+ * Refuse, as on its card: reachable at any width, where the sidebar is closed.
+ */
 const Zone = ({ z }: { z: ZoneBox }) => (
   <div
     className={cn('zone', z.file && 'f', z.ended && 'ended')}
     data-run={z.run}
     style={{ ...box(z.x, z.y, z.w, z.h), '--zone': z.colour } as React.CSSProperties}
   >
-    {z.label ? <b>{z.label}</b> : null}
+    {z.label ? (
+      <b className={cn(z.ask && 'asks')}>
+        {z.label}
+        {z.ask ? <ZoneAsk run={z.run} w={z.ask} /> : null}
+      </b>
+    ) : null}
   </div>
 );
+function ZoneAsk({ run, w }: { run: number; w: Want }) {
+  const r = S.RUNS.find(x => x.id === run);
+  if (!r) return null;
+  const held = !w.ask && !!holderOf(r, w.path);
+  return (
+    <span className="zask" {...(w.ask ? { 'data-ask': w.ask } : { 'data-want': w.path })}>
+      <span className="said" title={wantSaid(w)}>
+        {wantSaid(w)}
+      </span>
+      <span className="acts">
+        <button
+          type="button"
+          data-allow
+          disabled={held || !!st.busy || isOffline()}
+          onClick={() => void answerWant(r, w, true)}
+        >
+          {t('Allow')}
+        </button>
+        <button
+          type="button"
+          data-refuse
+          disabled={!!st.busy || isOffline()}
+          onClick={() => void answerWant(r, w, false)}
+        >
+          {t('Refuse')}
+        </button>
+      </span>
+    </span>
+  );
+}
 
 /**
  * The file tiles and code cards: all of them, or on a large map, those near the view, tiles zoomed out and cards

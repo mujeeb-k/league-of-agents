@@ -39,6 +39,7 @@ import { BetaTag, commandBlockedText, Dot, Label, SharedTag, Spinner, Stat, Step
 import { IntroSection } from './Intro';
 import { locale, t, tn } from '../i18n';
 import { Timeline } from './Timeline';
+import { Asks } from './Asks';
 
 const Section = ({ children, className }: { children: React.ReactNode; className?: string }) => (
   <section className={cn('border-b p-4', className)}>{children}</section>
@@ -292,6 +293,12 @@ function RunView({ run }: { run: Run }) {
             {running ? <Spinner /> : null}
           </div>
           <Reply run={run} text={reply} open={running || st.openReplies.has(run.id)} />
+          {/* Where the sidebar is a drawer (under 860 px): what the session asks, here too, in view. */}
+          {running ? (
+            <div className="min-[860px]:hidden">
+              <Asks r={run} />
+            </div>
+          ) : null}
           {needsYou(run) ? (
             // What the agent needs before it can finish: a neutral card with an amber edge, like warnings.
             <div className="needs mt-3 flex gap-2 rounded-lg border border-l-2 border-l-mod bg-card px-3 py-2">

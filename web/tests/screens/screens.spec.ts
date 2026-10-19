@@ -7,7 +7,9 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import {
   AGENT_FIXTURES,
+  FAKE_CLAUDE,
   REPLAY_AGENT,
+  call,
   SLOW_AGENT,
   approveChecks,
   git,
@@ -303,5 +305,27 @@ test('a shared file whose other session still works', async ({ page }) => {
   } finally {
     b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  }
+});
+
+/** At a phone's width too: the sidebar is a drawer there, and the run sits below the map. */
+const PHONE = [...NARROW, { width: 390, height: 844 }];
+
+// What a session asks: on its card, on the map, and in its run where the sidebar is a drawer.
+test('what a session asks', async ({ page }) => {
+  test.setTimeout(120_000);
+  const repo = makeRepo();
+  const b = await startBridge(repo, FAKE_CLAUDE, {}, ['--no-hooks']);
+  try {
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    const asked = (await call(b, '/api/runs', { agent: 'claude', prompt: 'Log it. ask:run', scope: [] }))
+      .body as unknown as { id: number };
+    await expect(page.locator('#sideList [data-ask]')).toBeVisible({ timeout: 15_000 });
+    await shoot(page, 'ask', PHONE);
+    await call(b, `/api/runs/${asked.id}/wants`, { ask: 'toolu_ask_1', allow: false });
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
 });

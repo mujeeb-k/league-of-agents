@@ -171,14 +171,14 @@ League of Agents 从不把你的代码上传到任何地方。你的代码只会
 
 | 代理 | 命令 |
 |---|---|
-| Claude Code | `claude -p <prompt> --output-format stream-json --verbose --setting-sources user --permission-mode acceptEdits` |
+| Claude Code | `claude -p <prompt> --output-format stream-json --verbose --mcp-config <the bridge's permission tool> --permission-prompt-tool mcp__league-of-agents__ask` |
 | Cursor | `cursor-agent -p --force --output-format stream-json <prompt>` |
 | Codex | `codex exec --json --sandbox workspace-write <prompt>` |
 
 后续运行会为 Claude Code 和 Cursor 加上 `--resume <session>`，为 Codex 加上 `resume <session>`。各个权限参数允许的操作：
 
-- **Claude Code，`--permission-mode acceptEdits`：** 它会在仓库中创建和编辑文件而不询问，并且**会在仓库中运行 `mkdir`、`touch`、`rm`、`rmdir`、`mv`、`cp` 和 `sed` 而不询问。** 其他 shell 命令和网络请求需要你在 Claude Code 中设置规则；使用 `-p` 时没有人可以询问，所以它们会被拒绝。（[权限模式](https://code.claude.com/docs/en/permission-modes#auto-approve-file-edits-with-acceptedits-mode)，[非交互式运行](https://code.claude.com/docs/en/headless#auto-approve-tools)）没有沙箱的地方，每次运行都是这样启动的。**在 macOS 上，使用 Claude Code 2.1.295 或更高版本时，会话改用 `--permission-mode dontAsk` 启动，并带有一个通过 `--settings` 传入的 hook，Claude Code 在每次工具调用之前都会运行它。** 这时 Claude Code 只做这个 hook 允许的事：这个 hook 让每个 shell 命令都在沙箱中运行，并约束文件工具，[如下文所述](#macos-上的沙箱)。hook 没有看到的调用会交给 Claude Code 自己的权限检查，所以会话不会在两者都没有的情况下运行。为此不会向你的仓库或你的 Claude Code 设置写入任何内容。
-- **Claude Code，`--setting-sources user`：** 会话读取你自己的 Claude Code 设置，从不读取仓库的设置（`.claude/settings.json`、`.claude/settings.local.json`），所以仓库提交的 hook 不会在会话中运行。
+- **Claude Code，`--permission-prompt-tool`：** 它使用你自己的 Claude Code 设置和它自己的权限检查运行，采用你的设置所设定的权限模式，和在终端中一样。**它在终端中会问你的事，会在会话的卡片上用“允许”和“拒绝”来问**，会话会等待你的回答：桥接程序提供 Claude Code 用来询问的那个工具。（[权限模式](https://code.claude.com/docs/en/permission-modes)，[非交互式运行](https://code.claude.com/docs/en/headless)）没有沙箱的地方，每次运行都是这样启动的。**在 macOS 上，使用 Claude Code 2.1.295 或更高版本时，在分区上的会话改用 `--setting-sources user --permission-mode dontAsk` 启动，并带有一个通过 `--settings` 传入的 hook，Claude Code 在每次工具调用之前都会运行它。** 这时 Claude Code 只做这个 hook 允许的事：这个 hook 让每个 shell 命令都在沙箱中运行，并约束文件工具，[如下文所述](#macos-上的沙箱)。hook 没有看到的调用会交给 Claude Code 自己的权限检查，所以会话不会在两者都没有的情况下运行。为此不会向你的仓库或你的 Claude Code 设置写入任何内容。
+- **Claude Code，`--setting-sources user`：** 受沙箱约束的会话读取你自己的 Claude Code 设置，从不读取仓库的设置（`.claude/settings.json`、`.claude/settings.local.json`），所以仓库提交的 hook 或 MCP 服务器不会在沙箱之外运行。
 - **Cursor，`-p --force`：** **它会运行 shell 命令而不询问。** `-p` 给它所有工具，包括写入和 shell，`--force` 允许运行命令，除非你明确拒绝了它们。（[CLI 参数](https://cursor.com/docs/cli/reference/parameters)）
 - **Codex，`exec --sandbox workspace-write`：** **它会在仓库中运行命令而不询问。** 它在仓库内读取和编辑文件并运行命令。网络访问是关闭的，它也无法越出仓库。（[非交互模式](https://learn.chatgpt.com/docs/non-interactive-mode)，[审批与安全](https://learn.chatgpt.com/docs/agent-approvals-security)）
 

@@ -12,8 +12,7 @@ import { drafts, openEditor } from '../state/editing';
 import { applyPanels, holdSide, panels, setPinned, sideVisibleAt } from '../state/panels';
 import { isOffline, runAction, selectRun, stopSessions, toggleSel } from '../state/actions';
 import { renderSel, renderSide, useRegion } from '../state/render';
-import { asking, endedAs, holderOf, reachOf, sessionColour, sessionsCost, workingRuns } from '../state/sessions';
-import { answerWant } from '../api/live';
+import { asking, endedAs, reachOf, sessionColour, sessionsCost, workingRuns } from '../state/sessions';
 import { follow } from '../state/watch';
 import { stepsOf } from '../lib/live';
 import { money } from '../lib/util';
@@ -23,6 +22,7 @@ import { BetaTag, CheckBadge, commandBlockedText, Dot, FilePath, Stat, Tip } fro
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { FileIcon } from './FileIcon';
 import { Button } from './ui/button';
+import { Asks } from './Asks';
 import { t, tn } from '../i18n';
 
 const row =
@@ -147,6 +147,8 @@ function RunRow({ r }: { r: Run }) {
   const s = runStats(r),
     a = agentOf(r.agent),
     running = r.status === 'running',
+    // Waiting on the person: ended with writes to answer, or its agent stopped on a question it asked.
+    waits = !!r.waiting || asking(r).some(w => w.ask),
     status = r.reverted ? t('Reverted') : (endedAs(r) ?? (needsYou(r) ? t('Needs you') : r.kept ? t('Kept') : null));
   const putBack = r.putBack?.filter(k => !k.restored).length ?? 0;
   // A session at work is marked in the colour its section has on the map.
@@ -197,10 +199,10 @@ function RunRow({ r }: { r: Run }) {
           {r.title}
         </div>
         <div className="m mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-          <Dot c={a.c} className={cn('size-1.5 shrink-0', running && !r.waiting && 'animate-pulse')} />
+          <Dot c={a.c} className={cn('size-1.5 shrink-0', running && !waits && 'animate-pulse')} />
           {/* The model is in the inspector; here, in the row's tooltip, so the time stays readable. */}
           <span className="min-w-0 truncate" title={r.model ? `${a.name} · ${r.model}` : undefined}>
-            {r.waiting ? t('Waiting for you') : running ? t('Working') : r.when}
+            {waits ? t('Waiting for you') : running ? t('Working') : r.when}
           </span>
           {r.cost != null ? <span className="cost shrink-0 tabular-nums">{money(r.cost)}</span> : null}
           {/* While it works, the stop button takes the room: "Beta" shows once it ends. */}
@@ -285,47 +287,6 @@ function RunRow({ r }: { r: Run }) {
       </div>
     </div>
   );
-}
-
-/**
- * The writes a session was refused outside its section, each asked of the person: Allow adds the file to the section
- * and the session carries on; Refuse keeps it out. A file another session's section holds waits for that one to end.
- */
-function Asks({ r }: { r: Run }) {
-  return asking(r).map(w => {
-    const holder = holderOf(r, w.path);
-    return (
-      <div key={w.path} data-want={w.path} className="mt-2 rounded-lg border bg-card px-2.5 py-2 text-xs">
-        <p className="text-foreground text-pretty [overflow-wrap:anywhere]">
-          {t('Wants to change {file}', { file: w.path })}
-        </p>
-        {holder ? (
-          <p className="held mt-0.5 text-muted-foreground text-pretty">
-            {t('Run {id} is working on it.', { id: holder.id })}
-          </p>
-        ) : null}
-        <div className="mt-2 flex gap-1.5">
-          <Button
-            size="xs"
-            data-allow
-            disabled={!!holder || !!st.busy || isOffline()}
-            onClick={() => void answerWant(r, w.path, true)}
-          >
-            {t('Allow')}
-          </Button>
-          <Button
-            size="xs"
-            variant="outline"
-            data-refuse
-            disabled={!!st.busy || isOffline()}
-            onClick={() => void answerWant(r, w.path, false)}
-          >
-            {t('Refuse')}
-          </Button>
-        </div>
-      </div>
-    );
-  });
 }
 
 /** Selects a file or folder and flies to it, as a click on the canvas does; with add, toggles it in the scope. */

@@ -570,6 +570,12 @@ const catalogue: Catalogue = {
   "Can change files outside your selection. You'll see each one flagged.":
     'Puede cambiar archivos fuera de tu selección. Verás cada uno señalado.',
   'Wants to change {file}': 'Quiere cambiar {file}',
+  'Wants to run {command}': 'Quiere ejecutar {command}',
+  'Wants to use {tool}': 'Quiere usar {tool}',
+  'Asks to run: {command}': 'Pide ejecutar: {command}',
+  'Asks to change {file}': 'Pide cambiar {file}',
+  'Asks to use {tool}': 'Pide usar {tool}',
+  'Allowed: {what}': 'Permitido: {what}',
   'Run {id} is working on it.': 'La ejecución {id} está trabajando en él.',
   Allow: 'Permitir',
   Refuse: 'Rechazar',

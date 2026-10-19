@@ -1,6 +1,7 @@
 // What the agents' own hooks run (bridge/loa.mjs hook ...): the scope lock before an edit, and a terminal or editor
 // turn recorded as a run. It loads without starting anything: it runs on every tool call, so it must start fast.
 import fs from 'node:fs';
+import readline from 'node:readline';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { loaOf, readJson, realish, splitLines } from './util.mjs';
@@ -10,6 +11,7 @@ import { inScope, rangeKept } from './scope.mjs';
 export const HOOK_AGENT = { claude: 'claude-terminal', codex: 'codex-terminal', cursor: 'cursor-editor' };
 
 export async function runHook(kind, agent = 'claude') {
+  if (kind === 'ask') return askServer(Number(agent));
   let input = '';
   process.stdin.setEncoding('utf8');
   for await (const d of process.stdin) input += d;
@@ -394,4 +396,79 @@ function lastTurn(transcriptPath) {
         .trim()
     : '';
   return { summary, events };
+}
+
+/**
+ * The tool Claude Code asks permission through, where nothing holds a session (`--permission-prompt-tool`): an MCP
+ * server on stdin and stdout, as Claude Code starts one, with one tool. Each call is the question Claude Code would
+ * have asked in a terminal, put to the person on the run's card (POST /api/runs/:id/ask); their answer goes back as
+ * Claude Code takes it. The bridge answers within a minute that it is still waiting, and the question is asked again
+ * until answered. One that can't reach the bridge is refused.
+ */
+function askServer(run) {
+  const send = m => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...m }) + '\n');
+  const { LOA_BRIDGE_PORT: port, LOA_SHELL_TOKEN: token } = process.env;
+  const ask = async ({ tool_name: tool, input, tool_use_id: id }) => {
+    for (;;) {
+      const res = await fetch(`http://127.0.0.1:${port}/api/runs/${run}/ask`, {
+        method: 'POST',
+        headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+        body: JSON.stringify({ tool, input, id }),
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (!res.ok) throw new Error(`the bridge answered ${res.status}`);
+      const answer = /** @type {{ allow?: boolean; pending?: boolean }} */ (await res.json());
+      if (!answer.pending) return answer.allow;
+    }
+  };
+  const lines = readline.createInterface({ input: process.stdin });
+  lines.on('line', async line => {
+    let m;
+    try {
+      m = JSON.parse(line);
+    } catch {
+      return;
+    }
+    if (m.id === undefined) return;
+    if (m.method === 'initialize')
+      return send({
+        id: m.id,
+        result: {
+          protocolVersion: m.params?.protocolVersion ?? '2025-06-18',
+          capabilities: { tools: {} },
+          serverInfo: { name: 'league-of-agents', version: '1' },
+        },
+      });
+    if (m.method === 'tools/list')
+      return send({
+        id: m.id,
+        result: {
+          tools: [
+            {
+              name: 'ask',
+              description: 'Asks the person, in League of Agents, whether this tool call may run.',
+              inputSchema: {
+                type: 'object',
+                properties: {
+                  tool_name: { type: 'string' },
+                  input: { type: 'object' },
+                  tool_use_id: { type: 'string' },
+                },
+                required: ['tool_name', 'input'],
+              },
+            },
+          ],
+        },
+      });
+    if (m.method !== 'tools/call') return send({ id: m.id, result: {} });
+    const args = m.params?.arguments ?? {};
+    let allow = false;
+    try {
+      allow = !!(await ask(args));
+    } catch {}
+    const answer = allow
+      ? { behavior: 'allow', updatedInput: args.input }
+      : { behavior: 'deny', message: 'The person refused this in League of Agents, or could not be asked.' };
+    send({ id: m.id, result: { content: [{ type: 'text', text: JSON.stringify(answer) }] } });
+  });
 }

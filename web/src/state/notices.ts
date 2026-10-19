@@ -5,6 +5,7 @@ import { needsYou } from '../lib/model';
 import { t } from '../i18n';
 import { S, st } from './app';
 import { bump } from './render';
+import { wantSaid } from './sessions';
 
 const KEY = 'loa.notify';
 /** The page's own title, without the count. */
@@ -84,7 +85,7 @@ export const forgetTold = () => told.clear();
 export function noticeAsks(runs: Run[]) {
   for (const r of runs)
     for (const w of r.status === 'running' ? (r.wants ?? []) : []) {
-      const key = `${r.id} ${w.path}`;
+      const key = `${r.id} ${w.ask ?? w.path}`;
       if (w.answer || told.has(key)) continue;
       told.add(key);
       if (!away()) continue;
@@ -93,8 +94,8 @@ export function noticeAsks(runs: Run[]) {
       document.title = `(${unseen}) ${base}`;
       if (!notifying()) continue;
       const n = new Notification(t('Run {id} needs you', { id: r.id }), {
-        body: t('Wants to change {file}', { file: w.path }),
-        tag: `loa-want-${S.repoRoot}-${r.id}-${w.path}`,
+        body: wantSaid(w),
+        tag: `loa-want-${S.repoRoot}-${r.id}-${w.ask ?? w.path}`,
       });
       n.onclick = () => {
         window.focus();

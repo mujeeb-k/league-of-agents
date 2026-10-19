@@ -25,7 +25,7 @@ import { BridgeError, bridge, sessionFor } from './client';
 import { explain } from './errors';
 import { showConflict } from '../components/ConflictDialog';
 import { clearConn, loadConn, saveConn } from './conn';
-import type { Conn, RunDTO, StateDelta, StateResponse, StepDTO } from './types';
+import type { Conn, RunDTO, StateDelta, StateResponse, StepDTO, Want } from './types';
 
 export const live = { pendingSelect: null as number | null };
 let refreshTimer = 0;
@@ -873,14 +873,17 @@ export async function restorePutBack(run: Run, path: string) {
   }
 }
 
-/** Allows a session to change a file outside its section, or refuses it; allowed, the session carries on. */
-export async function answerWant(run: Run, path: string, allow: boolean) {
+/**
+ * Allows a session to change a file outside its section, or what its agent asked permission for, or refuses it;
+ * allowed, the session carries on.
+ */
+export async function answerWant(run: Run, want: Want, allow: boolean) {
   if (st.busy) return;
   st.busy = `want:${run.id}`;
   renderSide();
   try {
-    await bridge.answerWant(conn(), run.id, path, allow);
-    const w = run.wants?.find(x => x.path === path && !x.answer);
+    await bridge.answerWant(conn(), run.id, want, allow);
+    const w = run.wants?.find(x => (want.ask ? x.ask === want.ask : !x.ask && x.path === want.path) && !x.answer);
     if (w) w.answer = allow ? 'allowed' : 'refused';
     queueRefresh();
   } catch (e) {
@@ -888,6 +891,7 @@ export async function answerWant(run: Run, path: string, allow: boolean) {
   } finally {
     st.busy = null;
     renderSide();
+    renderInspector();
   }
 }
 

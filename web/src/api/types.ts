@@ -59,6 +59,13 @@ export interface AgentInfo {
 export interface Want {
   path: string;
   answer?: 'allowed' | 'refused';
+  /**
+   * A question the agent asked permission for, where nothing holds its session (bridges after 0.2.0): its id, the
+   * tool, and what it names (the command, the file, or the tool). `path` is the file, or empty.
+   */
+  ask?: string;
+  tool?: string;
+  said?: string;
 }
 
 export interface HunkDTO {

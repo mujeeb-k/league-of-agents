@@ -529,6 +529,12 @@ const catalogue: Catalogue = {
   "Can change files outside your selection. You'll see each one flagged.":
     '可以改动你所选范围之外的文件，每一个都会标出给你看。',
   'Wants to change {file}': '想要改动 {file}',
+  'Wants to run {command}': '想要运行 {command}',
+  'Wants to use {tool}': '想要使用 {tool}',
+  'Asks to run: {command}': '请求运行：{command}',
+  'Asks to change {file}': '请求改动 {file}',
+  'Asks to use {tool}': '请求使用 {tool}',
+  'Allowed: {what}': '已允许：{what}',
   'Run {id} is working on it.': '运行 {id} 正在处理它。',
   Allow: '允许',
   Refuse: '拒绝',

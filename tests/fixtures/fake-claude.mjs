@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 const args = process.argv.slice(2);
@@ -18,8 +18,16 @@ if (args[0] === 'auth') {
 }
 const prompt = args[args.indexOf('-p') + 1];
 const out = o => console.log(JSON.stringify(o));
-// Claude Code's first event names the model, as in tests/fixtures/agents/claude/claude-canvas-follow-up.jsonl.
-out({ type: 'system', subtype: 'init', session_id: 'sess-123', model: 'claude-sonnet-5-5' });
+const flag = name => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
+// Claude Code's first event names the model, as in tests/fixtures/agents/claude/claude-canvas-follow-up.jsonl, and the
+// permission mode it runs in.
+out({
+  type: 'system',
+  subtype: 'init',
+  session_id: 'sess-123',
+  model: 'claude-sonnet-5-5',
+  permissionMode: flag('--permission-mode') ?? 'default',
+});
 if (loggedOut) {
   const text = 'Not logged in · Please run /login';
   out({ type: 'assistant', error: 'authentication_failed', message: { content: [{ type: 'text', text }] } });
@@ -33,6 +41,51 @@ if (/\bratelimit\b/.test(prompt)) {
   const text = 'API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"Rate limited"}}';
   out({ type: 'result', is_error: true, result: text, session_id: 'sess-123', total_cost_usd: 0 });
   process.exit(1);
+}
+// "ask:run": a shell command its permission mode would ask about. Asked as Claude Code asks with
+// --permission-prompt-tool: the MCP server --mcp-config names is started, and the tool called with the command; allowed,
+// it runs; refused, the agent says what it was told. With no permission tool, it runs unasked, as when permissions are
+// bypassed.
+if (/\bask:run\b/.test(prompt)) {
+  const command = 'printf asked > asked.txt';
+  const tool = flag('--permission-prompt-tool');
+  let answer = { behavior: 'allow' };
+  if (tool) {
+    const [, server, name] = /^mcp__(.+)__([^_]+)$/.exec(tool);
+    const config = JSON.parse(flag('--mcp-config')).mcpServers[server];
+    answer = await callTool(config, name, { tool_name: 'Bash', input: { command }, tool_use_id: 'toolu_ask_1' });
+  }
+  if (answer.behavior === 'allow') spawnSync('sh', ['-c', command]);
+  const text = answer.behavior === 'allow' ? 'Ran it.' : `Not allowed: ${answer.message}`;
+  out({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+  out({ type: 'result', result: text, session_id: 'sess-123', total_cost_usd: 0.001 });
+  process.exit(0);
+}
+/** One tool call to an MCP server started as Claude Code starts one: initialize, then tools/call; its text answer. */
+function callTool({ command, args: argv = [], env = {} }, name, input) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, argv, { env: { ...process.env, ...env }, stdio: ['pipe', 'pipe', 'inherit'] });
+    let buf = '';
+    child.stdout.on('data', d => {
+      buf += d;
+      for (let i; (i = buf.indexOf('\n')) >= 0;) {
+        const m = JSON.parse(buf.slice(0, i));
+        buf = buf.slice(i + 1);
+        if (m.id === 1)
+          child.stdin.write(
+            JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name, arguments: input } }) + '\n',
+          );
+        if (m.id === 2) {
+          child.kill();
+          resolve(JSON.parse(m.result.content[0].text));
+        }
+      }
+    });
+    child.on('error', reject);
+    child.stdin.write(
+      JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } }) + '\n',
+    );
+  });
 }
 // "abuse": try the run's shell token on another route, as a session reaching past its hooks would.
 if (/\babuse\b/.test(prompt)) {

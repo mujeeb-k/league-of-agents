@@ -128,9 +128,15 @@ export const bridge = {
   /** Writes back a file as the run's shell command left it, before the bridge put it back. */
   restorePutBack: (c: Conn, id: number, path: string) =>
     request<OkResponse>(c, `/api/runs/${id}/put-back`, { method: 'POST', body: { path } }),
-  /** Answers a write a session asked to make outside its section: allowed, it joins the section. */
-  answerWant: (c: Conn, id: number, path: string, allow: boolean) =>
-    request<OkResponse>(c, `/api/runs/${id}/wants`, { method: 'POST', body: { path, allow } }),
+  /**
+   * Answers a write a session asked to make outside its section (allowed, it joins the section), or a question its
+   * agent asked permission for (`ask`).
+   */
+  answerWant: (c: Conn, id: number, w: { path: string; ask?: string }, allow: boolean) =>
+    request<OkResponse>(c, `/api/runs/${id}/wants`, {
+      method: 'POST',
+      body: { path: w.path, allow, ...(w.ask ? { ask: w.ask } : {}) },
+    }),
   /** A run with its details: each file as it found it, its activity. Bridges before 0.2.0 answer 404. */
   run: (c: Conn, id: number) => request<RunDTO>(c, `/api/runs/${id}`),
   /** A run's steps from the `from`th on. Bridges before 0.2.0 answer 404. */

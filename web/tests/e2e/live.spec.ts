@@ -3139,7 +3139,9 @@ test.describe('sessions at once', () => {
         }
       ).hooks?.PreToolUse[0];
       return {
-        mode: args[args.indexOf('--permission-mode') + 1],
+        mode: args.includes('--permission-mode') ? args[args.indexOf('--permission-mode') + 1] : 'as set',
+        // What it would ask is asked of the person, through the bridge's permission tool.
+        asks: args.includes('--permission-prompt-tool'),
         outside: wrote,
         // Every tool, and a call it can't check refused.
         held:
@@ -3155,8 +3157,9 @@ test.describe('sessions at once', () => {
     }
   };
   // Held, it does only what the hook allows; its card says so only once that design has been reviewed.
-  const HELD = { mode: 'dontAsk', outside: true, held: true, says: false, sources: 'user' },
-    FLAGGED = { mode: 'bypassPermissions', outside: true, held: false, says: false, sources: 'all' };
+  // Not held, its permission mode is the one its settings set, never bypassed, and what it would ask is asked.
+  const HELD = { mode: 'dontAsk', asks: false, outside: true, held: true, says: false, sources: 'user' },
+    FLAGGED = { mode: 'as set', asks: true, outside: true, held: false, says: false, sources: 'all' };
   onMac(
     'held by the sandbox on a section, Claude Code runs outside it, with the hook; on the whole repository it is not held',
     async () => {
@@ -3164,7 +3167,7 @@ test.describe('sessions at once', () => {
       expect(await permissionOf({}, [])).toEqual(FLAGGED);
     },
   );
-  test('where there is no sandbox, Claude Code is not held, and nothing of its own asks or denies', async () => {
+  test('where there is no sandbox, Claude Code is not held, and keeps its own permission checks', async () => {
     // A system without one (Linux, Windows): on a section, and on the whole repository.
     expect(await permissionOf({ LOA_SANDBOX: 'off' }, ['shared/'])).toEqual(FLAGGED);
     expect(await permissionOf({ LOA_SANDBOX: 'off' }, [])).toEqual(FLAGGED);
@@ -5710,6 +5713,95 @@ test("a repo that holds the home folder's .config is refused: the records would 
       `League of Agents keeps its records in ${path.join(fs.realpathSync(home), '.config/league-of-agents')}, which is inside this repo.`,
     ]);
   } finally {
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// Nothing holds a whole-repository session: Claude Code keeps its own permission checks, as in a terminal, and what it
+// would ask there is asked on its card, through the bridge's permission tool.
+test('whole-repository Claude Code keeps its permission checks: what it would ask is asked on its card, and Allow lets it run', async ({
+  page,
+}) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo, FAKE_CLAUDE, {}, ['--no-hooks']);
+  const asked = path.join(repo, 'asked.txt');
+  try {
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    const { id } = (await call(b, '/api/runs', { agent: 'claude', prompt: 'Log it. ask:run', scope: [] }))
+      .body as unknown as RunDTO;
+    const ask = page.locator(`#sideList [data-run="${id}"] [data-ask]`);
+    await expect(ask).toContainText('Wants to run printf asked > asked.txt', { timeout: 15_000 });
+    await expect(page.locator(`#sideList [data-run="${id}"]`)).toContainText('Waiting for you');
+    await expect(page.locator(`#sels .zone[data-run="${id}"] [data-ask] [data-allow]`)).toBeVisible();
+    expect(fs.existsSync(asked)).toBe(false);
+    await ask.locator('[data-allow]').click();
+    await expect.poll(async () => (await runsOf(b)).find(r => r.id === id)?.status, { timeout: 15_000 }).toBe('done');
+    expect(fs.readFileSync(asked, 'utf8')).toBe('asked');
+    const run = (await call(b, `/api/runs/${id}`)).body as unknown as RunDTO;
+    expect(run.stream?.map(e => e.text)).toEqual(
+      expect.arrayContaining(['Asks to run: printf asked > asked.txt', 'Allowed: printf asked > asked.txt']),
+    );
+    // Its own checks, as its settings set them: never bypassed.
+    const init = JSON.parse(fs.readFileSync(path.join(loaOf(repo), `runs/${id}.stream.jsonl`), 'utf8').split('\n')[0]!);
+    expect(init.permissionMode).toBe('default');
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+// The sidebar is a drawer at a phone's width: the question is on the map too, on the session's label, with the same
+// two buttons.
+test('what a session asks is on the map and in the run as on its card, Allow and Refuse in view at a phone width', async ({
+  page,
+}) => {
+  const repo = makeRepo(),
+    b = await startBridge(repo, FAKE_CLAUDE, {}, ['--no-hooks']);
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(linkFor(b));
+    await expect(page.locator('#conn')).toHaveText('Live');
+    const { id } = (await call(b, '/api/runs', { agent: 'claude', prompt: 'Log it. ask:run', scope: [] }))
+      .body as unknown as RunDTO;
+    // On the map, on the session's label; and in the run, which a phone shows below the map, in view.
+    await expect(page.locator(`#sels .zone[data-run="${id}"] [data-ask]`)).toContainText(
+      'Wants to run printf asked > asked.txt',
+      { timeout: 15_000 },
+    );
+    const ask = page.locator('#insp [data-ask]');
+    await expect(ask).toContainText('Wants to run printf asked > asked.txt');
+    await expect(ask.locator('[data-allow]')).toBeInViewport();
+    await expect(ask.locator('[data-refuse]')).toBeInViewport();
+    await ask.locator('[data-allow]').click();
+    await expect.poll(async () => (await runsOf(b)).find(r => r.id === id)?.status, { timeout: 15_000 }).toBe('done');
+    expect(fs.readFileSync(path.join(repo, 'asked.txt'), 'utf8')).toBe('asked');
+    await expect(page.locator('#sels .zask')).toHaveCount(0);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
+
+test('Refuse tells the agent no, and nothing runs; a section nothing holds asks the same', async () => {
+  const repo = makeRepo(),
+    b = await startBridge(repo, FAKE_CLAUDE, { LOA_SANDBOX: 'off' }, ['--no-hooks']);
+  try {
+    const { id } = (await call(b, '/api/runs', { agent: 'claude', prompt: 'Log it. ask:run', scope: ['shared/'] }))
+      .body as unknown as RunDTO;
+    await expect
+      .poll(async () => (await runsOf(b)).find(r => r.id === id)?.wants?.[0]?.ask, { timeout: 15_000 })
+      .toBe('toolu_ask_1');
+    expect((await call(b, `/api/runs/${id}/wants`, { ask: 'toolu_ask_1', allow: false })).status).toBe(200);
+    await expect.poll(async () => (await runsOf(b)).find(r => r.id === id)?.status, { timeout: 15_000 }).toBe('done');
+    expect(fs.existsSync(path.join(repo, 'asked.txt'))).toBe(false);
+    const run = (await call(b, `/api/runs/${id}`)).body as unknown as RunDTO;
+    expect(run.summary).toBe('Not allowed: The person refused this in League of Agents, or could not be asked.');
+    expect(run.stream?.map(e => e.text)).toContain('Refused: printf asked > asked.txt');
+    // Answered once: a second answer is turned down.
+    expect((await call(b, `/api/runs/${id}/wants`, { ask: 'toolu_ask_1', allow: true })).status).toBe(409);
+  } finally {
+    b.stop();
     fs.rmSync(path.dirname(repo), { recursive: true, force: true });
   }
 });

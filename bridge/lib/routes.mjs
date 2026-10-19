@@ -26,7 +26,7 @@ import { recordedAuthors, exportAttribution } from './authorship.mjs';
 import { runs, working, saveRun, publicRun, fullRun, beginRun, finishRun, push, revertRun } from './runs.mjs';
 import { armIdle, capturedRun, ownWrite, writeConfig, watchOff } from './watch.mjs';
 import { seq, events, waiters, emit, emitRun } from './events.mjs';
-import { answerWant, cancelSession, startSession } from './sessions.mjs';
+import { answerAsk, answerWant, askPerson, cancelSession, startSession } from './sessions.mjs';
 import { publicStep, stepText, stepsOf } from './steps.mjs';
 import { restorePutBack, shellEnds, shellStarts } from './shell.mjs';
 import { commitPreview, commitRun } from './commit.mjs';
@@ -227,6 +227,17 @@ async function shell({ params, body }) {
   return [200, { undone: await shellEnds(run, tool) }];
 }
 /**
+ * A question an agent at work asks the person, from its permission tool (hook.mjs askServer), with the run's own
+ * token: answered when the person answers, or `pending` (sessions.mjs askPerson).
+ * @param {Request} request
+ * @returns {Promise<Reply>}
+ */
+async function askRoute({ params, body }) {
+  const run = runOf(params);
+  if (!run || !working.has(run.id)) return [200, { allow: false }];
+  return [200, await askPerson(run, await body())];
+}
+/**
  * What committing a run would hold (lib/commit.mjs).
  * @param {Request} request
  * @returns {Promise<Reply>}
@@ -267,8 +278,9 @@ async function restore({ params, body }) {
 async function answer({ params, body }) {
   const run = runOf(params);
   if (!run) return noRun;
-  const { path: file, allow } = await body();
-  await answerWant(run, String(file ?? ''), allow === true);
+  const { path: file, allow, ask } = await body();
+  if (typeof ask === 'string') answerAsk(run, ask, allow === true);
+  else await answerWant(run, String(file ?? ''), allow === true);
   return [200, { ok: true }];
 }
 /**
@@ -563,6 +575,7 @@ export const ROUTES = [
   ['POST', /^\/api\/runs\/(\d+)\/revert$/, revert],
   ['GET', /^\/api\/runs\/(\d+)\/before$/, runFileBefore],
   ['POST', /^\/api\/runs\/(\d+)\/shell$/, shell],
+  ['POST', /^\/api\/runs\/(\d+)\/ask$/, askRoute],
   ['POST', /^\/api\/runs\/(\d+)\/put-back$/, restore],
   ['POST', /^\/api\/runs\/(\d+)\/wants$/, answer],
   ['GET', /^\/api\/runs\/(\d+)$/, runDetails],

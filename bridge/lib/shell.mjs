@@ -29,9 +29,9 @@ export function shellAccess(run) {
 }
 /** A run ended: its token is good for nothing more. */
 export const forgetShell = run => tokens.delete(run.id);
-/** Whether a request is a run's hooks calling its own shell route with its token. */
+/** Whether a request is a run's hooks calling its own shell or ask route with its token. */
 export function shellTokenFits(pathname, token) {
-  const id = Number(/^\/api\/runs\/(\d+)\/shell$/.exec(pathname)?.[1]);
+  const id = Number(/^\/api\/runs\/(\d+)\/(shell|ask)$/.exec(pathname)?.[1]);
   const t = tokens.get(id);
   return !!t && sameSecret(token, t);
 }

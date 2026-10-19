@@ -30,7 +30,13 @@ export function streamConnector(bin, argsOf) {
   return {
     start(run, prompt, scopeFile) {
       const { child, closed } = launch(run, sandboxed => [bin(), ...argsOf(prompt, run, sandboxed)], {
-        env: () => ({ LOA_SCOPE_FILE: scopeFile, ...shellAccess(run) }),
+        // A question asked of the person waits for them (hook.mjs askServer): no timeout of its own, unless the
+        // person set one.
+        env: () => ({
+          LOA_SCOPE_FILE: scopeFile,
+          ...shellAccess(run),
+          ...(process.env.MCP_TOOL_TIMEOUT ? {} : { MCP_TOOL_TIMEOUT: String(24 * 3600 * 1000) }),
+        }),
         onLine: line => {
           onAgentLine(run, line);
           // Nothing holds a session whose hook can't run: it stops there.

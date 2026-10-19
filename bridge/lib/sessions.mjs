@@ -5,6 +5,7 @@ import path from 'node:path';
 import { line, logError, refused, serial } from './util.mjs';
 import { inScope, scopeEntry } from './scope.mjs';
 import { ROOT, LOA } from './repo.mjs';
+import { repoRelative } from './agents/labels.mjs';
 import { finishRun, push, saveRun, working } from './runs.mjs';
 import { emitRun } from './events.mjs';
 import { forgetSandbox, lockOfRun, prepareSandbox } from './sandbox.mjs';
@@ -141,6 +142,8 @@ function carryOn(run) {
 }
 async function end(run, status) {
   fs.rmSync(scopeFileOf(run), { force: true, recursive: true });
+  // A question still waiting goes unanswered: the agent that asked it is gone.
+  for (const w of run.wants ?? []) questions.get(`${run.id} ${w.ask}`)?.({ allow: false });
   forgetSandbox(run);
   forgetShell(run);
   await finishRun(run, status);
@@ -152,7 +155,7 @@ async function end(run, status) {
  */
 export async function answerWant(run, file, allow) {
   await serial(async () => {
-    const want = run.status === 'running' && run.wants?.find(w => w.path === file && !w.answer);
+    const want = run.status === 'running' && run.wants?.find(w => !w.ask && w.path === file && !w.answer);
     if (!want) throw refused('answered', 'That was already answered.');
     if (allow) {
       const holder = [...working.values()].find(r => r !== run && r.scope?.length && inScope(r.scope, file));
@@ -168,6 +171,66 @@ export async function answerWant(run, file, allow) {
     emitRun(run);
   });
   if (run.waiting && !sessions.has(run.id)) await afterAnswers(run, run.waiting);
+}
+/** Questions an agent at work asked through the bridge (askPerson), waiting for the person: by run and question. */
+const questions = new Map();
+/**
+ * What an agent asks permission for, where nothing holds its session (hook.mjs askServer): the question Claude Code
+ * would have put to the person in a terminal, on the run's card as a want with Allow and Refuse (`ask`, the
+ * question's id; `said`, the command, the file or the tool). Answered within a minute, or `pending`: it is asked again
+ * (the same id is the same question).
+ * @returns {Promise<{ allow?: boolean; pending?: boolean }>}
+ */
+export function askPerson(run, { tool, input, id }) {
+  if (run.status !== 'running') return Promise.resolve({ allow: false });
+  const ask = String(id || `${run.id}-${(run.wants ?? []).length}`);
+  let want = run.wants?.find(w => w.ask === ask);
+  if (!want) {
+    const command = tool === 'Bash' && typeof input?.command === 'string' ? input.command : null;
+    const file = typeof input?.file_path === 'string' ? repoRelative(input.file_path) : null;
+    want = { ask, tool: String(tool), path: file ?? '', said: command ?? file ?? String(tool) };
+    (run.wants ??= []).push(want);
+    push(
+      run,
+      command
+        ? line('warn', 'asks-run', `Asks to run: ${command.slice(0, 200)}`, { command: command.slice(0, 200) })
+        : file
+          ? line('warn', 'asks-change', `Asks to change ${file}`, { file })
+          : line('warn', 'asks-use', `Asks to use ${tool}`, { tool: String(tool) }),
+    );
+    saveRun(run);
+    emitRun(run);
+  }
+  if (want.answer) return Promise.resolve({ allow: want.answer === 'allowed' });
+  const key = `${run.id} ${ask}`;
+  return new Promise(resolve => {
+    const wait = setTimeout(() => {
+      questions.delete(key);
+      resolve({ pending: true });
+    }, ASK_WAIT_MS);
+    questions.set(key, answer => {
+      clearTimeout(wait);
+      questions.delete(key);
+      resolve(answer);
+    });
+  });
+}
+const ASK_WAIT_MS = Number(process.env.LOA_ASK_WAIT_MS || 60_000);
+/** The person answers a question an agent asked (askPerson): the agent goes on, or is told the person refused. */
+export function answerAsk(run, ask, allow) {
+  const want = run.status === 'running' && run.wants?.find(w => w.ask === ask && !w.answer);
+  if (!want) throw refused('answered', 'That was already answered.');
+  want.answer = allow ? 'allowed' : 'refused';
+  const what = want.said.slice(0, 200);
+  push(
+    run,
+    allow
+      ? line('text', 'allowed', `Allowed: ${what}`, { what })
+      : line('deny', 'refused-request', `Refused: ${what}`, { what }),
+  );
+  saveRun(run);
+  emitRun(run);
+  questions.get(`${run.id} ${ask}`)?.({ allow });
 }
 /** What an agent says when its provider stopped it for its rate or usage limit: told apart from other failures. */
 const LIMITED = /\b429\b|rate[ _-]?limit|usage limit|quota exceeded|too many requests/i;

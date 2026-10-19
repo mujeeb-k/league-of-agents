@@ -155,6 +155,8 @@ const unheld = run =>
  * @typedef {{ cancel(): void; done: Promise<Outcome> }} Session  An agent at work on one run.
  * @typedef {{ start(run: any, prompt: string, scopeFile: string): Session }} Connector
  */
+/** The MCP server the bridge's permission tool is served under, for Claude Code (hook.mjs askServer). */
+const ASK_SERVER = 'league-of-agents';
 /** @type {Record<string, Connector>} */
 const STREAMED = {
   claude: streamConnector(
@@ -167,12 +169,25 @@ const STREAMED = {
       '--verbose',
       // Held by the sandbox: the repo's own settings don't load, as their hooks and MCP servers would run outside
       // it, on files the session may have just written; the bridge's hook answers every call (hook.mjs hold), and
-      // one the hook never saw is refused, as the hook couldn't check it. Anywhere else its settings load as in a
-      // terminal, and nothing it would ask about is refused unasked: no one is there to answer, so it runs as
-      // allowed, held only to its section, where it has one, by the hook (hook.mjs pre).
-      ...(sandboxed ? ['--setting-sources', 'user'] : []),
-      '--permission-mode',
-      sandboxed ? 'dontAsk' : 'bypassPermissions',
+      // one the hook never saw is refused, as the hook couldn't check it (dontAsk). Anywhere else its settings load
+      // and decide as in a terminal, its own permission checks with them; what it would ask there is asked of the
+      // person on the run's card, through the bridge's permission tool (hook.mjs askServer). Where the session has
+      // a section, the hook also holds its edits to it (hook.mjs pre).
+      ...(sandboxed
+        ? ['--setting-sources', 'user', '--permission-mode', 'dontAsk']
+        : [
+            '--mcp-config',
+            JSON.stringify({
+              mcpServers: {
+                [ASK_SERVER]: {
+                  command: process.execPath,
+                  args: [path.join(LOA, 'bridge.mjs'), 'hook', 'ask', String(run.id)],
+                },
+              },
+            }),
+            '--permission-prompt-tool',
+            `mcp__${ASK_SERVER}__ask`,
+          ]),
       '--settings',
       JSON.stringify(sandboxed ? held() : unheld(run)),
       ...(run.sessionId ? ['--resume', run.sessionId] : []),
