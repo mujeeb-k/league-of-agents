@@ -8,5 +8,5 @@ export const PORT = Number(process.env.LOA_TEST_PORT) || 4173;
 export const APP = process.env.LOA_APP_URL ?? `http://127.0.0.1:${PORT}`;
 
 /** The one toast on screen. ui/toast.ts shows every message under the same sonner id. */
-/** The message on screen: not one on its way out as the next takes its place. */
-export const TOAST = '[data-sonner-toast]:not([data-removed="true"]) [data-title]';
+/** The message on screen: the newest, not the one before it on its way out. */
+export const TOAST = '[data-sonner-toast][data-front="true"] [data-title]';
