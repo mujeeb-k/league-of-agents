@@ -1612,7 +1612,14 @@ for (const home of ['/', '/zh-CN/', '/fr/', '/pt-BR/', '/es/'])
     await expect(page.locator('#scopeRow .chip:not(.all) > span')).toHaveText(['endpoint-health.ts', 'dead-letter.ts']);
     await page.locator('#prompt').fill('Log every attempt');
     await page.keyboard.press('ControlOrMeta+Enter');
-    await expect(page.locator('#sels .zone')).toHaveCount(5);
+    // Each new session's section on the map: the demo's own sessions may end meanwhile on a slow machine, so they
+    // aren't counted.
+    const toast = page.locator(TOAST).filter({ hasText: /\d+\D+\d+/ });
+    await expect(toast).toHaveCount(1);
+    const started = (await toast.textContent()) ?? '';
+    const ids = [...started.matchAll(/\d+/g)].map(m => m[0]);
+    expect(ids).toHaveLength(2);
+    for (const id of ids) await expect(page.locator(`#sels .zone[data-run="${id}"]`)).toHaveCount(1);
     await page.keyboard.press('Escape');
     await expect(page.locator('#stage')).toBeVisible();
     expect(errors).toEqual([]);
