@@ -678,6 +678,18 @@ test('⌘P quick open finds a file, selects it and flies to it; focus returns', 
   await expect(page.locator('#prompt')).toBeFocused();
 });
 
+test('a message shown just as the one before times out is shown, not lost with it', async ({ page }) => {
+  // The one before goes 2.2 s after it shows, then takes a moment to leave: a message given to it then was lost.
+  for (const wait of [2260, 2300, 2340]) {
+    await page.keyboard.press('c');
+    await expect(page.locator(TOAST)).toHaveText('Colored by author');
+    await page.waitForTimeout(wait);
+    await page.keyboard.press('c');
+    await expect(page.locator(TOAST)).toHaveText('Coloring by author off');
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(0, { timeout: 5000 });
+  }
+});
+
 test('⌘K command menu runs commands and closes with Escape', async ({ page }) => {
   await page.keyboard.press('ControlOrMeta+k');
   await expect(page.locator('#palette [cmdk-input]')).toBeFocused();
