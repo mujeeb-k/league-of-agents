@@ -79,11 +79,16 @@ const reported = run =>
     ...stepsOf(run).flatMap(s => (s?.act === 'edit' && s.file && s.blob && !s.refused ? [s.file] : [])),
     ...(run.wrote ?? []).map(w => w.file),
   ]);
-/** A run's writes to a file as they were seen: its edit steps (a refused one is none) and its shell commands'. */
+/**
+ * A run's writes to a file as they were seen: its edit steps (a refused one is none) and its shell commands'. Each
+ * from when it began to when it was done: an edit lands somewhere between its call and its result.
+ */
 const seenWrites = (run, file) =>
   [
     ...stepsOf(run).flatMap(s =>
-      s?.act === 'edit' && s.file === file && s.blob && !s.refused ? [{ at: s.at, from: s.from, to: s.blob }] : [],
+      s?.act === 'edit' && s.file === file && s.blob && !s.refused
+        ? [{ start: s.at, at: s.end ?? s.at, from: s.from, to: s.blob }]
+        : [],
     ),
     ...(run.wrote ?? []).filter(w => w.file === file).map(w => ({ at: w.at, from: w.from, to: w.to, start: w.start })),
   ].sort((a, b) => a.at - b.at);

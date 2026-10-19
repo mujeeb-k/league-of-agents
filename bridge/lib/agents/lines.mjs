@@ -113,7 +113,15 @@ export async function linesOf(run, peers, { stepsOf, blobAt, held }) {
       .flatMap(r => [
         ...made(r)
           .filter(s => s.file === c.path && s.at >= run.startedAt)
-          .map(s => ({ start: s.at, end: s.at, from: s.late ? undefined : s.from, to: s.blob, run: r.id, edit: true })),
+          // From its call to its result: the edit landed somewhere between (steps.mjs stepDone).
+          .map(s => ({
+            start: s.at,
+            end: s.end ?? s.at,
+            from: s.late ? undefined : s.from,
+            to: s.blob,
+            run: r.id,
+            edit: true,
+          })),
         ...(r.wrote ?? [])
           .filter(w => w.file === c.path && w.at >= run.startedAt)
           .map(w => ({ start: w.start ?? w.at, end: w.at, from: w.from, to: w.to, run: r.id, edit: false })),

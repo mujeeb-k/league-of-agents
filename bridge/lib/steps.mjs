@@ -107,6 +107,8 @@ const keeping = new Map();
 export function stepDone(run, i, exact = {}) {
   const s = live.get(run.id)?.[i];
   if (!s?.file) return;
+  // When its result was heard: the edit landed between its start (`at`) and this, not at its start.
+  s.end = Date.now();
   let text;
   try {
     const abs = path.join(ROOT, s.file);
