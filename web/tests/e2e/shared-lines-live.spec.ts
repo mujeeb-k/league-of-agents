@@ -119,112 +119,106 @@ async function onMap(page: Page, b: Bridge, file: string) {
   return out;
 }
 
-// On Linux CI these two have timed out waiting for a line's author after a click, and the cause isn't found: each
-// retries once there, and a failure keeps its bridges' records (reportRecords) for the next look.
-test.describe('two sessions, one file, the map', () => {
-  test.describe.configure({ retries: process.env.CI && process.platform === 'linux' ? 1 : 0 });
+test('two sessions edit one file one after the other: not shared, each run credited with its own lines, commit then revert keeps the other run', async ({
+  page,
+}) => {
+  const { repo, b, start, go } = await twoSessions();
+  try {
+    await page.goto(linkFor(b));
+    await expect.soft(page.locator('#conn')).toHaveText('Live');
+    // 1. Run 1 starts, then run 2.
+    const claude = await start('claude', ['a/'], CLAUDE_PROMPT);
+    const cursor = await start('cursor', ['b/'], CURSOR_PROMPT);
+    // 2. Run 1 edits the file and ends; run 2 still works.
+    go('one');
+    const one = await ended(b, claude);
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
+    expect.soft(change(one, 'a/tax.mjs')?.pre).toEqual(ORIGINAL);
+    expect.soft(change(one, 'a/tax.mjs')?.hunks).toEqual([
+      { at: 0, del: 0, add: CHECK },
+      { at: 2, del: 0, add: CALLS },
+    ]);
+    expect.soft(one.agentLines).toEqual({
+      'a/tax.mjs': [
+        [0, 8],
+        [11, 12],
+      ],
+    });
+    expect.soft((await runOf(b, cursor)).status).toBe('running');
+    expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
+    // 3. Run 2 edits the same file, and one of its own, and ends.
+    go('two');
+    const two = await ended(b, cursor);
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(BOTH_TAX));
+    // Run 2's change is its comment alone, on the file as Claude Code left it.
+    expect.soft(change(two, 'a/tax.mjs')?.pre).toEqual(CLAUDE_TAX);
+    expect.soft(change(two, 'a/tax.mjs')?.hunks).toEqual([{ at: 10, del: 0, add: [COMMENT] }]);
+    expect.soft(two.agentLines).toEqual({ 'a/tax.mjs': [[10, 10]], 'b/cart.mjs': [[0, 0]] });
+    // One after the other, not in the same window: not shared (VISION 31). Run 1's own change and lines are as they
+    // were.
+    expect.soft(sharedOf(two)).toEqual([]);
+    const oneNow = await runOf(b, claude);
+    expect.soft(sharedOf(oneNow)).toEqual([]);
+    expect.soft(change(oneNow, 'a/tax.mjs')?.hunks).toEqual(change(one, 'a/tax.mjs')?.hunks);
+    expect.soft(oneNow.agentLines).toEqual(one.agentLines);
+    expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_BOTH);
+    // 4. Run 1 is committed, the shared file chosen: the commit holds run 1's lines, not run 2's.
+    const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
+    expect.soft(done.status).toBe(200);
+    expect.soft(committed(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(BOTH_TAX));
+    // 5. Run 2 is reverted, the shared file chosen: only its comment goes; run 1's committed lines stay.
+    const back = await call(b, `/api/runs/${cursor}/revert`, { force: false, shared: ['a/tax.mjs'] });
+    expect.soft(back.status).toBe(200);
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(committed(repo, 'a/tax.mjs'));
+    expect.soft(onDisk(repo, 'b/cart.mjs')).toBe(committed(repo, 'b/cart.mjs'));
+    expect.soft(git(repo, 'status', '--porcelain', '--', 'a', 'b')).toBe('');
+    expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
+});
 
-  test('two sessions edit one file one after the other: not shared, each run credited with its own lines, commit then revert keeps the other run', async ({
-    page,
-  }) => {
-    const { repo, b, start, go } = await twoSessions();
-    try {
-      await page.goto(linkFor(b));
-      await expect.soft(page.locator('#conn')).toHaveText('Live');
-      // 1. Run 1 starts, then run 2.
-      const claude = await start('claude', ['a/'], CLAUDE_PROMPT);
-      const cursor = await start('cursor', ['b/'], CURSOR_PROMPT);
-      // 2. Run 1 edits the file and ends; run 2 still works.
-      go('one');
-      const one = await ended(b, claude);
-      expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
-      expect.soft(change(one, 'a/tax.mjs')?.pre).toEqual(ORIGINAL);
-      expect.soft(change(one, 'a/tax.mjs')?.hunks).toEqual([
-        { at: 0, del: 0, add: CHECK },
-        { at: 2, del: 0, add: CALLS },
-      ]);
-      expect.soft(one.agentLines).toEqual({
-        'a/tax.mjs': [
-          [0, 8],
-          [11, 12],
-        ],
-      });
-      expect.soft((await runOf(b, cursor)).status).toBe('running');
-      expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
-      // 3. Run 2 edits the same file, and one of its own, and ends.
-      go('two');
-      const two = await ended(b, cursor);
-      expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(BOTH_TAX));
-      // Run 2's change is its comment alone, on the file as Claude Code left it.
-      expect.soft(change(two, 'a/tax.mjs')?.pre).toEqual(CLAUDE_TAX);
-      expect.soft(change(two, 'a/tax.mjs')?.hunks).toEqual([{ at: 10, del: 0, add: [COMMENT] }]);
-      expect.soft(two.agentLines).toEqual({ 'a/tax.mjs': [[10, 10]], 'b/cart.mjs': [[0, 0]] });
-      // One after the other, not in the same window: not shared (VISION 31). Run 1's own change and lines are as they
-      // were.
-      expect.soft(sharedOf(two)).toEqual([]);
-      const oneNow = await runOf(b, claude);
-      expect.soft(sharedOf(oneNow)).toEqual([]);
-      expect.soft(change(oneNow, 'a/tax.mjs')?.hunks).toEqual(change(one, 'a/tax.mjs')?.hunks);
-      expect.soft(oneNow.agentLines).toEqual(one.agentLines);
-      expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_BOTH);
-      // 4. Run 1 is committed, the shared file chosen: the commit holds run 1's lines, not run 2's.
-      const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
-      expect.soft(done.status).toBe(200);
-      expect.soft(committed(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
-      expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(BOTH_TAX));
-      // 5. Run 2 is reverted, the shared file chosen: only its comment goes; run 1's committed lines stay.
-      const back = await call(b, `/api/runs/${cursor}/revert`, { force: false, shared: ['a/tax.mjs'] });
-      expect.soft(back.status).toBe(200);
-      expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
-      expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(committed(repo, 'a/tax.mjs'));
-      expect.soft(onDisk(repo, 'b/cart.mjs')).toBe(committed(repo, 'b/cart.mjs'));
-      expect.soft(git(repo, 'status', '--porcelain', '--', 'a', 'b')).toBe('');
-      expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
-    } finally {
-      b.stop();
-      fs.rmSync(path.dirname(repo), { recursive: true, force: true });
-    }
-  });
-
-  test('run 1 waits to be committed while run 2 still works; then each keeps to its own lines', async ({ page }) => {
-    const { repo, b, start, go } = await twoSessions();
-    try {
-      await page.goto(linkFor(b));
-      await expect.soft(page.locator('#conn')).toHaveText('Live');
-      const claude = await start('claude', ['a/'], CLAUDE_PROMPT);
-      const cursor = await start('cursor', ['b/'], CURSOR_PROMPT);
-      go('one');
-      await ended(b, claude);
-      // With run 2 at work, the commit waits (VISION 29): nothing is committed or written.
-      const early = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: [] });
-      expect.soft([early.status, early.body.code]).toEqual([409, 'sessions-working']);
-      expect.soft(git(repo, 'log', '--oneline').trim().split('\n')).toHaveLength(1);
-      expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
-      expect.soft((await runOf(b, cursor)).status).toBe('running');
-      expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
-      go('two');
-      const two = await ended(b, cursor);
-      expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(BOTH_TAX));
-      expect.soft(change(two, 'a/tax.mjs')?.pre).toEqual(CLAUDE_TAX);
-      expect.soft(change(two, 'a/tax.mjs')?.hunks).toEqual([{ at: 10, del: 0, add: [COMMENT] }]);
-      expect.soft(two.agentLines).toEqual({ 'a/tax.mjs': [[10, 10]], 'b/cart.mjs': [[0, 0]] });
-      expect.soft(sharedOf(two)).toEqual([]);
-      expect.soft(sharedOf(await runOf(b, claude))).toEqual([]);
-      expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_BOTH);
-      // Now none works: run 1's commit holds its lines, not run 2's.
-      const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
-      expect.soft(done.status).toBe(200);
-      expect.soft(committed(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
-      const back = await call(b, `/api/runs/${cursor}/revert`, { force: false, shared: ['a/tax.mjs'] });
-      expect.soft(back.status).toBe(200);
-      expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
-      expect.soft(git(repo, 'status', '--porcelain', '--', 'a', 'b')).toBe('');
-      expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
-    } finally {
-      b.stop();
-      fs.rmSync(path.dirname(repo), { recursive: true, force: true });
-    }
-  });
+test('run 1 waits to be committed while run 2 still works; then each keeps to its own lines', async ({ page }) => {
+  const { repo, b, start, go } = await twoSessions();
+  try {
+    await page.goto(linkFor(b));
+    await expect.soft(page.locator('#conn')).toHaveText('Live');
+    const claude = await start('claude', ['a/'], CLAUDE_PROMPT);
+    const cursor = await start('cursor', ['b/'], CURSOR_PROMPT);
+    go('one');
+    await ended(b, claude);
+    // With run 2 at work, the commit waits (VISION 29): nothing is committed or written.
+    const early = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: [] });
+    expect.soft([early.status, early.body.code]).toEqual([409, 'sessions-working']);
+    expect.soft(git(repo, 'log', '--oneline').trim().split('\n')).toHaveLength(1);
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
+    expect.soft((await runOf(b, cursor)).status).toBe('running');
+    expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
+    go('two');
+    const two = await ended(b, cursor);
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(BOTH_TAX));
+    expect.soft(change(two, 'a/tax.mjs')?.pre).toEqual(CLAUDE_TAX);
+    expect.soft(change(two, 'a/tax.mjs')?.hunks).toEqual([{ at: 10, del: 0, add: [COMMENT] }]);
+    expect.soft(two.agentLines).toEqual({ 'a/tax.mjs': [[10, 10]], 'b/cart.mjs': [[0, 0]] });
+    expect.soft(sharedOf(two)).toEqual([]);
+    expect.soft(sharedOf(await runOf(b, claude))).toEqual([]);
+    expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_BOTH);
+    // Now none works: run 1's commit holds its lines, not run 2's.
+    const done = await call(b, `/api/runs/${claude}/commit`, { message: 'Add input checks', include: ['a/tax.mjs'] });
+    expect.soft(done.status).toBe(200);
+    expect.soft(committed(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
+    const back = await call(b, `/api/runs/${cursor}/revert`, { force: false, shared: ['a/tax.mjs'] });
+    expect.soft(back.status).toBe(200);
+    expect.soft(onDisk(repo, 'a/tax.mjs')).toBe(text(CLAUDE_TAX));
+    expect.soft(git(repo, 'status', '--porcelain', '--', 'a', 'b')).toBe('');
+    expect.soft(await onMap(page, b, 'a/tax.mjs')).toEqual(AFTER_CLAUDE);
+  } finally {
+    b.stop();
+    fs.rmSync(path.dirname(repo), { recursive: true, force: true });
+  }
 });
 
 // One after the other, the file isn't shared: reverting the later run takes its line out, unasked.
